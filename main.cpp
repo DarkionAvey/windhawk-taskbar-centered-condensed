@@ -122,8 +122,13 @@ void AnimateMargin(FrameworkElement element, float toLeft, float toTop, float to
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 
 
+bool g_isAnimating=false;
 
 bool ApplyStyle(XamlRoot xamlRoot) {
+    if(g_isAnimating){
+        return true;
+    }
+    g_isAnimating=true;
     auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
 
 // todo: move notification center
@@ -135,9 +140,6 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     double rootWidth = xamlRoot.Size().Width;
   
   
-//   taskbar animation
- 
-    taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : trayFrameWidth, 0});
 
 
 // tray animations
@@ -155,7 +157,21 @@ boolean movingInwards=originalOffset.x>newXOffset;
     if(movingInwards){
     trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(370)));
     }
+    auto batch = compositor.CreateScopedBatch(winrt::Windows::UI::Composition::CompositionBatchTypes::Animation);
+
     trayVisual.StartAnimation(L"Offset", trayAnimation);
+
+    
+    batch.End();
+    batch.Completed([&](auto&& sender, auto&& args) {
+    Wh_Log(L"batch.Completed");
+         g_isAnimating=false;
+    });
+
+
+//   taskbar animation
+
+     taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : trayFrameWidth, 0});
 
     return true;
 }
@@ -364,16 +380,22 @@ IUIElement_Arrange_Hook(void* pThis,
         return original();
     }
 
-    auto className = winrt::get_class_name(element);
+
+
+     auto className = winrt::get_class_name(element);
     if (className != L"Taskbar.ExperienceToggleButton") {
         return original();
     }
 
-    auto automationId =
+Wh_Log(L"automationId: %s", Automation::AutomationProperties::GetAutomationId(element).c_str());
+
+   
+     auto automationId =
         Automation::AutomationProperties::GetAutomationId(element);
     if (automationId != L"StartButton") {
         return original();
     }
+
 
     auto taskbarFrameRepeater =
         Media::VisualTreeHelper::GetParent(element).as<FrameworkElement>();
