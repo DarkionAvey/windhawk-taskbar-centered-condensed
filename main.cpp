@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              taskbar-centered-condensed
-// @name            Tray area next to task area
+// @name            Compact and centered taskbar (dock-like)
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
 // @version         1.0.0
 // @author          DarkionAvey
@@ -18,8 +18,10 @@
 /*
 
 # Getting started
-Check out the documentation
-[here](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed).
+This mod tries to turn Windows 11 taskbar into MacOS-like dock with proper smooth animations without sacrificing the funcitonality of the default taskbar as when using custom apps. It is currently under development. Pull requests are welcome
+
+# Credits
+This mod wouldn't have been possible without `m417z`'s mods, so many thanks to him!
 */
 // ==/WindhawkModReadme==
 
@@ -1124,6 +1126,7 @@ void ApplySettingTaskbarHeight(int taskbarHeight) {
   g_applyingSettings = false;
 }
 
+                                                                        
 bool HookTaskbarViewDllSymbols(HMODULE module) {
   // Taskbar.View.dll, ExplorerExtensions.dll
   WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
@@ -1611,6 +1614,7 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
 
 double CalculateValidChildrenWidth(FrameworkElement element, int*& childrenCount, double& leftMostEdge, double& rightMostEdge) {
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(Wh_GetIntSetting(L"TaskButtonCornerRadius"));
+  auto userDefinedTaskbarIconSize = std::to_wstring(Wh_GetIntSetting(L"TaskbarIconSize"));
   double totalWidth = 0.0;
   childrenCount = new int(Media::VisualTreeHelper::GetChildrenCount(element));
   leftMostEdge = std::numeric_limits<double>::max();  // Initialize with a large value.
@@ -2078,6 +2082,50 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis, const winrt::Windows::Founda
   return original();
 }
 
+using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
+TrayUI__Hide_t TrayUI__Hide_Original;
+void WINAPI TrayUI__Hide_Hook(void* pThis) {
+      ApplySettingsFromTaskbarThread();
+
+      TrayUI__Hide_Original(pThis);
+}
+using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
+CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
+void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
+  ApplySettingsFromTaskbarThread();
+    CSecondaryTray__AutoHide_Original(pThis, param1);
+}
+using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis,
+                                          HWND hWnd,
+                                          UINT Msg,
+                                          WPARAM wParam,
+                                          LPARAM lParam,
+                                          bool* flag);
+TrayUI_WndProc_t TrayUI_WndProc_Original;
+LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
+                                   HWND hWnd,
+                                   UINT Msg,
+                                   WPARAM wParam,
+                                   LPARAM lParam,
+                                   bool* flag) {
+                                      ApplySettingsFromTaskbarThread();
+                                    return  TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
+                                   }
+
+   using CSecondaryTray_v_WndProc_t = LRESULT(
+    WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
+LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
+                                             HWND hWnd,
+                                             UINT Msg,
+                                             WPARAM wParam,
+                                             LPARAM lParam) {
+                                                  ApplySettingsFromTaskbarThread();
+                                                return        CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+
+                                             }     
+                                             
+
 bool HookTaskbarDllSymbols() {
   HookTaskbarDllSymbolsTaskbarHeight();
 
@@ -2088,6 +2136,31 @@ bool HookTaskbarDllSymbols() {
   }
 
   WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+                 
+        {
+            {LR"(public: void __cdecl TrayUI::_Hide(void))"},
+            &TrayUI__Hide_Original,
+            TrayUI__Hide_Hook,
+        },
+        {
+            {LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))"},
+            &CSecondaryTray__AutoHide_Original,
+            CSecondaryTray__AutoHide_Hook,
+        },
+
+        // {
+        //     {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+        //     &TrayUI_WndProc_Original,
+        //     TrayUI_WndProc_Hook,
+        // },
+        {
+            {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+            &CSecondaryTray_v_WndProc_Original,
+            CSecondaryTray_v_WndProc_Hook,
+        },
+
+
+
 
       {
           {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
