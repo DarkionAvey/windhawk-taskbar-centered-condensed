@@ -16,6 +16,11 @@
 
 // ==WindhawkModReadme==
 /*
+# Warning ⚠️
+There is a bug when you use vertical offset and not set your taskbar to auto hide. To fix, either set your taskbar to auto hide from Windows Settings, or set the offset to 0.
+
+# How to install
+Copy `main.cpp` content to clipboard, then go to WindHawk > Explore > Create a new mod > Compile Mod
 
 # Getting started
 This mod tries to turn Windows 11 taskbar into MacOS-like dock with proper smooth animations without sacrificing the funcitonality of the default taskbar as when using custom apps. It is currently under development. Pull requests are welcome
@@ -36,7 +41,7 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
   $name: Taskbar background horizontal padding
   $description: Adjusts the horizontal padding on both sides of the taskbar background.
 
-- TaskbarOffsetY: 4
+- TaskbarOffsetY: 0
   $name: Taskbar vertical offset
   $description: Adjusts the vertical offset of the entire taskbar. Negative values will move the taskbar offs screen
 
@@ -64,6 +69,10 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
   $name: Flat bottom corners
   $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded and the taskbar will dock to the edge of the screen. Overrides the taskbar offset setting.
 
+
+- ThemeBackground: true
+  $name: Theme taskbar background (set this to 'off' if you want to apply cutom theme using another mod)
+  
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity percentage
 
@@ -72,6 +81,8 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
 
 - TaskbarBackgroundLuminosity: 70
   $name: Background luminosity percentage  (high = opaque, low = glassy)
+
+
 
 */
 // ==/WindhawkModSettings==
@@ -1753,7 +1764,7 @@ trayFrameWidth=rightMostEdgeTray-leftMostEdgeTray;
   trayFrameWidth+=userDefinedTrayGap;
 float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth());
   float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (userDefinedBackgroundHorizontalPadding * 2) );
-  float targetOffsetX =leftMostEdgeTaskbar>0?( leftMostEdgeTaskbar -userDefinedBackgroundHorizontalPadding/2.0f)  : ((rootWidth - targetWidth) / 2.0f);
+  float targetOffsetX =leftMostEdgeTaskbar>=0?( fmax(leftMostEdgeTaskbar -userDefinedBackgroundHorizontalPadding/2.0f,0.0f))  : ((rootWidth - targetWidth) / 2.0f);
 
 
   
@@ -1828,12 +1839,17 @@ float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth())
 
 
 
-    auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(Wh_GetIntSetting(L"TaskbarBackgroundLuminosity") / 100.0f);
+ 
+    bool userDefinedThemeBackground=Wh_GetIntSetting(L"ThemeTaskbarBackground");
+    if(!userDefinedThemeBackground){
+   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(Wh_GetIntSetting(L"TaskbarBackgroundLuminosity") / 100.0f);
     auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(Wh_GetIntSetting(L"TaskbarBackgroundOpacity") / 100.0f);
     auto userDefinedTaskbarBackgroundTint = std::to_wstring(Wh_GetIntSetting(L"TaskbarBackgroundTint") / 100.0f);
     SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
                                  L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                  true);
+    }
+
   
 
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
