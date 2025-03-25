@@ -1667,7 +1667,6 @@ double CalculateValidChildrenWidth(FrameworkElement element, int*& childrenCount
   return totalWidth;
 }
 
-bool g_test = false;
 
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -2244,7 +2243,6 @@ BOOL Wh_ModInit() {
   if (isInitialThread) {
     return FALSE;
   }
-  g_test = false;
   Wh_ModInitTaskbarHeight();
   LoadSettings();
   // needed for the xml tree
