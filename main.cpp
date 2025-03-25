@@ -1755,12 +1755,12 @@ Wh_Log(L"leftMostEdgeTray: %f, rightMostEdgeTray: %f", leftMostEdgeTray, rightMo
   int userDefinedTrayGap = Wh_GetIntSetting(L"TrayTaskGap");
 
 
-if(rightMostEdgeTaskbar>0 &&leftMostEdgeTaskbar>0){
-childrenWidthTaskbar=rightMostEdgeTaskbar-leftMostEdgeTaskbar;
-}
-if(rightMostEdgeTray>0 &&leftMostEdgeTray>0){
-trayFrameWidth=rightMostEdgeTray-leftMostEdgeTray;
-}
+// if(rightMostEdgeTaskbar>0 &&leftMostEdgeTaskbar>0){
+// childrenWidthTaskbar=rightMostEdgeTaskbar-leftMostEdgeTaskbar;
+// }
+// if(rightMostEdgeTray>0 &&leftMostEdgeTray>0){
+// trayFrameWidth=rightMostEdgeTray-leftMostEdgeTray;
+// }
   trayFrameWidth+=userDefinedTrayGap;
 float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth());
   float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (userDefinedBackgroundHorizontalPadding * 2) );
@@ -1819,8 +1819,8 @@ float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth())
     }
   });
 
-  //  taskbar
-   taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : trayFrameWidth, 0});
+
+
 
 
       if (!taskbarBackground) return false;
@@ -1887,6 +1887,11 @@ float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth())
     g_lastTargetOffsetX = targetOffsetX;
     roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
   
+
+
+
+    //  taskbar
+   taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : fmin(trayFrameWidth,(rootWidth-targetWidth)/2.0f), 0});
 
   return true;
 }
