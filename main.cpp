@@ -43,7 +43,7 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
 
 - TaskbarOffsetY: 0
   $name: Taskbar vertical offset
-  $description: Adjusts the vertical offset of the entire taskbar. Negative values will move the taskbar offs screen
+  $description: Adjusts the vertical offset of the entire taskbar. Negative values will move the taskbar off screen
 
 - TaskbarHeight: 70
   $name: Taskbar height
@@ -1643,13 +1643,13 @@ double CalculateValidChildrenWidth(FrameworkElement element, int*& childrenCount
     if (rect.X < 0 | rect.Y < 0) {
       continue;
     }
-    auto className = winrt::get_class_name(child);
-    if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton") {
-      SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
-    } else {
-      Wh_Log(L"CalculateValidChildrenWidth: classname: %s", className.c_str());
-    }
-    
+    // auto className = winrt::get_class_name(child);
+    // if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className==L"Taskbar.OverflowToggleButton") {
+    // } else {
+    //   Wh_Log(L"CalculateValidChildrenWidth: classname: %s", className.c_str());
+    // }
+          SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
+
     // Update totalWidth
     totalWidth += rect.Width;
     
