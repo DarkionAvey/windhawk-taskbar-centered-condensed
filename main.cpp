@@ -1756,6 +1756,8 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
   double rootWidth = xamlRoot.Size().Width;
 
+
+
   int* childrenCountTaskbar = nullptr;
   double leftMostEdgeTaskbar = 0.0, rightMostEdgeTaskbar = rootWidth;
   double childrenWidthTaskbar = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, leftMostEdgeTaskbar, rightMostEdgeTaskbar);
@@ -1810,7 +1812,8 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Height", userDefinedTaskbarHeightStr);
   SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"MaxHeight", userDefinedTaskbarHeightStr);
 
-  // tray animations
+
+      // tray animations
   auto trayVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(trayFrame);
   auto originalOffset = trayVisual.Offset();
   if (g_initOffsetX == -1) {
@@ -1827,20 +1830,25 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   auto compositorTaskbar = taskbarVisual.Compositor();
   float targetOffsetXTray = (g_unloading ? (float)g_initOffsetX : static_cast<float>(newXOffset));
   auto trayAnimation = compositorTaskbar.CreateVector3KeyFrameAnimation();
-  trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, taskbarVisual.Offset().y, taskbarVisual.Offset().z});
+  
+  
+ 
+    trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, taskbarVisual.Offset().y, taskbarVisual.Offset().z});
   if (movingInwards) {
     trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(*childrenCountTaskbar * 4)));
   }
-  auto batchTray = compositorTaskbar.CreateScopedBatch(winrt::Windows::UI::Composition::CompositionBatchTypes::Animation);
+
+ 
+    //  auto batchTray = compositorTaskbar.CreateScopedBatch(winrt::Windows::UI::Composition::CompositionBatchTypes::Animation);
   trayVisual.StartAnimation(L"Offset", trayAnimation);
-  batchTray.End();
-  batchTray.Completed([&](auto&& sender, auto&& args) {
-    Wh_Log(L"batchTray.Completed");
-    g_isAnimating = false;
-    if (g_unloading) {
-      g_initOffsetX = -1;
-    }
-  });
+//   batchTray.End();
+//   batchTray.Completed([&](auto&& sender, auto&& args) {
+//     Wh_Log(L"batchTray.Completed");
+//     g_isAnimating = false;
+//     if (g_unloading) {
+//       g_initOffsetX = -1;
+//     }
+//   });
 
   if (!taskbarBackground) return false;
 
@@ -1866,6 +1874,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
 
   Wh_Log(L"rootWidth: %f, targetWidth: %f, targetOffsetX %f", rootWidth, targetWidth, targetOffsetX);
+
 
   auto userDefinedTaskbarCornerRadius = static_cast<float>(Wh_GetIntSetting(L"TaskbarCornerRadius"));
 
@@ -1893,7 +1902,6 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   offsetAnimationRect.InsertKeyFrame(1.0f, {targetOffsetX, g_lastTargetOffsetY});
   g_lastTargetOffsetX = targetOffsetX;
   roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
-
   // border control
   double userDefinedBorderThickness = 1.0;
   auto compositor = compositorTaskBackground;
@@ -1905,7 +1913,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   borderGeometry.Size({static_cast<float>(targetWidth - userDefinedBorderThickness), static_cast<float>(clipHeight - userDefinedBorderThickness)});
 
   auto borderShape = compositor.CreateSpriteShape(borderGeometry);
-  winrt::Windows::UI::Color borderColor = {20, 255, 255, 255};  // { A, R, G, B }
+  winrt::Windows::UI::Color borderColor = {40, 255, 255, 255};  // { A, R, G, B }
   borderShape.StrokeBrush(compositor.CreateColorBrush(borderColor));
   borderShape.StrokeThickness(userDefinedBorderThickness);
   borderShape.FillBrush(nullptr);
@@ -1914,7 +1922,21 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisual);
 
   //  taskbar
-  taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : fmin(trayFrameWidth, (rootWidth - targetWidth) / 2.0f), 0});
+// taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : fmin(trayFrameWidth, (rootWidth - targetWidth) / 2.0f)-((targetWidth-childrenWidthTaskbar)/2.0f), 0});
+
+
+// double rmostEdgePredicted= (leftMostEdgeTaskbar+childrenWidthTaskbar+userDefinedTrayGap+trayFrameWidth);
+// double rightGap=rootWidth-targetWidth-leftMostEdgeTaskbar;
+
+//  taskbarFrameRepeater.Margin({
+//   0,
+   
+//   0,
+//  0,
+//     0});
+
+
+  Wh_Log(L"rightGap: %f", rightGap);
 
   return true;
 }
