@@ -1643,7 +1643,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int*& childrenCount
     if (rect.X < 0 | rect.Y < 0) {
       continue;
     }
-    // auto className = winrt::get_class_name(child);
+     auto className = winrt::get_class_name(child);
     // if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className==L"Taskbar.OverflowToggleButton") {
     // } else {
     //   Wh_Log(L"CalculateValidChildrenWidth: classname: %s", className.c_str());
@@ -1887,6 +1887,36 @@ float showDesktopButtonWidth=static_cast<float>(showDesktopButton.ActualWidth())
     g_lastTargetOffsetX = targetOffsetX;
     roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
   
+
+// double userDefinedBorderThickness=10.0;
+
+// // Add border visual after background setup
+// auto borderVisual = compositorTaskBackground.CreateSpriteVisual();
+// borderVisual.Brush(compositorTaskBackground.CreateColorBrush(
+//     winrt::Windows::UI::Colors::Red()
+// ));
+
+// // Create border geometry matching clip shape
+// auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
+// borderGeometry.CornerRadius({userDefinedTaskbarCornerRadius, userDefinedTaskbarCornerRadius});
+// borderGeometry.Size({static_cast<float>(targetWidth - userDefinedBorderThickness*2), 
+//                     static_cast<float>(clipHeight - userDefinedBorderThickness*2)});
+
+// // Position border relative to background
+// borderVisual.Size({targetWidth, clipHeight});
+// borderVisual.Offset({targetOffsetX, g_lastTargetOffsetY, 0.0f});
+
+// // Apply geometric clip to border (same as background)
+// auto borderGeometricClip = compositorTaskBackground.CreateGeometricClip(borderGeometry);
+// borderVisual.Clip(borderGeometricClip);
+
+// // Share animations with main clip
+// borderGeometry.StartAnimation(L"Size", sizeAnimationRect);
+// borderGeometry.StartAnimation(L"Offset", offsetAnimationRect);
+
+//   auto backgroundFillParentVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillParent);
+// // Insert border behind background content 
+// backgroundFillParentVisual.Parent().Children().InsertAtBottom(borderVisual);
 
 
 
