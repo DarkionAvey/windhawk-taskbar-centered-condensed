@@ -1643,10 +1643,10 @@ double CalculateValidChildrenWidth(FrameworkElement element, int*& childrenCount
       continue;
     }
     auto className = winrt::get_class_name(child);
-    // if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className==L"Taskbar.OverflowToggleButton") {
-    // } else {
-    //   Wh_Log(L"CalculateValidChildrenWidth: classname: %s", className.c_str());
-    // }
+   
+  if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className==L"Taskbar.OverflowToggleButton") {
+            SetElementPropertyFromString(child, className.c_str(), L"MinWidth", userDefinedTaskbarIconSize);
+    }
     SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
 
     // Update totalWidth
@@ -1777,6 +1777,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   Wh_Log(L"leftMostEdgeTaskbar: %f, rightMostEdgeTaskbar: %f", leftMostEdgeTaskbar, rightMostEdgeTaskbar);
   Wh_Log(L"leftMostEdgeTray: %f, rightMostEdgeTray: %f", leftMostEdgeTray, rightMostEdgeTray);
 
+
   bool userDefinedFlatTaskbarBottomCorners = Wh_GetIntSetting(L"FlatTaskbarBottomCorners");
   signed int userDefinedTaskbarOffsetY = userDefinedFlatTaskbarBottomCorners ? 0 : (Wh_GetIntSetting(L"TaskbarOffsetY") * -1);  // we invert it to make the setting more user intuitive
   int userDefinedTaskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
@@ -1811,6 +1812,28 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
   SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Height", userDefinedTaskbarHeightStr);
   SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"MaxHeight", userDefinedTaskbarHeightStr);
+
+
+auto remainingSpace=rootWidth-targetWidth;
+leftMostEdgeTaskbar=fmax(0.0f,(rootWidth-childrenWidthTaskbar)/2.0f);
+auto rightGap=fmax(0.0f,remainingSpace-leftMostEdgeTaskbar);
+auto rightSideDelta=fmax(0.0f, remainingSpace-rightGap*2);
+//  trayFrame.Margin({0, 0,rightSideDelta, 0});
+
+      Wh_Log(L"rightSideDelta: %f ", rightSideDelta);
+      
+
+    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Width",std::to_wstring(rootWidth-rightSideDelta));
+    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"MaxWidth",std::to_wstring(rootWidth-rightSideDelta));
+
+
+ auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
+
+   auto taskbarFrameRepeaterVisualAnimation =  taskbarFrameRepeaterVisual.Compositor().CreateVector3KeyFrameAnimation();
+  taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(0.0), taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
+   
+  taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
+
 
 
       // tray animations
@@ -1923,6 +1946,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
   //  taskbar
 // taskbarFrameRepeater.Margin({0, 0, g_unloading ? 0 : fmin(trayFrameWidth, (rootWidth - targetWidth) / 2.0f)-((targetWidth-childrenWidthTaskbar)/2.0f), 0});
+
 
 
 // double rmostEdgePredicted= (leftMostEdgeTaskbar+childrenWidthTaskbar+userDefinedTrayGap+trayFrameWidth);
