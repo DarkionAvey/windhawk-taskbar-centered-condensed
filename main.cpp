@@ -1817,16 +1817,31 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 auto remainingSpace=rootWidth-targetWidth;
 leftMostEdgeTaskbar=fmax(0.0f,(rootWidth-childrenWidthTaskbar)/2.0f);
 auto rightGap=fmax(0.0f,remainingSpace-leftMostEdgeTaskbar);
-auto rightSideDelta=fmax(0.0f, remainingSpace-rightGap*2);
-//  trayFrame.Margin({0, 0,rightSideDelta, 0});
+auto leftSideSpace=remainingSpace-rightGap;
+auto rightLeftSideDelta=fmax(0.0f, leftSideSpace-rightGap);
+auto finalProduct=rootWidth-rightLeftSideDelta/2;
+// float rem = rootWidth - targetWidth;
+// float leftEdge = fmax(0.f, (rootWidth - childrenWidthTaskbar) / 2.f);
+// float finalProduct;
 
-      Wh_Log(L"rightSideDelta: %f ", rightSideDelta);
-      
+// if (rem > leftEdge) {
+//     // When the remaining space exceeds leftEdge, the gap on the right is rem - leftEdge.
+//     // This makes the left side space equal to leftEdge.
+//     // The difference between left and right side is: 2 * leftEdge - rem.
+//     float delta = fmax(0.f, 2 * leftEdge - rem);
+//     finalProduct = rootWidth - delta / 2;
+// } else {
+//     // If remaining space is less than or equal to leftEdge,
+//     // we simply average rootWidth and targetWidth.
+//     finalProduct = (rootWidth + targetWidth) / 2;
+// }
 
-    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Width",std::to_wstring(rootWidth-rightSideDelta));
-    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"MaxWidth",std::to_wstring(rootWidth-rightSideDelta));
 
 
+    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Width",std::to_wstring(finalProduct));
+    SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"MaxWidth",std::to_wstring(finalProduct));
+
+    
  auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
 
    auto taskbarFrameRepeaterVisualAnimation =  taskbarFrameRepeaterVisual.Compositor().CreateVector3KeyFrameAnimation();
@@ -1960,7 +1975,6 @@ auto rightSideDelta=fmax(0.0f, remainingSpace-rightGap*2);
 //     0});
 
 
-  Wh_Log(L"rightGap: %f", rightGap);
 
   return true;
 }
