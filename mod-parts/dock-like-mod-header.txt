@@ -1,0 +1,28 @@
+// ==WindhawkMod==
+// @id              taskbar-centered-condensed
+// @name            Dock-like taskbar for Windows 11
+// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
+// @version         {version_code}
+// @author          DarkionAvey
+// @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore
+// ==/WindhawkMod==
+
+// This mod is based on code released under the GNU General Public License v3.0.
+// For bug reports and feedback:
+// https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
+
+// ==WindhawkModReadme==
+/*
+{read_me_contents}
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+{mod_settings}
+*/
+// ==/WindhawkModSettings==
+
