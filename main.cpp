@@ -43,7 +43,7 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
 
 - TaskbarOffsetY: 0
   $name: Taskbar vertical offset
-  $description: Adjusts the vertical offset of the entire taskbar. Negative values will move the taskbar off screen
+  $description: Adjusts the vertical offset of the entire taskbar; Padding with the same value will be applied to the top. No negative values allowed
 
 - TaskbarHeight: 70
   $name: Taskbar height
@@ -140,6 +140,7 @@ using namespace winrt::Windows::UI::Xaml;
 struct {
   int iconSize;
   int taskbarHeight;
+  int taskbarOffsetY;
   int taskbarButtonWidth;
 } g_settings;
 
@@ -1031,7 +1032,9 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
 
 void LoadSettingsTaskbarHeight() {
   g_settings.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-  g_settings.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+  g_settings.taskbarOffsetY= Wh_GetIntSetting(L"TaskbarOffsetY")*-1;
+    g_settings.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight")+ (abs(g_settings.taskbarOffsetY)*2) ;
+
   g_settings.taskbarButtonWidth = Wh_GetIntSetting(L"TaskbarButtonSize");
 }
 
@@ -1427,7 +1430,7 @@ void Wh_ModAfterInitTaskbarHeight() {
     }
   }
 
-  ApplySettingTaskbarHeight(Wh_GetIntSetting(L"TaskbarHeight"));
+  ApplySettingTaskbarHeight(g_settings.taskbarHeight);
 }
 
 void Wh_ModBeforeUninitTaskbarHeight() {
@@ -1435,7 +1438,7 @@ void Wh_ModBeforeUninitTaskbarHeight() {
 
   g_unloading = true;
 
-  ApplySettingTaskbarHeight(Wh_GetIntSetting(L"TaskbarHeight"));
+  ApplySettingTaskbarHeight(g_settings.taskbarHeight);
 }
 
 void Wh_ModUninitTaskbarHeight() {
@@ -1451,7 +1454,7 @@ void Wh_ModSettingsChangedTaskbarHeight() {
 
   LoadSettingsTaskbarHeight();
 
-  ApplySettingTaskbarHeight(Wh_GetIntSetting(L"TaskbarHeight"));
+  ApplySettingTaskbarHeight(g_settings.taskbarHeight);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1657,6 +1660,21 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
       SetElementPropertyFromString(child, className.c_str(), L"MinWidth", userDefinedTaskbarIconSize);
     }
     SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
+
+// auto firstChild = EnumChildElements(child, [](auto) { return true; });
+// if(firstChild){
+// auto bgElementChild = FindChildByClassName(firstChild, L"Windows.UI.Xaml.Controls.Border");
+// if(bgElementChild){
+//     SetElementPropertyFromString(bgElementChild, L"Windows.UI.Xaml.Controls.Border",L"Background",  L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\"0\" Opacity=\"0.5\"/>",
+//                                  true);
+
+//                                     SetElementPropertyFromString(bgElementChild, L"Windows.UI.Xaml.Controls.Border",L"BorderThickness",  L"2,2,2,2");
+                                 
+// }
+// }
+
+
+
 
     // Update totalWidth
     totalWidth += rect.Width;
@@ -1892,33 +1910,8 @@ if(g_invalidateDimensions){
 
   float centeredTray = (rootWidth - trayFrameWidth) / 2.0f;
 
-  auto remainingSpace = rootWidth - targetWidth;
   leftMostEdgeTaskbar = fmax(0.0f, (rootWidth - childrenWidthTaskbar) / 2.0f);
-  auto rightGap = remainingSpace - leftMostEdgeTaskbar;
-  auto leftSideSpace = remainingSpace - rightGap;
-  auto rightLeftSideDelta = fmax(0.0f, leftSideSpace - rightGap);
-  auto finalProduct = rootWidth - remainingSpace / 2.0f;
-  // float rem = rootWidth - targetWidth;
-  // float leftEdge = fmax(0.f, (rootWidth - childrenWidthTaskbar) / 2.f);
-  // float finalProduct;
 
-  // if (rem > leftEdge) {
-  //     // When the remaining space exceeds leftEdge, the gap on the right is rem - leftEdge.
-  //     // This makes the left side space equal to leftEdge.
-  //     // The difference between left and right side is: 2 * leftEdge - rem.
-  //     float delta = fmax(0.f, 2 * leftEdge - rem);
-  //     finalProduct = rootWidth - delta / 2;
-  // } else {
-  //     // If remaining space is less than or equal to leftEdge,
-  //     // we simply average rootWidth and targetWidth.
-  //     finalProduct = (rootWidth + targetWidth) / 2;
-  // }
-
-//   Wh_Log(L"rootWidth: %f, targetWidth: %f, childrenWidthTaskbar: %f, leftMostEdgeTaskbar: %f, rightGap: %f, rightLeftSideDelta: %f, finalProduct: %f, remainingSpace %f", rootWidth, targetWidth, childrenWidthTaskbar, leftMostEdgeTaskbar, rightGap,
-//          rightLeftSideDelta, finalProduct, remainingSpace);
-
-
-  // SetElementPropertyFromString(taskbarFrameRepeater, L"Microsoft.UI.Xaml.Controls.ItemsRepeater", L"Margin",L"0");
 
   auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisual.Compositor().CreateVector3KeyFrameAnimation();
@@ -1927,7 +1920,7 @@ if(g_invalidateDimensions){
   isOverflowing ? ((targetWidth-childrenWidthTaskbar)/2.0f) :    (childrenWidthTaskbar-g_lastTaskbarData.childrenWidth)/2.0f;
   
   Wh_Log(L"modifierForTaskbarOffset: %f, isOverflowing: %d, wasOverflowing: %d", modifierForTaskbarOffset,isOverflowing, g_wasOverflowing);
-//   taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(-trayFrameWidth / 2.0f + abs(modifierForTaskbarOffset) ), taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
+
   taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(-trayFrameWidth / 2.0f + (modifierForTaskbarOffset<0?0:modifierForTaskbarOffset) ), taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
   taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
 
@@ -1940,9 +1933,8 @@ if(g_invalidateDimensions){
   }
 
   float newXOffset = centeredTray + (childrenWidthTaskbar / 2.0f) + userDefinedTrayGap + showDesktopButtonWidth;
-  //   float newXOffset = (rightMostEdgeTaskbar > 0 ? (rightMostEdgeTaskbar) : (centeredTray + childrenWidthTaskbar / 2)) + userDefinedTrayGap + showDesktopButtonWidth;
+
   boolean movingInwards = originalOffset.x > newXOffset;
-  //   Wh_Log(L"Original Offset: %f, New offset: %f, Children %f", originalOffset.x, newXOffset, childrenWidthTaskbar);
 
   auto taskbarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   auto compositorTaskbar = taskbarVisual.Compositor();
@@ -1954,16 +1946,7 @@ if(g_invalidateDimensions){
     trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
   }
 
-  //  auto batchTray = compositorTaskbar.CreateScopedBatch(winrt::Windows::UI::Composition::CompositionBatchTypes::Animation);
   trayVisual.StartAnimation(L"Offset", trayAnimation);
-  //   batchTray.End();
-  //   batchTray.Completed([&](auto&& sender, auto&& args) {
-  //     Wh_Log(L"batchTray.Completed");
-  //     g_isAnimating = false;
-  //     if (g_unloading) {
-  //       g_initOffsetX = -1;
-  //     }
-  //   });
 
   if (!taskbarBackground) return false;
 
@@ -1989,10 +1972,6 @@ if(g_invalidateDimensions){
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
 
   Wh_Log(L"rootWidth: %f, targetWidth: %f, targetOffsetX %f", rootWidth, targetWidth, targetOffsetX);
-
-
-
-
 
 
 
