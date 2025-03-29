@@ -55,4 +55,7 @@
   $name: Background luminosity percentage  (high = opaque, low = glassy)
   $type: unsigned int
 
+- TaskbarBorderOpacity: 30
+  $name: The opacity of the border surrounding the taskbar
+  $type: unsigned int
 

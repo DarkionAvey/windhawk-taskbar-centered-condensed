@@ -1,11 +1,17 @@
+<p align="center">
+  <img alt="Logo" src="/logo-raster.png" height="200"/>
+</p>
+
+![Screenshot](/screenshot.png)
+
 # Docklike Windhawk Mod ⚒️ Under development
 This mod turns Windows 11 taskbar into MacOS-like dock with proper smooth animations without sacrificing the funcitonality of the default taskbar as when using custom apps. It is currently under development. Pull requests are welcome.
 
 # How to install
-Copy `assembled-mod.cpp` contents to clipboard, then go to WindHawk > Explore > Create a new mod > Compile Mod
+Copy [`assembled-mod.cpp`](https://raw.githubusercontent.com/DarkionAvey/windhawk-taskbar-centered-condensed/refs/heads/main/assembled-mod.cpp) contents to clipboard, then go to WindHawk > Explore > Create a new mod > Compile Mod
 
 # Source code
-You will find the actual code for the mod under `mod-parts/docklike-mod.cpp`. The rest of the lines are auto generated using the python code. Please don't edit the `assembled-mod.cpp`, the edits will be overwritten during the next build cycle. Instead, edit the source files found in `mod-parts`
+You will find the actual code for the mod under [`mod-parts/docklike-mod.cpp`](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/blob/main/mod-parts/docklike-mod.cpp). The rest of the lines are auto generated using the python code. Please don't edit the `assembled-mod.cpp`, the edits will be overwritten during the next build cycle. Instead, edit the source files found in `mod-parts`
 
 # Credits
 This mod wouldn't have been possible without `m417z`'s mods, so many thanks to him!
@@ -26,3 +32,4 @@ This mod wouldn't have been possible without `m417z`'s mods, so many thanks to h
 | `TaskbarBackgroundOpacity` | Background opacity percentage |  | Non-negative integer |
 | `TaskbarBackgroundTint` | Background tint percentage (high = greyscale) |  | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity percentage  (high = opaque, low = glassy) |  | Non-negative integer |
+| `TaskbarBorderOpacity` | The opacity of the border surrounding the taskbar |  | Non-negative integer |
