@@ -1,8 +1,8 @@
 <p align="center">
-  <img alt="Logo" src="/logo-raster.png" height="200"/>
+  <img alt="Logo" src="https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/logo-raster.png" height="200"/>
 </p>
 
-![Screenshot](/screenshot.png)
+![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 
 # Docklike Windhawk Mod ⚒️ Under development
 This mod turns Windows 11 taskbar into MacOS-like dock with proper smooth animations without sacrificing the funcitonality of the default taskbar as when using custom apps. It is currently under development. Pull requests are welcome.
