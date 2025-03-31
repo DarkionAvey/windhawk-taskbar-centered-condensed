@@ -1,61 +1,74 @@
-- TrayTaskGap: 4
+- TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjusts the space between task area and tray area.
+  $description: Adjusts the space between the task area and the tray area (Default 10)
   $type: signed int
 
-- TaskbarBackgroundHorizontalPadding: 4
+- TaskbarBackgroundHorizontalPadding: 6
   $name: Taskbar background horizontal padding
-  $description: Adjusts the horizontal padding on both sides of the taskbar background.
+  $description: Sets the horizontal padding on both sides of the taskbar background (Default 6)
   $type: signed int
 
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
-  $description: Adjusts the vertical offset of the entire taskbar; Padding with the same value will be applied to the top.
+  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default 6)
   $type: unsigned int
 
 - TaskbarHeight: 78
   $name: Taskbar height
-  $description: Adjusts the height of the entire taskbar.
+  $description: Sets the height of the taskbar (Default 78)
   $type: unsigned int
 
 - TaskbarIconSize: 40
   $name: Taskbar icon size
-  $description: Adjusts the width and height of the taskbar icons.
+  $description: Defines the width and height of taskbar icons (Default 40)
   $type: unsigned int
 
 - TaskbarButtonSize: 70
   $name: Taskbar button size
-  $description: Adjusts the width and height of taskbar button (surrounding the icons).
+  $description: Sets the size of taskbar buttons, which surround the icons (Default 70)
   $type: unsigned int
 
 - TaskbarCornerRadius: 24
-  $name: Corner radius of task bar
-  $description: Defines the corner rounding of the taskbar.
+  $name: Taskbar corner radius
+  $description: Controls how rounded the taskbar corners appear (Default 24)
   $type: unsigned int
 
 - TaskButtonCornerRadius: 16
-  $name: Corner radius of the task buttons
-  $description: Defines the corner rounding of individual task buttons.
+  $name: Task button corner radius
+  $description: Controls how rounded the corners of individual task buttons are (Default 16)
   $type: unsigned int
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded and the taskbar will dock to the edge of the screen. Overrides the taskbar offset setting.
+  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This setting overrides the taskbar offset (Default false)
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
-  $name: Background opacity percentage
+  $name: Background opacity
+  $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default 100)
   $type: unsigned int
 
 - TaskbarBackgroundTint: 0
-  $name: Background tint percentage (high = greyscale)
+  $name: Background tint
+  $description: Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default 0)
   $type: unsigned int
 
 - TaskbarBackgroundLuminosity: 30
-  $name: Background luminosity percentage  (high = opaque, low = glassy)
+  $name: Background luminosity
+  $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30)
   $type: unsigned int
 
 - TaskbarBorderOpacity: 30
-  $name: The opacity of the border surrounding the taskbar
+  $name: Taskbar border opacity
+  $description: Controls the opacity of the taskbar border. Range 0-100 (Default 30)
   $type: unsigned int
 
+- FullWidthTaskbarBackground: false
+  $name: Full-width taskbar background
+  $description: If enabled, the taskbar background spans the entire width of the screen (Default false)
+  $type: bool
+
+- IgnoreShowDesktopButton: false
+  $name: Ignore "Show Desktop" button
+  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default false)
+  $type: bool

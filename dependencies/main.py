@@ -132,7 +132,11 @@ class StartButtonPosition(URLProcessor):
         return content
 
 
+def generate_mod_art():
+    print(generate_slash_block("Dock-like"))
+
 if __name__ == "__main__":
+    generate_mod_art()
     processors = [
         TaskbarIconSizeMod(),
         StartButtonPosition()
