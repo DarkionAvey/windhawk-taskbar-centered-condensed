@@ -457,7 +457,7 @@ if(roundedRect.TryGetAnimationController(L"Offset")){
 
   auto borderGeometry = compositor.CreateRoundedRectangleGeometry();
   borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
-  borderGeometry.Size({static_cast<float>(targetWidthRect - userDefinedBorderThickness), static_cast<float>(clipHeight - userDefinedBorderThickness / 2.0f)});
+  borderGeometry.Size({static_cast<float>(targetWidthRect - userDefinedBorderThickness / 2.0f), static_cast<float>(clipHeight - userDefinedBorderThickness / 2.0f)});
 
 //   Wh_Log(L"userDefinedTaskbarBorderOpacity: %d", g_settings.userDefinedTaskbarBorderOpacity);
 
