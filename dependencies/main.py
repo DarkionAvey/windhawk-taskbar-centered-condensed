@@ -85,7 +85,7 @@ class URLProcessor(ABC):
 class TaskbarIconSizeMod(URLProcessor):
     def __init__(self):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/taskbar-icon-size.wh.cpp"
-        super().__init__(url, "TaskbarHeight")
+        super().__init__(url, "TBIconSize")
 
     def format_content(self, content):
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
@@ -135,7 +135,7 @@ class StartButtonPosition(URLProcessor):
 def generate_mod_art():
     print(generate_slash_block("Dock-like"))
 
-if __name__ == "__main__":
+def process_all_mods():
     generate_mod_art()
     processors = [
         TaskbarIconSizeMod(),
@@ -144,3 +144,6 @@ if __name__ == "__main__":
 
     for processor in processors:
         processor.process()
+
+if __name__ == "__main__":
+    process_all_mods()

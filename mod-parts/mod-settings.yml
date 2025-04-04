@@ -63,6 +63,16 @@
   $description: Controls the opacity of the taskbar border. Range 0-100 (Default 30)
   $type: unsigned int
 
+- TaskbarBorderColorHex: "#ffffff"
+  $name: Taskbar border color (HEX)
+  $description: Adjusts the color of the taskbar border. Hex color as \#RRGGBB
+  $type: string hex color
+
+- TaskbarBorderThickness: 10
+  $name: Taskbar border thickness scale
+  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default 10)
+  $type: unsigned int
+
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
   $description: If enabled, the taskbar background spans the entire width of the screen (Default false)

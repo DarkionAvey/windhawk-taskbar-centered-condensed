@@ -74,5 +74,7 @@ Your contributions to modding Windows are truly appreciated!
 | `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default 0) | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30) | Non-negative integer |
 | `TaskbarBorderOpacity` | Taskbar border opacity | Controls the opacity of the taskbar border. Range 0-100 (Default 30) | Non-negative integer |
+| `TaskbarBorderColorHex` | Taskbar border color (HEX) | Adjusts the color of the taskbar border. Hex color as \#RRGGBB | string hex color |
+| `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default 10) | Non-negative integer |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default false) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default false) | Boolean (true/false) |
