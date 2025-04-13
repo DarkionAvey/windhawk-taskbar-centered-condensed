@@ -1,3 +1,4 @@
+import glob
 import os
 import re
 
@@ -51,8 +52,7 @@ def main(version="1.0.0"):
     header_path = os.path.join(base_dir, 'mod-parts', 'dock-like-mod-header.txt')
     readme_path = os.path.join(base_dir, 'README.md')
     mod_settings_path = os.path.join(base_dir, 'mod-parts', 'mod-settings.yml')
-    taskbar_icon_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies', 'taskbar-icon-size.wh.cpp')
-    taskbar_start_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies', 'taskbar-start-button-position.wh.cpp')
+    dependencies_dir_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies')
     docklike_mod_path = os.path.join(base_dir, 'mod-parts', 'docklike-mod.cpp')
     output_path = os.path.join(base_dir, 'assembled-mod.cpp')
     with open(readme_path, 'r', encoding='utf-8') as f:
@@ -75,19 +75,16 @@ def main(version="1.0.0"):
     header_contents = header_contents.replace('{mod_settings}', re.sub(r'^\s*\$type:.*$', '', mod_settings_contents, flags=re.MULTILINE).strip())
     header_contents = header_contents.replace('{version_code}', version)
 
-    with open(taskbar_icon_path, 'r', encoding='utf-8') as f:
-        taskbar_icon_contents = f.read()
-    with open(taskbar_start_path, 'r', encoding='utf-8') as f:
-        taskbar_start_contents = f.read()
+    merged_contents = header_contents + "\n\n"
+    for cpp_file_path in glob.glob(os.path.join(dependencies_dir_path, '*.cpp')):
+        with open(cpp_file_path, 'r', encoding='utf-8') as f:
+            cpp_contents = f.read()
+            merged_contents += f"{cpp_contents}\n\n"
+
     with open(docklike_mod_path, 'r', encoding='utf-8') as f:
         docklike_mod_contents = f.read()
 
-    merged_contents = (
-            header_contents + "\n\n" +
-            taskbar_icon_contents + "\n\n" +
-            taskbar_start_contents + "\n\n" +
-            docklike_mod_contents
-    )
+    merged_contents = merged_contents + docklike_mod_contents + "\n\n"
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)

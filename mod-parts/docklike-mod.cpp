@@ -1,4 +1,5 @@
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +66,6 @@ struct {
   bool userDefinedFullWidthTaskbarBackground;
   bool userDefinedIgnoreShowDesktopButton;
   unsigned int borderColorR, borderColorG, borderColorB;
-
 } g_settings;
 float g_lastTargetOffsetX = 0.0f, g_lastTargetWidth = 0.0f, g_lastTargetOffsetY = 0.0f;
 bool g_isAnimating = false;
@@ -78,7 +78,6 @@ struct {
 } g_lastTaskbarData;
 float g_lastModifierForTaskbarOffset = 0.0f;
 bool g_wasOverflowing = false;
-
 
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
   std::wstring buffer;
@@ -162,12 +161,11 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
   }
 }
 
-void  ApplySettingsFromTaskbarThreadIfRequired(){
-    if(g_invalidateDimensions){
-         ApplySettingsFromTaskbarThread();
-            }
+void ApplySettingsFromTaskbarThreadIfRequired() {
+  if (g_invalidateDimensions) {
+    ApplySettingsFromTaskbarThread();
+  }
 }
-
 
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
 
@@ -182,16 +180,17 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   auto userDefinedTaskbarIconSize = std::to_wstring(g_settings.userDefinedTaskbarIconSize);
   double totalWidth = 0.0;
-  int childrenCountTentitive = Media::VisualTreeHelper::GetChildrenCount(element);
+  childrenCount = 0;
+  int childrenCountTentative = Media::VisualTreeHelper::GetChildrenCount(element);
   leftMostEdge = std::numeric_limits<double>::max();
   rightMostEdge = std::numeric_limits<double>::lowest();
-  for (int i = 0; i < childrenCountTentitive; i++) {
+  for (int i = 0; i < childrenCountTentative; i++) {
     auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
     if (!child) {
-      Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentitive);
+      Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentative);
       continue;
     }
-    auto transform = child.TransformToVisual(element);
+    auto transform = child.TransformToVisual(nullptr);
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
     if (rect.X < 0 | rect.Y < 0) {
@@ -202,17 +201,13 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
       child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       child.Width(g_settings.userDefinedTaskbarButtonSize);
 
-     auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
-     if(innerElementChild){
-      innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
-     }
+      auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
+      if (innerElementChild) {
+        innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
+        innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
+      }
     }
     SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
-
-
-
-
 
     // auto firstChild = EnumChildElements(child, [](auto) { return true; });
     // if(firstChild){
@@ -239,7 +234,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
   return totalWidth;
 }
 
-
+unsigned int g_lastChildrenWidthTaskbar = 0, g_lastTrayFrameWidth = 0;
 
 bool ApplyStyle(XamlRoot xamlRoot) {
   g_isAnimating = true;
@@ -294,10 +289,14 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   double rootWidth = xamlRoot.Size().Width;
 
   int childrenCountTaskbar = 0;
-  double leftMostEdgeTaskbar = 0.0, rightMostEdgeTaskbar = rootWidth;
-  const double childrenWidthTaskbar = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, leftMostEdgeTaskbar, rightMostEdgeTaskbar);
+  double leftMostEdgeTaskbarDbl = 0.0, rightMostEdgeTaskbarDbl = rootWidth;
+  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, leftMostEdgeTaskbarDbl, rightMostEdgeTaskbarDbl);
 
-  if (childrenCountTaskbar == 0 || childrenWidthTaskbar <= 0) {
+  signed int leftMostEdgeTaskbar = static_cast<signed int>(leftMostEdgeTaskbarDbl);
+  signed int rightMostEdgeTaskbar = static_cast<signed int>(rightMostEdgeTaskbarDbl);
+  unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl);
+
+  if (childrenCountTaskbar < 1 || childrenWidthTaskbar <= 1) {
     return false;
   }
 
@@ -310,24 +309,57 @@ bool ApplyStyle(XamlRoot xamlRoot) {
   }
 
   int childrenCountTray = 0;
-  double leftMostEdgeTray = 0.0, rightMostEdgeTray = rootWidth;
-  double trayFrameWidth = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray, leftMostEdgeTray, rightMostEdgeTray);
+  double leftMostEdgeTrayDbl = 0.0, rightMostEdgeTrayDbl = rootWidth;
+  double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray, leftMostEdgeTrayDbl, rightMostEdgeTrayDbl);
 
-  if (childrenCountTray == 0 || trayFrameWidth <= 0) {
+  signed int leftMostEdgeTray = static_cast<signed int>(leftMostEdgeTrayDbl);
+  signed int rightMostEdgeTray = static_cast<signed int>(rightMostEdgeTrayDbl);
+  unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthDbl);
+
+  if (childrenCountTray == 0 || trayFrameWidth <= 1) {
     return false;
   }
 
-  Wh_Log(L"leftMostEdgeTaskbar: %f, rightMostEdgeTaskbar: %f, g_lastTaskbarData.rightMostEdge %f, g_lastTaskbarData.count %d", leftMostEdgeTaskbar, rightMostEdgeTaskbar, g_lastTaskbarData.rightMostEdge, g_lastTaskbarData.childrenCount);
-  Wh_Log(L"leftMostEdgeTray: %f, rightMostEdgeTray: %f", leftMostEdgeTray, rightMostEdgeTray);
+  float centeredTray = (rootWidth - trayFrameWidth) / 2.0f;
+  float showDesktopButtonWidth = static_cast<float>(g_settings.userDefinedIgnoreShowDesktopButton ? showDesktopButton.ActualWidth() : 0);
+  float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + g_settings.userDefinedTrayTaskGap + showDesktopButtonWidth;
+  // tray animations
+  auto trayVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(trayFrame);
+  auto originalOffset = trayVisual.Offset();
+  if (g_initOffsetX == -1) {
+    g_initOffsetX = originalOffset.x;
+  }
+
+  auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
+  float targetTaskFrameOffsetX = newXOffsetTray - g_settings.userDefinedTrayTaskGap - rightMostEdgeTaskbar + taskbarFrameRepeaterVisual.Offset().x;
+
+// 5 pixels tolerance
+if (abs(newXOffsetTray - trayVisual.Offset().x) <= 5 &&
+    childrenWidthTaskbar == g_lastChildrenWidthTaskbar &&
+    trayFrameWidth == g_lastTrayFrameWidth &&
+    abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5)
+{
+    Wh_Log(L"newXOffsetTray is within 5 pixels of trayVisual offset %f", trayVisual.Offset().x);
+    Wh_Log(L"childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", childrenWidthTaskbar, g_lastTrayFrameWidth);
+    return true;
+}
+
+  g_lastChildrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbar);
+  g_lastTrayFrameWidth = static_cast<unsigned int>(trayFrameWidth);
+
+  Wh_Log(L"leftMostEdgeTaskbar: %df, rightMostEdgeTaskbar: %d, g_lastTaskbarData.rightMostEdge %d, g_lastTaskbarData.count %d", leftMostEdgeTaskbar, rightMostEdgeTaskbar, g_lastTaskbarData.rightMostEdge, g_lastTaskbarData.childrenCount);
+  Wh_Log(L"leftMostEdgeTray: %d, rightMostEdgeTray: %d", leftMostEdgeTray, rightMostEdgeTray);
 
   signed int userDefinedTaskbarOffsetY = g_settings.userDefinedFlatTaskbarBottomCorners ? 0 : g_settings.userDefinedTaskbarOffsetY;
   trayFrameWidth += g_settings.userDefinedTrayTaskGap;
-  float showDesktopButtonWidth = static_cast<float>(g_settings.userDefinedIgnoreShowDesktopButton?showDesktopButton.ActualWidth():0);
   float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (g_settings.userDefinedTaskbarBackgroundHorizontalPadding * 2));
   float targetOffsetX = leftMostEdgeTaskbar >= 0 ? (fmax(leftMostEdgeTaskbar - g_settings.userDefinedTaskbarBackgroundHorizontalPadding / 2.0f, 0.0f)) : ((rootWidth - targetWidth) / 2.0f);
 
   auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY < 0 ? (userDefinedTaskbarOffsetY * 2) : 0));
 
+  if (ScrollViewer.Width() != rootWidth) {
+    g_invalidateDimensions = true;
+  }
   if (g_invalidateDimensions) {
     g_invalidateDimensions = false;
     taskFrame.SetValue(FrameworkElement::WidthProperty(), winrt::box_value(std::numeric_limits<double>::quiet_NaN()));
@@ -354,38 +386,26 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     taskbarFrameRepeater.MaxWidth(rootWidth);
   }
 
-  float centeredTray = (rootWidth - trayFrameWidth) / 2.0f;
+  //   leftMostEdgeTaskbar = fmax(0.0f, (rootWidth - childrenWidthTaskbar) / 2.0f);
 
-  leftMostEdgeTaskbar = fmax(0.0f, (rootWidth - childrenWidthTaskbar) / 2.0f);
-
-  auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisual.Compositor().CreateVector3KeyFrameAnimation();
 
   float modifierForTaskbarOffset = isOverflowing ? ((targetWidth - childrenWidthTaskbar) / 2.0f) : (childrenWidthTaskbar - g_lastTaskbarData.childrenWidth) / 2.0f;
 
   Wh_Log(L"modifierForTaskbarOffset: %f, isOverflowing: %d, wasOverflowing: %d", modifierForTaskbarOffset, isOverflowing, g_wasOverflowing);
 
-auto animationControllerTaskbarFrameRepeaterVisual = taskbarFrameRepeaterVisual.TryGetAnimationController(L"Offset");
-if(animationControllerTaskbarFrameRepeaterVisual){
+  auto animationControllerTaskbarFrameRepeaterVisual = taskbarFrameRepeaterVisual.TryGetAnimationController(L"Offset");
+  if (animationControllerTaskbarFrameRepeaterVisual) {
     taskbarFrameRepeaterVisual.StopAnimation(L"Offset");
-}
-  taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(-trayFrameWidth / 2.0f + (modifierForTaskbarOffset < 0 ? 0 : modifierForTaskbarOffset)), taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
+  }
+  taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
   taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
 
-  // tray animations
-  auto trayVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(trayFrame);
-  auto originalOffset = trayVisual.Offset();
-  if (g_initOffsetX == -1) {
-    g_initOffsetX = originalOffset.x;
-  }
-
-  float newXOffset = centeredTray + (childrenWidthTaskbar / 2.0f) + g_settings.userDefinedTrayTaskGap + showDesktopButtonWidth;
-
-  boolean movingInwards = originalOffset.x > newXOffset;
+  boolean movingInwards = originalOffset.x > newXOffsetTray;
 
   auto taskbarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   auto compositorTaskbar = taskbarVisual.Compositor();
-  float targetOffsetXTray = (g_unloading ? (float)g_initOffsetX : static_cast<float>(newXOffset));
+  float targetOffsetXTray = (g_unloading ? (float)g_initOffsetX : static_cast<float>(newXOffsetTray));
   auto trayAnimation = compositorTaskbar.CreateVector3KeyFrameAnimation();
 
   trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, taskbarVisual.Offset().y, taskbarVisual.Offset().z});
@@ -409,7 +429,8 @@ if(animationControllerTaskbarFrameRepeaterVisual){
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
+                                   userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
 
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
@@ -419,56 +440,49 @@ if(animationControllerTaskbarFrameRepeaterVisual){
 
   ////////////////////////////////////////
 
-  float   targetWidthRect=!g_settings.userDefinedFullWidthTaskbarBackground?targetWidth:static_cast<float>(rootWidth);
-
+  float targetWidthRect = !g_settings.userDefinedFullWidthTaskbarBackground ? targetWidth : static_cast<float>(rootWidth);
 
   auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
-roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
+  roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
 
-auto targetHeightPrelim=  (!g_settings.userDefinedFullWidthTaskbarBackground?
-    g_settings.userDefinedTaskbarHeight :ScrollViewer.ActualHeight());
+  auto targetHeightPrelim = (!g_settings.userDefinedFullWidthTaskbarBackground ? g_settings.userDefinedTaskbarHeight : ScrollViewer.ActualHeight());
 
-   auto clipHeight = static_cast<float>(
-targetHeightPrelim   + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius : 0.0f)
-    );
+  auto clipHeight = static_cast<float>(targetHeightPrelim + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius : 0.0f));
   roundedRect.Size({g_lastTargetWidth, clipHeight});
- auto geometricClip = compositorTaskBackground.CreateGeometricClip(roundedRect);
-   backgroundFillVisual.Clip(geometricClip);
+  auto geometricClip = compositorTaskBackground.CreateGeometricClip(roundedRect);
+  backgroundFillVisual.Clip(geometricClip);
 
+  if (!g_settings.userDefinedFullWidthTaskbarBackground) {
+    float offsetXRect = (rootWidth - targetWidth) / 2;
+    // size animation
+    if (roundedRect.TryGetAnimationController(L"Size")) {
+      roundedRect.StopAnimation(L"Size");
+    }
+    auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
+    sizeAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetWidth, clipHeight});
+    sizeAnimationRect.InsertKeyFrame(1.0f, {targetWidthRect, clipHeight});
 
+    if (movingInwards) {
+      sizeAnimationRect.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(200)));
+    }
+    roundedRect.StartAnimation(L"Size", sizeAnimationRect);
 
+    //   // centering the clip animation
+    if (roundedRect.TryGetAnimationController(L"Offset")) {
+      roundedRect.StopAnimation(L"Offset");
+    }
 
-  if(!g_settings.userDefinedFullWidthTaskbarBackground){
-      float offsetXRect = (rootWidth - targetWidth) / 2;
-  // size animation
-  if(roundedRect.TryGetAnimationController(L"Size")){
-    roundedRect.StopAnimation(L"Size");
-  }
-  auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-  sizeAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetWidth, clipHeight});
-  sizeAnimationRect.InsertKeyFrame(1.0f, {targetWidthRect, clipHeight});
-
-  if (movingInwards) {
-    sizeAnimationRect.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(200)));
-  }
-  roundedRect.StartAnimation(L"Size", sizeAnimationRect);
-
-  //   // centering the clip animation
-if(roundedRect.TryGetAnimationController(L"Offset")){
-    roundedRect.StopAnimation(L"Offset");
-  }
-
-  roundedRect.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY});
-  auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-  offsetAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetOffsetX, g_lastTargetOffsetY});
-  float newOffsetYRect = userDefinedTaskbarOffsetY < 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
-  offsetAnimationRect.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect});
-   if (movingInwards) {
-    offsetAnimationRect.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(200)));
-  }
-  roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
-  g_lastTargetOffsetX = offsetXRect;
-  g_lastTargetOffsetY = newOffsetYRect;
+    roundedRect.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY});
+    auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
+    offsetAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetOffsetX, g_lastTargetOffsetY});
+    float newOffsetYRect = userDefinedTaskbarOffsetY < 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
+    offsetAnimationRect.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect});
+    if (movingInwards) {
+      offsetAnimationRect.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(200)));
+    }
+    roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
+    g_lastTargetOffsetX = offsetXRect;
+    g_lastTargetOffsetY = newOffsetYRect;
   }
 
   // border control
@@ -476,30 +490,26 @@ if(roundedRect.TryGetAnimationController(L"Offset")){
   auto shapeVisual = compositor.CreateShapeVisual();
   shapeVisual.Size({targetWidthRect, static_cast<float>(clipHeight)});
 
- auto borderGeometry = compositor.CreateRoundedRectangleGeometry();
+  auto borderGeometry = compositor.CreateRoundedRectangleGeometry();
   borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
-  borderGeometry.Size({static_cast<float>(targetWidthRect - g_settings.userDefinedTaskbarBorderThickness ), static_cast<float>(clipHeight - g_settings.userDefinedTaskbarBorderThickness)});
-//   Wh_Log(L"userDefinedTaskbarBorderOpacity: %d", g_settings.userDefinedTaskbarBorderOpacity);
+  borderGeometry.Size({static_cast<float>(targetWidthRect - g_settings.userDefinedTaskbarBorderThickness), static_cast<float>(clipHeight - g_settings.userDefinedTaskbarBorderThickness)});
+  //   Wh_Log(L"userDefinedTaskbarBorderOpacity: %d", g_settings.userDefinedTaskbarBorderOpacity);
 
   auto borderShape = compositor.CreateSpriteShape(borderGeometry);
 
-
-
-winrt::Windows::UI::Color borderColor = { g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB) };
-
+  winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
 
   borderShape.StrokeBrush(compositor.CreateColorBrush(borderColor));
   borderShape.StrokeThickness(g_settings.userDefinedTaskbarBorderThickness);
   borderShape.FillBrush(nullptr);
 
-  borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness/2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness/2.0f)});
+  borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
   shapeVisual.Shapes().Append(borderShape);
   shapeVisual.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY, 0.0f});
   winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisual);
 
-
   g_wasOverflowing = isOverflowing;
-    g_lastTargetWidth = targetWidthRect;
+  g_lastTargetWidth = targetWidthRect;
 
   return true;
 }
@@ -529,90 +539,79 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wPar
 using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
 LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
- ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadIfRequired();
   return CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
 }
 
-
 // Hook function type definitions and original function pointers
-
 
 using CTaskBand__ProcessWindowDestroyed_t = void(WINAPI*)(void* pThis, void* pHwnd);
 CTaskBand__ProcessWindowDestroyed_t CTaskBand__ProcessWindowDestroyed_Original;
 void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
-    ApplySettingsFromTaskbarThread();
-    CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
+  ApplySettingsFromTaskbarThread();
+  CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
 }
-
-
-
-
-
-
 
 using CTaskBand__InsertItem_t = long(WINAPI*)(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2);
 CTaskBand__InsertItem_t CTaskBand__InsertItem_Original;
 long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2) {
-    Wh_Log(L"CTaskBand::_InsertItem Hook");
-    return CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
+  Wh_Log(L"CTaskBand::_InsertItem Hook");
+  return CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
 }
-
 
 using CTaskBand__UpdateAllIcons_t = void(WINAPI*)(void* pThis);
 CTaskBand__UpdateAllIcons_t CTaskBand__UpdateAllIcons_Original;
 void WINAPI CTaskBand__UpdateAllIcons_Hook(void* pThis) {
-    Wh_Log(L"CTaskBand::_UpdateAllIcons Hook");ApplySettingsFromTaskbarThread();
-    CTaskBand__UpdateAllIcons_Original(pThis);
+  Wh_Log(L"CTaskBand::_UpdateAllIcons Hook");
+  ApplySettingsFromTaskbarThread();
+  CTaskBand__UpdateAllIcons_Original(pThis);
 }
-
-
 
 using CTaskBand__TaskOrderChanged_t = void(WINAPI*)(void* pThis, void* pTaskGroup, int param);
 CTaskBand__TaskOrderChanged_t CTaskBand__TaskOrderChanged_Original;
 void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int param) {
-    Wh_Log(L"CTaskBand::TaskOrderChanged Hook");ApplySettingsFromTaskbarThread();
-    CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
+  Wh_Log(L"CTaskBand::TaskOrderChanged Hook");
+  ApplySettingsFromTaskbarThread();
+  CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
 }
-
 
 // /////////////////////////////////////
 
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
 __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-   ApplySettingsFromTaskbarThreadIfRequired();
-    return CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 
 using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskBand__WndProc_t CTaskBand__WndProc_Original;
 __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-ApplySettingsFromTaskbarThreadIfRequired();
-    return CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 
 using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
 __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-   ApplySettingsFromTaskbarThreadIfRequired();
-    return CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
 __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-   ApplySettingsFromTaskbarThreadIfRequired();
-    return CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
 __int64 WINAPI CTraySearchControl__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
   ApplySettingsFromTaskbarThreadIfRequired();
-    return CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  return CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 
-
 bool HookTaskbarDllSymbols() {
-  HookTaskbarDllSymbolsTaskbarHeight();
+  HookTaskbarDllSymbolsTBIconSize();
   HMODULE module = LoadLibrary(L"taskbar.dll");
   if (!module) {
     Wh_Log(L"Failed to load taskbar.dll");
@@ -620,71 +619,57 @@ bool HookTaskbarDllSymbols() {
   }
   WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
 
+      {
+          {LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+          &CImpWndProc__WndProc_Original,
+          CImpWndProc__WndProc_Hook,
+      },
+      {
+          {LR"(protected: static __int64 __cdecl CTraySearchControl::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+          &CTraySearchControl__WndProc_Original,
+          CTraySearchControl__WndProc_Hook,
+      },
+      {
+          {LR"(private: virtual __int64 __cdecl CSecondaryTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+          &CSecondaryTaskBand__WndProc_Original,
+          CSecondaryTaskBand__WndProc_Hook,
+      },
+      {
+          {LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+          &CTaskBand__WndProc_Original,
+          CTaskBand__WndProc_Hook,
+      },
 
- {
-       { LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-       &CImpWndProc__WndProc_Original,
-        CImpWndProc__WndProc_Hook,
-    },
-    {
-     {   LR"(protected: static __int64 __cdecl CTraySearchControl::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-       &CTraySearchControl__WndProc_Original,
-        CTraySearchControl__WndProc_Hook,
-    },
-    {
-       { LR"(private: virtual __int64 __cdecl CSecondaryTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-       &CSecondaryTaskBand__WndProc_Original,
-        CSecondaryTaskBand__WndProc_Hook,
-    },
-    {
-       { LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-       &CTaskBand__WndProc_Original,
-        CTaskBand__WndProc_Hook,
-    },
+      {
+          {LR"(protected: virtual __int64 __cdecl CTaskListWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+          &CTaskListWnd__WndProc_Original,
+          CTaskListWnd__WndProc_Hook,
+      },
 
-    {
-       { LR"(protected: virtual __int64 __cdecl CTaskListWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-       &CTaskListWnd__WndProc_Original,
-        CTaskListWnd__WndProc_Hook,
-    },
+      /////////////////////////////////////
+      {
+          {LR"(protected: long __cdecl CTaskBand::_InsertItem(struct HWND__ *,struct ITaskItem * *,struct HWND__ *,struct HWND__ *))"},
+          &CTaskBand__InsertItem_Original,
+          CTaskBand__InsertItem_Hook,
+      },
 
+      {
+          {LR"(protected: void __cdecl CTaskBand::_UpdateAllIcons(void))"},
+          &CTaskBand__UpdateAllIcons_Original,
+          CTaskBand__UpdateAllIcons_Hook,
+      },
 
+      {
+          {LR"(public: virtual void __cdecl CTaskBand::TaskOrderChanged(struct ITaskGroup *,int))"},
+          &CTaskBand__TaskOrderChanged_Original,
+          CTaskBand__TaskOrderChanged_Hook,
+      },
 
-
-
-
-
-/////////////////////////////////////
-    {
-       { LR"(protected: long __cdecl CTaskBand::_InsertItem(struct HWND__ *,struct ITaskItem * *,struct HWND__ *,struct HWND__ *))"},
-       &CTaskBand__InsertItem_Original,
-        CTaskBand__InsertItem_Hook,
-    },
-
-    {
-       { LR"(protected: void __cdecl CTaskBand::_UpdateAllIcons(void))"},
-       &CTaskBand__UpdateAllIcons_Original,
-        CTaskBand__UpdateAllIcons_Hook,
-    },
-
-
-    {
-       { LR"(public: virtual void __cdecl CTaskBand::TaskOrderChanged(struct ITaskGroup *,int))"},
-       &CTaskBand__TaskOrderChanged_Original,
-        CTaskBand__TaskOrderChanged_Hook,
-    },
-
-
-
-
-
-
-    {
-        {LR"(protected: void __cdecl CTaskBand::_ProcessWindowDestroyed(struct HWND__ *))"},
-    &CTaskBand__ProcessWindowDestroyed_Original,
-        CTaskBand__ProcessWindowDestroyed_Hook,
-    },
-
+      {
+          {LR"(protected: void __cdecl CTaskBand::_ProcessWindowDestroyed(struct HWND__ *))"},
+          &CTaskBand__ProcessWindowDestroyed_Original,
+          CTaskBand__ProcessWindowDestroyed_Hook,
+      },
 
       {
           {LR"(public: void __cdecl TrayUI::_Hide(void))"},
@@ -697,11 +682,11 @@ bool HookTaskbarDllSymbols() {
           CSecondaryTray__AutoHide_Hook,
       },
 
-     {
-         {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
-         &TrayUI_WndProc_Original,
-         TrayUI_WndProc_Hook,
-     },
+      {
+          {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+          &TrayUI_WndProc_Original,
+          TrayUI_WndProc_Hook,
+      },
       {
           {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
           &CSecondaryTray_v_WndProc_Original,
@@ -755,10 +740,10 @@ bool HookTaskbarViewDllSymbols() {
 }
 
 void RefreshSettings() {
-  Wh_ModSettingsChangedTaskbarHeight();
+  Wh_ModSettingsChangedTBIconSize();
 
   g_invalidateDimensions = true;
-    g_settings.userDefinedFlatTaskbarBottomCorners = Wh_GetIntSetting(L"FlatTaskbarBottomCorners");
+  g_settings.userDefinedFlatTaskbarBottomCorners = Wh_GetIntSetting(L"FlatTaskbarBottomCorners");
   g_settings.userDefinedFullWidthTaskbarBackground = Wh_GetIntSetting(L"FullWidthTaskbarBackground");
   g_settings.userDefinedIgnoreShowDesktopButton = Wh_GetIntSetting(L"IgnoreShowDesktopButton");
 
@@ -766,9 +751,9 @@ void RefreshSettings() {
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = Wh_GetIntSetting(L"TaskbarBackgroundHorizontalPadding");
   g_settings.userDefinedTaskbarOffsetY = -1 * abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
 
-if(g_settings.userDefinedFlatTaskbarBottomCorners){
-    g_settings.userDefinedTaskbarOffsetY=0;
-}
+  if (g_settings.userDefinedFlatTaskbarBottomCorners) {
+    g_settings.userDefinedTaskbarOffsetY = 0;
+  }
 
   g_settings.userDefinedTaskbarHeight = abs(Wh_GetIntSetting(L"TaskbarHeight"));
 
@@ -783,39 +768,29 @@ if(g_settings.userDefinedFlatTaskbarBottomCorners){
   g_settings.userDefinedTaskButtonCornerRadius = abs(Wh_GetIntSetting(L"TaskButtonCornerRadius"));
   g_settings.userDefinedTaskButtonCornerRadius = g_settings.userDefinedTaskButtonCornerRadius < (g_settings.userDefinedTaskbarHeight / 2.0f) ? g_settings.userDefinedTaskButtonCornerRadius : (g_settings.userDefinedTaskbarHeight / 2.0f);
 
-
-
   g_settings.userDefinedTaskbarBackgroundOpacity = std::min(100, std::max(0, abs(Wh_GetIntSetting(L"TaskbarBackgroundOpacity"))));
   g_settings.userDefinedTaskbarBackgroundTint = std::min(100, std::max(0, abs(Wh_GetIntSetting(L"TaskbarBackgroundTint"))));
   g_settings.userDefinedTaskbarBackgroundLuminosity = std::min(100, std::max(0, abs(Wh_GetIntSetting(L"TaskbarBackgroundLuminosity"))));
   g_settings.userDefinedTaskbarBorderOpacity = abs(Wh_GetIntSetting(L"TaskbarBorderOpacity")) * 2.55;
   g_settings.userDefinedTaskbarBorderOpacity = static_cast<uint8_t>(g_settings.userDefinedTaskbarBorderOpacity > 255 ? 255 : g_settings.userDefinedTaskbarBorderOpacity);
 
-  g_settings.userDefinedTaskbarBorderThickness =(10.0 / 100.0) *  std::max(std::min(abs(Wh_GetIntSetting(L"TaskbarBorderThickness")), 100), 0)     ;
+  g_settings.userDefinedTaskbarBorderThickness = (10.0 / 100.0) * std::max(std::min(abs(Wh_GetIntSetting(L"TaskbarBorderThickness")), 100), 0);
 
-
-
-
-
-PCWSTR userDefinedTaskbarBorderHexColorString = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-if (!userDefinedTaskbarBorderHexColorString || wcslen(userDefinedTaskbarBorderHexColorString) == 0)
-{
+  PCWSTR userDefinedTaskbarBorderHexColorString = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  if (!userDefinedTaskbarBorderHexColorString || wcslen(userDefinedTaskbarBorderHexColorString) == 0) {
     userDefinedTaskbarBorderHexColorString = L"#ffffff";
-}
-PCWSTR hexStr = userDefinedTaskbarBorderHexColorString;
-if (*hexStr == L'#')
-{
+  }
+  PCWSTR hexStr = userDefinedTaskbarBorderHexColorString;
+  if (*hexStr == L'#') {
     hexStr++;
-}
-unsigned int r = 255, g = 255, b = 255;
-if (swscanf_s(hexStr, L"%02x%02x%02x", &r, &g, &b) != 3)
-{
+  }
+  unsigned int r = 255, g = 255, b = 255;
+  if (swscanf_s(hexStr, L"%02x%02x%02x", &r, &g, &b) != 3) {
     r = g = b = 255;
-}
-g_settings.borderColorR=r;
-g_settings.borderColorG=g;
-g_settings.borderColorB=b;
-
+  }
+  g_settings.borderColorR = r;
+  g_settings.borderColorG = g;
+  g_settings.borderColorB = b;
 }
 
 BOOL Wh_ModInit() {
@@ -828,7 +803,7 @@ BOOL Wh_ModInit() {
   if (isInitialThread) {
     return FALSE;
   }
-  Wh_ModInitTaskbarHeight();
+  Wh_ModInitTBIconSize();
   RefreshSettings();
   // needed for the xml tree
   if (!HookTaskbarDllSymbols()) {
@@ -857,7 +832,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-  Wh_ModAfterInitTaskbarHeight();
+  Wh_ModAfterInitTBIconSize();
 
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (hTaskbarWnd) {
@@ -866,7 +841,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-  Wh_ModBeforeUninitTaskbarHeight();
+  Wh_ModBeforeUninitTBIconSize();
 
   g_unloading = true;
   HWND hTaskbarWnd = GetTaskbarWnd();
@@ -875,7 +850,7 @@ void Wh_ModBeforeUninit() {
   }
 }
 
-void Wh_ModUninit() { Wh_ModUninitTaskbarHeight(); }
+void Wh_ModUninit() { Wh_ModUninitTBIconSize(); }
 
 void Wh_ModSettingsChanged() {
   RefreshSettings();

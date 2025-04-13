@@ -31,10 +31,16 @@ def generate_slash_block(name):
 
 
 class URLProcessor(ABC):
-    def __init__(self, url, name):
+    def __init__(self, url, name, injection_order):
         self.url = url
         self.name = name
-        self.output_folder = "modified-dependencies"
+        self.injection_order = injection_order
+
+        if os.path.exists("main.py"):
+            self.output_folder = "modified-dependencies"
+        else:
+            self.output_folder = os.path.join("dependencies", "modified-dependencies")
+
         os.makedirs(self.output_folder, exist_ok=True)
 
     @abstractmethod
@@ -49,6 +55,7 @@ class URLProcessor(ABC):
             raise Exception(f"Failed to download {self.url}")
 
     def save(self, content, filename):
+        filename = self.injection_order + "_" + filename
         filepath = os.path.join(self.output_folder, filename)
         with open(filepath, "w", encoding="utf-8") as file:
             file.write(content)
@@ -71,7 +78,7 @@ class URLProcessor(ABC):
         content = re.sub(r"Wh_ModBeforeUninit\(\)", r"Wh_ModBeforeUninit" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModUninit\(\)", r"Wh_ModUninit" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModSettingsChanged\(\)", r"Wh_ModSettingsChanged" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL|re.MULTILINE)
+        content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub("\n+", "\n", content, flags=re.DOTALL)
         content = generate_slash_block(self.name) + content
 
@@ -81,11 +88,10 @@ class URLProcessor(ABC):
 
 ######################################################################
 
-
 class TaskbarIconSizeMod(URLProcessor):
     def __init__(self):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/taskbar-icon-size.wh.cpp"
-        super().__init__(url, "TBIconSize")
+        super().__init__(url, "TBIconSize", "a")
 
     def format_content(self, content):
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
@@ -100,14 +106,14 @@ class TaskbarIconSizeMod(URLProcessor):
 class StartButtonPosition(URLProcessor):
     def __init__(self):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/taskbar-start-button-position.wh.cpp"
-        super().__init__(url, "StartButtonPosition")
+        super().__init__(url, "StartButtonPosition", "b")
 
     def format_content(self, content):
         content = re.sub(r"std::atomic<bool> g_taskbarViewDllLoaded;", "", content, flags=re.DOTALL)
         content = re.sub(r"std::atomic<bool> g_unloading;", "", content, flags=re.DOTALL)
         content = re.sub(r"typedef enum MONITOR_DPI_TYPE {.*?} MONITOR_DPI_TYPE;", "", content, flags=re.DOTALL)
 
-        content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_"+self.name, content, flags= re.DOTALL)
+        content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
 
         content = re.sub(r"HWND GetTaskbarWnd\(\).*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"FrameworkElement EnumChildElements\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
@@ -120,11 +126,12 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"LoadLibraryExW_t LoadLibraryExW_Original;", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"LoadLibraryExW_Hook", "LoadLibraryExW_Hook_" + self.name, content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"bool ApplyStyle\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"element\.Dispatcher\(\)\.TryRunAsync\(\s+winrt::Windows::UI::Core::CoreDispatcherPriority::High,\s+\[element\]\(\) {", "element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() {\\n ApplySettingsFromTaskbarThread(); \\n", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"element\.Dispatcher\(\)\.TryRunAsync\(\s+winrt::Windows::UI::Core::CoreDispatcherPriority::High,\s+\[element\]\(\) {", "element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() {\\n ApplySettingsFromTaskbarThread(); \\n", content,
+                         flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuOnTheLeft\"\);", "0;", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuWidth\"\);", "0;", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL|re.MULTILINE )
+        content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
 
@@ -132,18 +139,40 @@ class StartButtonPosition(URLProcessor):
         return content
 
 
+######################################################################
+
+class TaskbarStylerMod(URLProcessor):
+    def __init__(self):
+        url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/windows-11-taskbar-styler.wh.cpp"
+        super().__init__(url, "TaskbarStyler", "c")
+
+    def format_content(self, content):
+        content = re.sub(r"^const\sTheme\sg_.*?\}\}\;", "", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"^void ProcessAllStylesFromSettings\(\) {.*?(^}$)", "void ProcessAllStylesFromSettings() {}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"RunFromWindowThread\(", "RunFromWindowThread" + self.name + "(", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"// clang-format off", "" , content, flags= re.DOTALL)
+        content = re.sub(r"// clang-format on", "" , content, flags= re.DOTALL)
+
+        return content
+
+
+######################################################################
+
 def generate_mod_art():
     print(generate_slash_block("Dock-like"))
+
 
 def process_all_mods():
     generate_mod_art()
     processors = [
         TaskbarIconSizeMod(),
-        StartButtonPosition()
+        StartButtonPosition(),
+        # TaskbarStylerMod()
     ]
 
     for processor in processors:
         processor.process()
+
 
 if __name__ == "__main__":
     process_all_mods()
