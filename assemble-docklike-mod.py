@@ -47,7 +47,7 @@ def remove_options_section(readme_contents):
     return new_contents.strip()
 
 
-def main(version="1.0.0"):
+def main(version="1.1.0"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     header_path = os.path.join(base_dir, 'mod-parts', 'dock-like-mod-header.txt')
     readme_path = os.path.join(base_dir, 'README.md')

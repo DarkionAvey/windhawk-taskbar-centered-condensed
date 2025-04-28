@@ -223,8 +223,7 @@ IUIElement_Arrange_Hook(void* pThis,
             return true;
         });
     if (!widgetElement) {
-        element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() {
- ApplySettingsFromTaskbarThread(); 
+        element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { 
                 double width = element.ActualWidth();
                 double minX = std::numeric_limits<double>::infinity();
                 auto taskbarFrameRepeater =

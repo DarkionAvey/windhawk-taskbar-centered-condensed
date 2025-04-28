@@ -875,7 +875,7 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
 }
 void LoadSettingsTBIconSize() {
     g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-    g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight") + (abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2);
+    g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));
     g_settings_tbiconsize.taskbarButtonWidth = Wh_GetIntSetting(L"TaskbarButtonSize");
 }
 HWND GetTaskbarWnd() {

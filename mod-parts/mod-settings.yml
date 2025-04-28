@@ -18,14 +18,14 @@
   $description: Sets the height of the taskbar (Default 78)
   $type: unsigned int
 
-- TaskbarIconSize: 40
+- TaskbarIconSize: 48
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default 40)
+  $description: Defines the width and height of taskbar icons (Default 48)
   $type: unsigned int
 
-- TaskbarButtonSize: 70
+- TaskbarButtonSize: 74
   $name: Taskbar button size
-  $description: Sets the size of taskbar buttons, which surround the icons (Default 70)
+  $description: Sets the size of taskbar buttons, which surround the icons (Default 74)
   $type: unsigned int
 
 - TaskbarCornerRadius: 24
@@ -40,7 +40,7 @@
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This setting overrides the taskbar offset (Default false)
+  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This setting overrides the taskbar offset; this setting is always on with Full-width taskbar background (Default false)
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
@@ -58,14 +58,14 @@
   $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30)
   $type: unsigned int
 
-- TaskbarBorderOpacity: 30
+- TaskbarBorderOpacity: 20
   $name: Taskbar border opacity
-  $description: Controls the opacity of the taskbar border. Range 0-100 (Default 30)
+  $description: Controls the opacity of the taskbar border. Range 0-100 (Default 20)
   $type: unsigned int
 
 - TaskbarBorderColorHex: "#ffffff"
   $name: Taskbar border color (HEX)
-  $description: Adjusts the color of the taskbar border. Hex color as \#RRGGBB
+  $description: Adjusts the color of the taskbar border. Hex color as `#RRGGBB` (Default `#ffffff`)
   $type: string hex color
 
 - TaskbarBorderThickness: 10
@@ -82,3 +82,23 @@
   $name: Ignore "Show Desktop" button
   $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default false)
   $type: bool
+
+- TrayAreaDivider: true
+  $name: Tray area divider
+  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar (Default true)
+  $type: bool
+
+- StyleTrayArea: false
+  $name: Modify the tray area appearance
+  $description: If enabled, the options for tray icon size will take effect (Default false)
+  $type: bool
+
+- TrayIconSize: 30
+  $name: Tray icon size
+  $description: Defines the width and height of tray icons (Default 30)
+  $type: unsigned int
+
+- TrayButtonSize: 45
+  $name: Tray button size
+  $description: Sets the size of tray buttons, which surround the icons (Default 45)
+  $type: unsigned int
