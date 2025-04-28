@@ -38,7 +38,7 @@ customizability.
 features.
 
 1. Copy the contents of [
-   `assembled-mod.cpp`](https://raw.githubusercontent.com/DarkionAvey/windhawk-taskbar-centered-condensed/refs/heads/main/assembled-mod.cpp)
+   `assembled-mod.cpp`](https://raw.githubusercontent.com/DarkionAvey/windhawk-taskbar-centered-condensed/main/assembled-mod.cpp)
    to your clipboard.
 2. Open **WindHawk** and navigate to: `Explore` → `Create a new mod`.
 3. Press `Ctrl+A` to select all, then `Ctrl+V` to paste.
