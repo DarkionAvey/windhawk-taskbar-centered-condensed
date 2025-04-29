@@ -134,8 +134,9 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
+        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)", "auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!InitializeDebounce()) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))", content, flags=re.DOTALL)
 
-        content = "bool ApplyStyle(XamlRoot xamlRoot);\n" + content
+        content = "bool ApplyStyle(FrameworkElement element);\nbool InitializeDebounce();\n" + content
         return content
 
 

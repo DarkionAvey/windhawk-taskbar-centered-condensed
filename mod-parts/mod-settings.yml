@@ -18,9 +18,9 @@
   $description: Sets the height of the taskbar (Default 78)
   $type: unsigned int
 
-- TaskbarIconSize: 48
+- TaskbarIconSize: 44
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default 48)
+  $description: Defines the width and height of taskbar icons (Default 44)
   $type: unsigned int
 
 - TaskbarButtonSize: 74

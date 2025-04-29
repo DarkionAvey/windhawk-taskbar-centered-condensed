@@ -47,20 +47,28 @@ def remove_options_section(readme_contents):
     return new_contents.strip()
 
 
+def read_file(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        contents = f.read()
+
+    return contents
+
+
+def remove_cpp_comments(code: str) -> str:
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
+    code = re.sub(r'//.*', '', code)
+    code = '\n'.join(line for line in (l.strip() for l in code.splitlines()) if line)
+    return code
+
 def main(version="1.1.0"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    header_path = os.path.join(base_dir, 'mod-parts', 'dock-like-mod-header.txt')
     readme_path = os.path.join(base_dir, 'README.md')
-    mod_settings_path = os.path.join(base_dir, 'mod-parts', 'mod-settings.yml')
     dependencies_dir_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies')
-    docklike_mod_path = os.path.join(base_dir, 'mod-parts', 'docklike-mod.cpp')
     output_path = os.path.join(base_dir, 'assembled-mod.cpp')
-    with open(readme_path, 'r', encoding='utf-8') as f:
-        readme_contents = f.read()
-    with open(mod_settings_path, 'r', encoding='utf-8') as f:
-        mod_settings_contents = f.read()
-    with open(header_path, 'r', encoding='utf-8') as f:
-        header_contents = f.read()
+
+    readme_contents = read_file(readme_path)
+    header_contents = read_file(os.path.join(base_dir, 'mod-parts', 'dock-like-mod-header.txt'))
+    mod_settings_contents = read_file(os.path.join(base_dir, 'mod-parts', 'mod-settings.yml'))
 
     options_table = generate_options_table(mod_settings_contents)
     options_section = f"# Options\n\n{options_table}\n"
@@ -81,10 +89,23 @@ def main(version="1.1.0"):
             cpp_contents = f.read()
             merged_contents += f"{cpp_contents}\n\n"
 
-    with open(docklike_mod_path, 'r', encoding='utf-8') as f:
-        docklike_mod_contents = f.read()
+    merged_contents = f"""
+{merged_contents.strip()}
 
-    merged_contents = merged_contents + docklike_mod_contents + "\n\n"
+{read_file(os.path.join(base_dir, 'mod-parts', 'ascii-art.txt')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-style-xml.cpp')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-set-image-source-async.cpp')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-debouncer.cpp')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-icon-scanner.cpp')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-apply-style-helpers.cpp')).strip()}
+
+{read_file(os.path.join(base_dir, 'mod-parts', 'docklike-mod.cpp')).strip()}
+"""
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)

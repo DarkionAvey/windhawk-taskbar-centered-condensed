@@ -6,25 +6,11 @@ import re
 # and identifying potential hooks.
 
 input_block = r"""
-	Line  13: 	Line  1477: [00021384] protected: long __cdecl CTaskBand::_InsertItem(struct HWND__ *,struct ITaskItem * *,struct HWND__ *,struct HWND__ *)
-	Line  16: 	Line  1491: [000220C0] protected: long __cdecl CTaskBand::_MatchApp(struct IImmersiveApplication *,struct ITaskGroup * *,struct ITaskItem * *)
-	Line  19: 	Line  1494: [000228CC] protected: long __cdecl CTaskBand::_MatchApplicationView(struct IApplicationView *,struct ITaskGroup * *,struct ITaskItem * *)
-	Line  33: 	Line  1543: [00024B90] protected: void __cdecl CTaskBand::_DeleteTask(struct ITaskGroup *,struct ITaskItem *,enum SWITCHER_REMOVAL_REASON)
-	Line  61: 	Line  2604: [0004E5B0] public: virtual long __cdecl CTaskBand::GetIconId(struct ITaskGroup *,struct ITaskItem *,int,int *)
-	Line  62: 	Line  2605: [0004E6E8] protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *)
-	Line  81: 	Line  2821: [00055C6C] protected: void __cdecl CTaskBand::_SwitchToWindow(struct ITaskItem *)
-	Line 106: 	Line  3295: [00065910] public: virtual long __cdecl CTaskBand::SwitchTo(struct ITaskItem *,int)
-	Line 108: 	Line  3305: [000660E4] protected: void __cdecl CTaskBand::_HandleTaskActivated(struct ITaskGroup *,struct ITaskItem *)
-	Line 126: 	Line  4229: [00073D60] public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *)
-	Line 133: 	Line  4375: [00077D90] public: virtual void __cdecl CTaskBand::CloseItem(struct ITaskItem *)
-	Line 159: 	Line  4976: [00081FBC] protected: void __cdecl CTaskBand::_AddAppTaskItem(struct ITaskItem *,struct RESOLVEDWINDOW *)
-	Line 162: 	Line  5062: [00082940] protected: long __cdecl CTaskBand::_BuildTaskList(class CDPA<struct ITaskItem,class CTContainer_PolicyUnOwned<struct ITaskItem> > *)
-	Line 167: 	Line  5187: [00084FE8] protected: void __cdecl CTaskBand::_HandleMonitorChanged(struct ITaskGroup *,struct ITaskItem *)
-	Line 180: 	Line  5470: [0008BEB0] protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *)
-	Line 204: 	Line  6845: [000AD8C0] public: virtual long __cdecl CTaskBand::GetTaskFromWindow(struct HWND__ *,struct ITaskGroup * *,struct ITaskItem * *)
-	Line 301: 	Line 10778: [00109A90] public: virtual long __cdecl CTaskBand::HandleContextMenuCommand(struct ITaskItemFilter *,struct ITaskGroup *,struct ITaskItem *,struct HWND__ *,struct IContextMenu *,int)
-	Line 380: 	Line 10944: [00111500] public: virtual long __cdecl CTaskBand::RequestContextMenu(struct ITaskGroup *,struct ITaskItem *,int,struct IContextMenu * *,struct HMENU__ * *)
-	Line 430: 	Line 11031: [00118B2C] protected: long __cdecl CTaskBand::_ResolveInsertBefore(struct HWND__ *,struct ITaskGroup *,struct ITaskItem *,struct ITaskGroup * *,struct ITaskItem * *)
+	Line  27: 	Line  1311: [00019900] public: long __cdecl ImmersiveIcons::LoadImmersiveIconThemeAware(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *)
+	Line  29: 	Line  1602: [000274AC] public: long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *)
+	Line  30: 	Line  1603: [0002797C] public: long __cdecl ImmersiveIcons::_LoadImmersiveIcon(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *,struct ImmersiveIcons::IconData2 *)
+	Line  2186: [0003F778] public: long __cdecl GetIconFromBitmap(struct HBITMAP__ *,struct HICON__ * *)
+
 """
 
 

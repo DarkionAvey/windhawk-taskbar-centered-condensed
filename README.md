@@ -80,7 +80,7 @@ Your contributions to modding Windows are truly appreciated!
 | `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default 6) | Integer (whole number) |
 | `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default 6) | Non-negative integer |
 | `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default 78) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default 48) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default 44) | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default 74) | Non-negative integer |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default 24) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default 16) | Non-negative integer |
