@@ -1,6 +1,6 @@
-- TrayTaskGap: 10
+- TrayTaskGap: 20
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default 10)
+  $description: Adjusts the space between the task area and the tray area (Default 20)
   $type: signed int
 
 - TaskbarBackgroundHorizontalPadding: 6
