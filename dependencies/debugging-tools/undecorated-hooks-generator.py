@@ -6,10 +6,10 @@ import re
 # and identifying potential hooks.
 
 input_block = r"""
-	Line  27: 	Line  1311: [00019900] public: long __cdecl ImmersiveIcons::LoadImmersiveIconThemeAware(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *)
-	Line  29: 	Line  1602: [000274AC] public: long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *)
-	Line  30: 	Line  1603: [0002797C] public: long __cdecl ImmersiveIcons::_LoadImmersiveIcon(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *,struct ImmersiveIcons::IconData2 *)
-	Line  2186: [0003F778] public: long __cdecl GetIconFromBitmap(struct HBITMAP__ *,struct HICON__ * *)
+[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartRequestingAttentionAnimation'::`1'::dtor$1()
+[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartRunningIndicatorSizeChangeAnimation'::`1'::dtor$2()
+[007DDA94] public: void __cdecl winrt::Taskbar::implementation::SharedAnimations::StartTransitionFromOverflowToTaskbarScaleAnimation(struct winrt::Windows::UI::Xaml::UIElement const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >)const 
+[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartAugmentedEntryPointEntranceAnimation'::`1'::dtor$1()
 
 """
 

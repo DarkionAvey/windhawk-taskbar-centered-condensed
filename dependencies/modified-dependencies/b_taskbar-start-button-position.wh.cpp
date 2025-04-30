@@ -14,6 +14,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool ApplyStyle(FrameworkElement element);
 bool InitializeDebounce();
+DispatcherTimer debounceTimer{nullptr};
 #include <windhawk_utils.h>
 #include <atomic>
 #include <functional>
@@ -166,7 +167,8 @@ void ApplySettingsFromTaskbarThread() {
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
-            auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!InitializeDebounce()) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent)) {
+            if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}
+auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent)) {
                 Wh_Log(L"ApplyStyles failed");
                 return TRUE;
             }

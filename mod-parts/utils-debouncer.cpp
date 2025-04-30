@@ -1,4 +1,3 @@
-DispatcherTimer debounceTimer{nullptr};
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
@@ -22,7 +21,7 @@ void CleanupDebounce() {
     debounceTimer = nullptr;
   }
 }
-void ApplySettingsDebounced(int delayMs = 500) {
+void ApplySettingsDebounced(int delayMs = 10) {
   if (!debounceTimer) return;
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (!hTaskbarWnd) return;

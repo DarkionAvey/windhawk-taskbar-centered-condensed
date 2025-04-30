@@ -94,6 +94,8 @@ class TaskbarIconSizeMod(URLProcessor):
         super().__init__(url, "TBIconSize", "a")
 
     def format_content(self, content):
+        content = "void ApplySettingsDebounced(int delayMs);\n" + content
+        content = re.sub(r'double labelsTopBorderExtraMargin = 0', 'ApplySettingsDebounced(300);\n\t\tdouble labelsTopBorderExtraMargin = 0', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
         content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);', ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));', content, flags=re.DOTALL)
@@ -134,9 +136,9 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
-        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)", "auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!InitializeDebounce()) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))", content, flags=re.DOTALL)
+        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)", "if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}\nauto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))", content, flags=re.DOTALL)
 
-        content = "bool ApplyStyle(FrameworkElement element);\nbool InitializeDebounce();\n" + content
+        content = "bool ApplyStyle(FrameworkElement element);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n" + content
         return content
 
 
@@ -151,8 +153,8 @@ class TaskbarStylerMod(URLProcessor):
         content = re.sub(r"^const\sTheme\sg_.*?\}\}\;", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"^void ProcessAllStylesFromSettings\(\) {.*?(^}$)", "void ProcessAllStylesFromSettings() {}", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"RunFromWindowThread\(", "RunFromWindowThread" + self.name + "(", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"// clang-format off", "" , content, flags= re.DOTALL)
-        content = re.sub(r"// clang-format on", "" , content, flags= re.DOTALL)
+        content = re.sub(r"// clang-format off", "", content, flags=re.DOTALL)
+        content = re.sub(r"// clang-format on", "", content, flags=re.DOTALL)
 
         return content
 

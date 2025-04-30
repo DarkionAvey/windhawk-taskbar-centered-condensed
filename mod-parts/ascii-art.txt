@@ -48,5 +48,3 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX,
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <mutex>
-#include <thread>

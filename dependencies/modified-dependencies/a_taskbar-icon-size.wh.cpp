@@ -12,6 +12,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ApplySettingsDebounced(int delayMs);
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -783,7 +784,8 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         }
         Wh_Log(L"Processing %f x %f widget", panelGrid.Width(),
                panelGrid.Height());
-        double labelsTopBorderExtraMargin = 0;
+        ApplySettingsDebounced(300);
+		double labelsTopBorderExtraMargin = 0;
         bool widePanel = panelGrid.Width() > panelGrid.Height();
         if (widePanel) {
             auto margin = Thickness{3, 3, 3, 3};
