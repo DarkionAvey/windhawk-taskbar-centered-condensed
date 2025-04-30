@@ -31,14 +31,22 @@ struct {
     bool startMenuOnTheLeft;
     int startMenuWidth;
 } g_settings_startbuttonposition;
+
+
 HWND g_startMenuWnd;
 int g_startMenuOriginalWidth;
 HWND g_searchMenuWnd;
 int g_searchMenuOriginalX;
+
 STDAPI GetDpiForMonitor(HMONITOR hmonitor,
                         MONITOR_DPI_TYPE dpiType,
                         UINT* dpiX,
                         UINT* dpiY);
+
+
+
+
+
 void* CTaskBand_ITaskListWndSite_vftable;
 void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
@@ -227,6 +235,7 @@ IUIElement_Arrange_Hook(void* pThis,
         });
     if (!widgetElement) {
         element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { 
+
                 double width = element.ActualWidth();
                 double minX = std::numeric_limits<double>::infinity();
                 auto taskbarFrameRepeater =
@@ -260,6 +269,7 @@ IUIElement_Arrange_Hook(void* pThis,
 }
 using AugmentedEntryPointButton_UpdateButtonPadding_t =
     void(WINAPI*)(void* pThis);
+
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPosition(void* pThis) {
     
     AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
@@ -283,13 +293,189 @@ void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPositi
             button.Margin(margin);
         });
 }
+using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
+TrayUI__Hide_t TrayUI__Hide_Original;
+void WINAPI TrayUI__Hide_Hook(void* pThis) {
+  TrayUI__Hide_Original(pThis);
+  ApplySettingsDebounced();
+}
+using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
+CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
+void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
+  CSecondaryTray__AutoHide_Original(pThis, param1);
+  ApplySettingsDebounced();
+}
+using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
+TrayUI_WndProc_t TrayUI_WndProc_Original;
+LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
+}
+using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
+LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+}
+using CTaskBand__ProcessWindowDestroyed_t = void(WINAPI*)(void* pThis, void* pHwnd);
+CTaskBand__ProcessWindowDestroyed_t CTaskBand__ProcessWindowDestroyed_Original;
+void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
+  Wh_Log(L"CTaskBand::CTaskBand__ProcessWindowDestroyed_Hook Hook");
+  CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
+  ApplySettingsDebounced();
+}
+using CTaskBand__InsertItem_t = long(WINAPI*)(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2);
+CTaskBand__InsertItem_t CTaskBand__InsertItem_Original;
+long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2) {
+  Wh_Log(L"CTaskBand::_InsertItem Hook");
+  auto original_call = CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
+  ApplySettingsDebounced(100);
+  return original_call;
+}
+using CTaskBand__UpdateAllIcons_t = void(WINAPI*)(void* pThis);
+CTaskBand__UpdateAllIcons_t CTaskBand__UpdateAllIcons_Original;
+void WINAPI CTaskBand__UpdateAllIcons_Hook(void* pThis) {
+  Wh_Log(L"CTaskBand::_UpdateAllIcons Hook");
+  CTaskBand__UpdateAllIcons_Original(pThis);
+  ApplySettingsDebounced();
+}
+using CTaskBand__TaskOrderChanged_t = void(WINAPI*)(void* pThis, void* pTaskGroup, int param);
+CTaskBand__TaskOrderChanged_t CTaskBand__TaskOrderChanged_Original;
+void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int param) {
+  Wh_Log(L"CTaskBand::TaskOrderChanged Hook");
+  CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
+  ApplySettingsDebounced();
+}
+using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
+CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
+__int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+}
+using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
+CTaskBand__WndProc_t CTaskBand__WndProc_Original;
+__int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+}
+using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
+CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
+__int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+}
+using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
+CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
+__int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+}
+using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
+CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
+__int64 WINAPI CTraySearchControl__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  ApplySettingsFromTaskbarThreadIfRequired();
+  return CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+}
+interface ITaskGroup;
+interface ITaskItem;
+using CTaskBand__UpdateItemIcon_WithArgs_t = void(WINAPI*)(void* pThis, ITaskGroup* param1, ITaskItem* param2);
+CTaskBand__UpdateItemIcon_WithArgs_t CTaskBand__UpdateItemIcon_WithArgs_Original;
+void WINAPI CTaskBand__UpdateItemIcon_WithArgs_Hook(void* pThis, ITaskGroup* param1, ITaskItem* param2) {
+  Wh_Log(L"Method called: CTaskBand__UpdateItemIcon");
+  CTaskBand__UpdateItemIcon_WithArgs_Original(pThis, param1, param2);
+  ApplySettingsDebounced(100);
+}
+using CTaskBand_RemoveIcon_WithArgs_t = void(WINAPI*)(void* pThis, ITaskItem* param1);
+CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
+void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
+  Wh_Log(L"Method called: CTaskBand_RemoveIcon");
+  CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
+  ApplySettingsDebounced();
+}
+
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
+
+    {{LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"}, &CTaskBand__UpdateItemIcon_WithArgs_Original, CTaskBand__UpdateItemIcon_WithArgs_Hook},
+
+    {
+        {LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CImpWndProc__WndProc_Original,
+        CImpWndProc__WndProc_Hook,
+    },
+    {
+        {LR"(protected: static __int64 __cdecl CTraySearchControl::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CTraySearchControl__WndProc_Original,
+        CTraySearchControl__WndProc_Hook,
+    },
+    {
+        {LR"(private: virtual __int64 __cdecl CSecondaryTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CSecondaryTaskBand__WndProc_Original,
+        CSecondaryTaskBand__WndProc_Hook,
+    },
+    {
+        {LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CTaskBand__WndProc_Original,
+        CTaskBand__WndProc_Hook,
+    },
+
+    {
+        {LR"(protected: virtual __int64 __cdecl CTaskListWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CTaskListWnd__WndProc_Original,
+        CTaskListWnd__WndProc_Hook,
+    },
+
+    /////////////////////////////////////
+    {
+        {LR"(protected: long __cdecl CTaskBand::_InsertItem(struct HWND__ *,struct ITaskItem * *,struct HWND__ *,struct HWND__ *))"},
+        &CTaskBand__InsertItem_Original,
+        CTaskBand__InsertItem_Hook,
+    },
+
+    {
+        {LR"(protected: void __cdecl CTaskBand::_UpdateAllIcons(void))"},
+        &CTaskBand__UpdateAllIcons_Original,
+        CTaskBand__UpdateAllIcons_Hook,
+    },
+
+    {
+        {LR"(public: virtual void __cdecl CTaskBand::TaskOrderChanged(struct ITaskGroup *,int))"},
+        &CTaskBand__TaskOrderChanged_Original,
+        CTaskBand__TaskOrderChanged_Hook,
+    },
+
+    {
+        {LR"(protected: void __cdecl CTaskBand::_ProcessWindowDestroyed(struct HWND__ *))"},
+        &CTaskBand__ProcessWindowDestroyed_Original,
+        CTaskBand__ProcessWindowDestroyed_Hook,
+    },
+
+    {
+        {LR"(public: void __cdecl TrayUI::_Hide(void))"},
+        &TrayUI__Hide_Original,
+        TrayUI__Hide_Hook,
+    },
+    {
+        {LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))"},
+        &CSecondaryTray__AutoHide_Original,
+        CSecondaryTray__AutoHide_Hook,
+    },
+
+    {
+        {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+        &TrayUI_WndProc_Original,
+        TrayUI_WndProc_Hook,
+    },
+    {
+        {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+        &CSecondaryTray_v_WndProc_Original,
+        CSecondaryTray_v_WndProc_Hook,
+    },
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -313,8 +499,28 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
     };
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
+using TaskbarTelemetry_StartItemEntranceAnimation_t = void(WINAPI*)(const bool&);
+static TaskbarTelemetry_StartItemEntranceAnimation_t orig_StartItemEntranceAnimation = nullptr;
+
+using TaskbarTelemetry_StartItemPlateEntranceAnimation_t = void(WINAPI*)(const bool&);
+static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEntranceAnimation = nullptr;
+
+void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
+  Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
+  orig_StartItemEntranceAnimation(b);
+  ApplySettingsDebounced();
+}
+
+void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
+  Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
+  orig_StartItemPlateEntranceAnimation(b);
+  ApplySettingsDebounced();
+}
+
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
+
+    {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
             &IUIElement_Arrange_Original,
@@ -328,6 +534,7 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     };
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
+
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
@@ -338,6 +545,7 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     }
 }
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+
 HMODULE WINAPI LoadLibraryExW_Hook_StartButtonPosition(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
@@ -470,7 +678,7 @@ void LoadSettingsStartButtonPosition() {
 }
 BOOL Wh_ModInitStartButtonPosition() {
     
-    LoadSettingsStartButtonPosition();
+    
     if (!HookTaskbarDllSymbolsStartButtonPosition()) {
         return FALSE;
     }
@@ -489,7 +697,7 @@ BOOL Wh_ModInitStartButtonPosition() {
                                            LoadLibraryExW_Hook_StartButtonPosition,
                                            &LoadLibraryExW_Original);
     }
-    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    HMODULE dwmapiModule = nullptr;
     if (dwmapiModule) {
         auto pDwmSetWindowAttribute =
             (decltype(&DwmSetWindowAttribute))GetProcAddress(
@@ -514,20 +722,14 @@ void Wh_ModAfterInitStartButtonPosition() {
             }
         }
     }
-    HWND hTaskbarWnd = GetTaskbarWnd();
-    if (hTaskbarWnd) {
-        ApplySettingsStartButtonPosition(hTaskbarWnd);
-    }
+    
 }
 void Wh_ModBeforeUninitStartButtonPosition() {
     
     g_unloading = true;
-    HWND hTaskbarWnd = GetTaskbarWnd();
-    if (hTaskbarWnd) {
-        ApplySettingsStartButtonPosition(hTaskbarWnd);
-    }
+    
 }
-void Wh_ModUninitStartButtonPosition() {
+void Wh_ModUninitStartButtonPosition() {if(true)return;
     
     if (g_startMenuWnd && g_startMenuOriginalWidth) {
         RECT rect;
@@ -560,5 +762,5 @@ void Wh_ModUninitStartButtonPosition() {
 }
 void Wh_ModSettingsChangedStartButtonPosition() {
     
-    LoadSettingsStartButtonPosition();
+    
 }

@@ -5,6 +5,14 @@ import re
 
 from art import *
 
+hooks_dir = "mod-parts/hooks/"
+
+
+def read_file(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        contents = f.read()
+    return contents
+
 
 def generate_slash_block(name):
     name = text2art(name, font="starwars")
@@ -66,11 +74,10 @@ class URLProcessor(ABC):
         content = content.strip()
         content = re.sub(r"//\s+==WindhawkMod==.*?WindhawkModSettings==\s+(?=#include)", "", content, flags=re.DOTALL)
 
-        content = self.format_content(content)
-
         content = re.sub("g_settings", "g_settings_" + self.name.lower(), content, flags=re.DOTALL)
         content = re.sub(r'Wh_Log\(L\">\"\);', r'', content, flags=re.DOTALL)
         content = re.sub(r"LoadSettings\(\)", r"LoadSettings" + self.name + "()", content, flags=re.DOTALL)
+        content = re.sub(r"LoadLibrary\(L\"dwmapi.dll\"\);", "nullptr;", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"ApplySettings\(", r"ApplySettings" + self.name + "(", content, flags=re.DOTALL)
         content = re.sub(r"HookTaskbarDllSymbols\(\)", r"HookTaskbarDllSymbols" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModInit\(\)", r"Wh_ModInit" + self.name + "()", content, flags=re.DOTALL)
@@ -80,6 +87,7 @@ class URLProcessor(ABC):
         content = re.sub(r"Wh_ModSettingsChanged\(\)", r"Wh_ModSettingsChanged" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub("\n+", "\n", content, flags=re.DOTALL)
+        content = self.format_content(content)
         content = generate_slash_block(self.name) + content
 
         filename = self.url.split("/")[-1] or "output.mod"
@@ -94,7 +102,7 @@ class TaskbarIconSizeMod(URLProcessor):
         super().__init__(url, "TBIconSize", "a")
 
     def format_content(self, content):
-        content = "void ApplySettingsDebounced(int delayMs);\n" + content
+        content = "void ApplySettingsDebounced(int delayMs);\nvoid ApplySettingsDebounced();\nvoid ApplySettingsFromTaskbarThreadIfRequired();\n" + content
         content = re.sub(r'double labelsTopBorderExtraMargin = 0', 'ApplySettingsDebounced(300);\n\t\tdouble labelsTopBorderExtraMargin = 0', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
@@ -116,6 +124,8 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"typedef enum MONITOR_DPI_TYPE {.*?} MONITOR_DPI_TYPE;", "", content, flags=re.DOTALL)
 
         content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
+        content = re.sub(r"LoadSettingsStartButtonPosition\(\);", "", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"LoadLibrary\(L\"dwmapi.dll\"\);", "nullptr;", content, flags=re.MULTILINE | re.DOTALL)
 
         content = re.sub(r"HWND GetTaskbarWnd\(\).*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"FrameworkElement EnumChildElements\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
@@ -132,11 +142,25 @@ class StartButtonPosition(URLProcessor):
                          flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuOnTheLeft\"\);", "0;", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuWidth\"\);", "0;", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"HWND hTaskbarWnd = GetTaskbarWnd.*?}", "", content, flags=re.MULTILINE | re.DOTALL)
 
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
-        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)", "if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}\nauto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))", content, flags=re.DOTALL)
+        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)",
+                         "if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}\nauto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))",
+                         content, flags=re.DOTALL)
+        content = re.sub(r"void Wh_ModUninitStartButtonPosition\(\) {", "void Wh_ModUninitStartButtonPosition() {if(true)return;", content, flags=re.MULTILINE | re.DOTALL)
+
+        # hooks
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir,"taskbar.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir,"Taskbar.View.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
+
+        content = re.sub(r"bool HookTaskbarDllSymbolsStartButtonPosition\(\) \{", fr"""{read_file(os.path.join(hooks_dir, "taskbar.dll_methods.cpp"))}
+bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILINE | re.DOTALL)
+
+        content = re.sub(r"bool HookTaskbarViewDllSymbolsStartButtonPosition\(HMODULE module\) \{", fr"""{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_methods.cpp"))}
+bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {{""", content, flags=re.MULTILINE | re.DOTALL)
 
         content = "bool ApplyStyle(FrameworkElement element);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n" + content
         return content
@@ -178,4 +202,5 @@ def process_all_mods():
 
 
 if __name__ == "__main__":
+    hooks_dir = "../mod-parts/hooks/"
     process_all_mods()

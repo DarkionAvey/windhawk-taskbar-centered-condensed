@@ -42,14 +42,15 @@ modify the source files in the `mod-parts` directory.
 
 ---
 
-## 🛣️ Checklist
+## 🛣️ Potential roadmap
 
-1. ~~Use debounce to stop running the animations concurrently.~~ ✅
-2. Taskbar dividers (partially implemented)
-3. Move widget panel to the center
-4. Public release
-5. Add support for custom taskbar icons
-6. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at
+1. ~~Use debounce to stop running the animations concurrently~~ ✅
+2. Proper "unloading" of mod.
+3. Taskbar dividers (partially implemented)
+4. Move widget panel to the center
+5. Replace the taskbar weather widget with WebView for more interesting stuff to show
+6. Add support for custom taskbar icons
+7. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at
 
 ---
 

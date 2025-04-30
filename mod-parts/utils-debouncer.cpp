@@ -16,20 +16,34 @@ bool InitializeDebounce() {
 }
 void CleanupDebounce() {
   if (debounceTimer) {
-    debounceTimer.Stop();
-    debounceTimer.Tick(debounceToken);  // remove handler
-    debounceTimer = nullptr;
+    if (auto debounceHwnd = GetTaskbarWnd()) {
+      RunFromWindowThread(
+          debounceHwnd,
+          [](void* pParam) {
+            debounceTimer.Stop();
+            debounceTimer.Tick(debounceToken);  // remove handler
+            debounceTimer = nullptr;
+          },
+          0);
+    }
   }
 }
-void ApplySettingsDebounced(int delayMs = 10) {
+void ApplySettingsDebounced(int delayMs) {
   if (!debounceTimer) return;
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (!hTaskbarWnd) return;
 
   debounceDelayMs = delayMs;
-  RunFromWindowThread(hTaskbarWnd, [](void* pParam) {
-          debounceTimer.Stop();
-          debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(debounceDelayMs)});
-          debounceTimer.Start();
-  }, 0);
+  RunFromWindowThread(
+      hTaskbarWnd,
+      [](void* pParam) {
+        debounceTimer.Stop();
+        debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(debounceDelayMs)});
+        debounceTimer.Start();
+      },
+      0);
+}
+
+void ApplySettingsDebounced(){
+    ApplySettingsDebounced(100);
 }
