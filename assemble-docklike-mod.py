@@ -59,7 +59,7 @@ def remove_cpp_comments(code: str) -> str:
     code = '\n'.join(line for line in (l.strip() for l in code.splitlines()) if line)
     return code
 
-def main(version="1.1.0"):
+def main(version="1.2.0"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     readme_path = os.path.join(base_dir, 'README.md')
     dependencies_dir_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies')
