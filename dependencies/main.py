@@ -103,10 +103,30 @@ class TaskbarIconSizeMod(URLProcessor):
 
     def format_content(self, content):
         content = "void ApplySettingsDebounced(int delayMs);\nvoid ApplySettingsDebounced();\nvoid ApplySettingsFromTaskbarThreadIfRequired();\n" + content
-        content = re.sub(r'double labelsTopBorderExtraMargin = 0', 'ApplySettingsDebounced(300);\n\t\tdouble labelsTopBorderExtraMargin = 0', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
         content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);', ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));', content, flags=re.DOTALL)
+        content = re.sub(r"void LoadSettingsTBIconSize\(\) \{.*?}", r"""
+void LoadSettingsTBIconSize() {
+  g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
+  if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
+  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+
+  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+  if (g_settings_tbiconsize.taskbarHeight <= 0) g_settings_tbiconsize.taskbarHeight = 78;
+  g_settings_tbiconsize.taskbarHeight = abs(g_settings_tbiconsize.taskbarHeight);
+  if (g_settings_tbiconsize.taskbarHeight > 200) g_settings_tbiconsize.taskbarHeight = 200;
+  if (g_settings_tbiconsize.taskbarHeight < 44) g_settings_tbiconsize.taskbarHeight = 44;
+  int TaskbarOffsetY = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
+  if (TaskbarOffsetY < 0) TaskbarOffsetY = 6;
+  int heightExpansion = ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground")) ? 0 : (abs(TaskbarOffsetY) * 2));
+  g_settings_tbiconsize.taskbarHeight = g_settings_tbiconsize.taskbarHeight + heightExpansion;
+  int value = Wh_GetIntSetting(L"TaskbarButtonSize");
+  if (value <= 0) value = 74;
+  g_settings_tbiconsize.taskbarButtonWidth = value;
+}
+    """, content, flags=re.DOTALL)
+
         return content
 
 
@@ -147,14 +167,30 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
-        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\)",
-                         "if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}\nauto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent))",
-                         content, flags=re.DOTALL)
+        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\) \{.*?}",
+                         r"""
+if (!debounceTimer) {
+  RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+  return TRUE;
+}
+auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent || !debounceTimer) return TRUE;
+
+if (xamlRootContent && xamlRootContent.Dispatcher()) {
+  xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+    if (!ApplyStyle(xamlRootContent)) {
+      Wh_Log(L"ApplyStyles failed");
+    }
+  });
+  return TRUE;
+}
+""",
+                         content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"void Wh_ModUninitStartButtonPosition\(\) {", "void Wh_ModUninitStartButtonPosition() {if(true)return;", content, flags=re.MULTILINE | re.DOTALL)
 
         # hooks
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir,"taskbar.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir,"Taskbar.View.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir, "taskbar.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
 
         content = re.sub(r"bool HookTaskbarDllSymbolsStartButtonPosition\(\) \{", fr"""{read_file(os.path.join(hooks_dir, "taskbar.dll_methods.cpp"))}
 bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILINE | re.DOTALL)

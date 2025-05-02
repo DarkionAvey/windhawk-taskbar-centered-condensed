@@ -175,11 +175,23 @@ void ApplySettingsFromTaskbarThread() {
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
-            if(!debounceTimer){RunFromWindowThread( hWnd, [](void* pParam) { InitializeDebounce(); }, 0);return TRUE;}
-auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();if (!xamlRootContent ||!debounceTimer) return TRUE;if (xamlRootContent&&!ApplyStyle(xamlRootContent)) {
-                Wh_Log(L"ApplyStyles failed");
-                return TRUE;
-            }
+            
+if (!debounceTimer) {
+  RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+  return TRUE;
+}
+auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent || !debounceTimer) return TRUE;
+
+if (xamlRootContent && xamlRootContent.Dispatcher()) {
+  xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+    if (!ApplyStyle(xamlRootContent)) {
+      Wh_Log(L"ApplyStyles failed");
+    }
+  });
+  return TRUE;
+}
+
             return TRUE;
         },
         0);

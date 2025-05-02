@@ -88,8 +88,8 @@ Your contributions to modding Windows are truly appreciated!
 
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
-| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default 20) | Integer (whole number) |
-| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default 6) | Integer (whole number) |
+| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default 20) | Non-negative integer |
+| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default 6) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default 6) | Non-negative integer |
 | `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default 78) | Non-negative integer |
 | `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default 44) | Non-negative integer |

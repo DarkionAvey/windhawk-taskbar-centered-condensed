@@ -786,8 +786,7 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         }
         Wh_Log(L"Processing %f x %f widget", panelGrid.Width(),
                panelGrid.Height());
-        ApplySettingsDebounced(300);
-		double labelsTopBorderExtraMargin = 0;
+        double labelsTopBorderExtraMargin = 0;
         bool widePanel = panelGrid.Width() > panelGrid.Height();
         if (widePanel) {
             auto margin = Thickness{3, 3, 3, 3};
@@ -877,11 +876,26 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
     }
     return ret;
 }
+
 void LoadSettingsTBIconSize() {
-    g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-    g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));
-    g_settings_tbiconsize.taskbarButtonWidth = Wh_GetIntSetting(L"TaskbarButtonSize");
+  g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
+  if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
+  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+
+  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+  if (g_settings_tbiconsize.taskbarHeight <= 0) g_settings_tbiconsize.taskbarHeight = 78;
+  g_settings_tbiconsize.taskbarHeight = abs(g_settings_tbiconsize.taskbarHeight);
+  if (g_settings_tbiconsize.taskbarHeight > 200) g_settings_tbiconsize.taskbarHeight = 200;
+  if (g_settings_tbiconsize.taskbarHeight < 44) g_settings_tbiconsize.taskbarHeight = 44;
+  int TaskbarOffsetY = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
+  if (TaskbarOffsetY < 0) TaskbarOffsetY = 6;
+  int heightExpansion = ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground")) ? 0 : (abs(TaskbarOffsetY) * 2));
+  g_settings_tbiconsize.taskbarHeight = g_settings_tbiconsize.taskbarHeight + heightExpansion;
+  int value = Wh_GetIntSetting(L"TaskbarButtonSize");
+  if (value <= 0) value = 74;
+  g_settings_tbiconsize.taskbarButtonWidth = value;
 }
+    
 HWND GetTaskbarWnd() {
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
     DWORD processId = 0;
