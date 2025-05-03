@@ -1,4 +1,4 @@
-bool g_sheduled_low_priority_update = false;
+bool g_scheduled_low_priority_update = false;
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
@@ -7,7 +7,7 @@ bool InitializeDebounce() {
   debounceTimer = DispatcherTimer();
   debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
-    g_sheduled_low_priority_update = false;
+    g_scheduled_low_priority_update = false;
     debounceTimer.Stop();
     if (auto debounceHwnd = GetTaskbarWnd()) {
       Wh_Log(L"Debounce triggered");
@@ -23,7 +23,7 @@ void CleanupDebounce() {
       RunFromWindowThread(
           debounceHwnd,
           [](void* pParam) {
-            g_sheduled_low_priority_update = false;
+            g_scheduled_low_priority_update = false;
             debounceTimer.Stop();
             debounceTimer.Tick(debounceToken);  // remove handler
             debounceTimer = nullptr;
@@ -40,7 +40,7 @@ void ApplySettingsDebounced(int delayMs) {
   bool lowPriority = false;
   if (delayMs <= 0) {
     lowPriority = true;
-    delayMs = 500;
+    delayMs = 1000;
   }
 
   debounceDelayMs = delayMs;

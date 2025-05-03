@@ -174,7 +174,7 @@ if (!debounceTimer) {
   RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
   return TRUE;
 }
-auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
 if (!xamlRootContent || !debounceTimer) return TRUE;
 
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
@@ -199,7 +199,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILI
         content = re.sub(r"bool HookTaskbarViewDllSymbolsStartButtonPosition\(HMODULE module\) \{", fr"""{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_methods.cpp"))}
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {{""", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = "bool ApplyStyle(FrameworkElement element);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n" + content
+        content = "bool ApplyStyle(FrameworkElement const& element);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n" + content
         return content
 
 

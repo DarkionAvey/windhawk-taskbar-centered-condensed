@@ -81,11 +81,40 @@ def get_next_patch_version(version_file_path):
     return patch
 
 
-def main(major_minor="1.3"):
+def get_next_patch_version(version_file_path):
+    if not os.path.exists(version_file_path):
+        return 0
+    with open(version_file_path, 'r') as f:
+        last_version = f.read().strip()
+    try:
+        major_minor_file, patch_file = last_version.rsplit('.', 1)
+        patch_file = int(patch_file)
+    except ValueError:
+        # fallback in case of malformed version file
+        return 0
+    return patch_file + 1
+
+
+def main(major_minor="1.4"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     version_file_path = os.path.join(base_dir, 'mod-parts', 'mod-build-version.txt')
-    patch = get_next_patch_version(version_file_path)
+
+    if os.path.exists(version_file_path):
+        with open(version_file_path, 'r') as f:
+            current_version = f.read().strip()
+        current_major_minor = '.'.join(current_version.split('.')[:2])
+    else:
+        current_major_minor = None
+
+    if current_major_minor != major_minor:
+        patch = 0  # reset patch
+    else:
+        patch = get_next_patch_version(version_file_path)
+
     version = f"{major_minor}.{patch}"
+
+    with open(version_file_path, 'w') as f:
+        f.write(version)
 
     readme_path = os.path.join(base_dir, 'README.md')
     dependencies_dir_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies')

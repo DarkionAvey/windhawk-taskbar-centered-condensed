@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.3.11
+// @version         1.4.1
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -1542,7 +1542,7 @@ void Wh_ModSettingsChangedTBIconSize() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool ApplyStyle(FrameworkElement element);
+bool ApplyStyle(FrameworkElement const& element);
 bool InitializeDebounce();
 DispatcherTimer debounceTimer{nullptr};
 #include <windhawk_utils.h>
@@ -1710,7 +1710,7 @@ if (!debounceTimer) {
   RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
   return TRUE;
 }
-auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
 if (!xamlRootContent || !debounceTimer) return TRUE;
 
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
@@ -2321,26 +2321,17 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-
 #include <dwmapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <functional>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/base.h>
-using namespace winrt::Windows::UI::Xaml;
-STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
-#include <commctrl.h>
-#include <roapi.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
@@ -2348,21 +2339,24 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX,
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+#include <commctrl.h>
+#include <roapi.h>
 #include <winstring.h>
 #include <chrono>
 #include <string>
 #include <string_view>
-#include <winrt/Windows.UI.Xaml.Automation.h.>
-#include <atomic>
-#include <chrono>
-#include <winrt/Windows.Foundation.h>
-#include <string>
 #include <vector>
 #include <regex>
 #include <sstream>
 #include <algorithm>
-#include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <atomic>
+#include <unordered_map>
+#include <limits>
+
+using namespace winrt::Windows::UI::Xaml;
+
+STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
   std::wstring buffer;
@@ -2448,7 +2442,7 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
 
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
 
-bool g_sheduled_low_priority_update = false;
+bool g_scheduled_low_priority_update = false;
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
@@ -2457,7 +2451,7 @@ bool InitializeDebounce() {
   debounceTimer = DispatcherTimer();
   debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
-    g_sheduled_low_priority_update = false;
+    g_scheduled_low_priority_update = false;
     debounceTimer.Stop();
     if (auto debounceHwnd = GetTaskbarWnd()) {
       Wh_Log(L"Debounce triggered");
@@ -2473,7 +2467,7 @@ void CleanupDebounce() {
       RunFromWindowThread(
           debounceHwnd,
           [](void* pParam) {
-            g_sheduled_low_priority_update = false;
+            g_scheduled_low_priority_update = false;
             debounceTimer.Stop();
             debounceTimer.Tick(debounceToken);  // remove handler
             debounceTimer = nullptr;
@@ -2490,7 +2484,7 @@ void ApplySettingsDebounced(int delayMs) {
   bool lowPriority = false;
   if (delayMs <= 0) {
     lowPriority = true;
-    delayMs = 500;
+    delayMs = 1000;
   }
 
   debounceDelayMs = delayMs;
@@ -2614,22 +2608,14 @@ struct {
   unsigned int borderColorR, borderColorG, borderColorB;
   std::vector<std::wstring> userDefinedDividedAppNames;
 } g_settings;
-struct {
-  int childrenCount = 0;
-  double rightMostEdge = 0.0;
-  double childrenWidth = 0.0;
-} g_lastTaskbarData;
+
 
 bool g_invalidateDimensions = true;
-bool g_wasOverflowing = false;
-signed int g_initOffsetX = -1;
-float g_lastTargetOffsetX = 0.0f, g_lastTargetWidth = 0.0f, g_lastTargetOffsetY = 0.0f;
 
-unsigned int g_lastChildrenWidthTaskbar = 0, g_lastTrayFrameWidth = 0;
 
 void ApplySettingsFromTaskbarThreadIfRequired() {
-  if (!g_sheduled_low_priority_update) {
-    g_sheduled_low_priority_update = true;
+  if (!g_scheduled_low_priority_update) {
+    g_scheduled_low_priority_update = true;
     Wh_Log(L"Scheduled low priority update");  // it's low priority in the debounce sense, not the required sense.
     ApplySettingsDebounced(-1);
   }
@@ -2996,21 +2982,36 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
 }
 
-#include <chrono>
 
-std::chrono::steady_clock::time_point g_lastApplyStyleTime{};
+struct TaskbarState {
+    std::chrono::steady_clock::time_point lastApplyStyleTime{};
+    struct Data { int childrenCount; int rightMostEdge; unsigned int childrenWidth; } lastTaskbarData{};
+    unsigned int lastChildrenWidthTaskbar{0};
+    unsigned int lastTrayFrameWidth{0};
+    float lastTargetWidth{0};
+    float lastTargetOffsetX{0};
+    float lastTargetOffsetY{0};
+    float initOffsetX{-1};
+    bool wasOverflowing{false};
+};
 
-bool ApplyStyle(FrameworkElement xamlRootContent) {
-  g_sheduled_low_priority_update = false;
+static std::unordered_map<size_t, TaskbarState> g_taskbarStates;
+
+bool ApplyStyle(FrameworkElement const& xamlRootContent) {
+    if (!xamlRootContent) return false;
+
+  size_t key = reinterpret_cast<size_t>(winrt::get_abi(xamlRootContent));
+  auto& state = g_taskbarStates[key];
+
+    Wh_Log(L"ApplyStyle on key %zu", key);
+
+  g_scheduled_low_priority_update = false;
 
   auto now = std::chrono::steady_clock::now();
-  if (now - g_lastApplyStyleTime < std::chrono::milliseconds(200)) {
+    if (now - state.lastApplyStyleTime < std::chrono::milliseconds(200)) {
     return true;
   }
-
-  Wh_Log(L"ApplyStyle");
-
-  g_lastApplyStyleTime = now;
+    state.lastApplyStyleTime = now;
 
   if (!xamlRootContent) return false;
 
@@ -3097,13 +3098,13 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
   signed int rightMostEdgeTaskbar = static_cast<signed int>((rootWidth / 2.0) + (childrenWidthTaskbarDbl / 2.0));
   unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl);
 
-  if (childrenCountTaskbar < 10) {
+  if (childrenCountTaskbar < 1) {
     Wh_Log(L"Error: childrenCountTaskbar < 1");
     return false;
   }
 
   if (childrenWidthTaskbar <= 10) {
-    Wh_Log(L"Error: childrenWidthTaskbar <= 1");
+    Wh_Log(L"Error: childrenWidthTaskbar <= 10");
     return false;
   }
 
@@ -3112,12 +3113,12 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
     return false;
   }
 
-  bool rightMostEdgeChangedTaskbar = (g_lastTaskbarData.rightMostEdge != rightMostEdgeTaskbar);
+  bool rightMostEdgeChangedTaskbar = (state.lastTaskbarData.rightMostEdge != rightMostEdgeTaskbar);
 
-  if (!isOverflowing && (rightMostEdgeChangedTaskbar || g_lastTaskbarData.rightMostEdge == 0.0)) {
-    g_lastTaskbarData.childrenCount = childrenCountTaskbar;
-    g_lastTaskbarData.rightMostEdge = rightMostEdgeTaskbar;
-    g_lastTaskbarData.childrenWidth = childrenWidthTaskbar;
+  if (!isOverflowing && (rightMostEdgeChangedTaskbar || state.lastTaskbarData.rightMostEdge == 0.0)) {
+    state.lastTaskbarData.childrenCount = childrenCountTaskbar;
+    state.lastTaskbarData.rightMostEdge = rightMostEdgeTaskbar;
+    state.lastTaskbarData.childrenWidth = childrenWidthTaskbar;
   }
 
   int childrenCountTray = 0;
@@ -3169,8 +3170,8 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
   }
 
   auto originalOffset = trayVisual.Offset();
-  if (g_initOffsetX == -1) {
-    g_initOffsetX = originalOffset.x;
+  if (state.initOffsetX == -1) {
+    state.initOffsetX = originalOffset.x;
   }
 
   auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
@@ -3182,23 +3183,23 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
 
   // 5 pixels tolerance
-  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - trayVisual.Offset().x) <= 5 && childrenWidthTaskbar == g_lastChildrenWidthTaskbar && trayFrameWidth == g_lastTrayFrameWidth &&
+  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - trayVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
       abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
     Wh_Log(L"newXOffsetTray is within 5 pixels of trayVisual offset %f", trayVisual.Offset().x);
-    Wh_Log(L"childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", childrenWidthTaskbar, g_lastTrayFrameWidth);
+    Wh_Log(L"childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
 
   if (childrenWidthTaskbar < 1) {
-    g_lastChildrenWidthTaskbar = 1;
+    state.lastChildrenWidthTaskbar = 1;
   } else {
-    g_lastChildrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbar);
+    state.lastChildrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbar);
   }
 
   if (trayFrameWidth < 1) {
-    g_lastTrayFrameWidth = 1;
+    state.lastTrayFrameWidth = 1;
   } else {
-    g_lastTrayFrameWidth = static_cast<unsigned int>(trayFrameWidth);
+    state.lastTrayFrameWidth = static_cast<unsigned int>(trayFrameWidth);
   }
 
   signed int userDefinedTaskbarOffsetY = (g_settings.userDefinedFlatTaskbarBottomCorners || g_settings.userDefinedFullWidthTaskbarBackground) ? 0 : g_settings.userDefinedTaskbarOffsetY;
@@ -3256,7 +3257,7 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
 
   auto trayVisualCompositor = trayVisual.Compositor();
   if (trayVisualCompositor) {
-    float targetOffsetXTray = (g_unloading ? (float)g_initOffsetX : static_cast<float>(newXOffsetTray));
+    float targetOffsetXTray = (g_unloading ? (float)state.initOffsetX : static_cast<float>(newXOffsetTray));
     auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
 
     trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, taskbarVisual.Offset().y, taskbarVisual.Offset().z});
@@ -3291,10 +3292,10 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
   }
 
   // borders and corners
-  if (g_lastTargetWidth <= 10) {
-    g_lastTargetWidth = static_cast<float>(rootWidth);
+  if (state.lastTargetWidth <= 10) {
+    state.lastTargetWidth = static_cast<float>(rootWidth);
 
-    if (g_lastTargetWidth <= 0) {
+    if (state.lastTargetWidth <= 0) {
       return false;
     }
   }
@@ -3358,11 +3359,11 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
       auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
       borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
 
-      roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? g_lastTargetWidth : targetWidthRect, clipHeight});
+      roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
       borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
 
       auto shapeVisualBorderControl = compositorTaskBackground.CreateShapeVisual();
-      shapeVisualBorderControl.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? g_lastTargetWidth : targetWidthRect, clipHeight});
+      shapeVisualBorderControl.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
 
       auto geometricClip = compositorTaskBackground.CreateGeometricClip(roundedRect);
       auto borderShape = compositorTaskBackground.CreateSpriteShape(borderGeometry);
@@ -3385,11 +3386,11 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
         // size animation
 
         auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-        sizeAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetWidth, clipHeight});
+        sizeAnimationRect.InsertKeyFrame(0.0f, {state.lastTargetWidth, clipHeight});
         sizeAnimationRect.InsertKeyFrame(1.0f, {targetWidthRect, clipHeight});
 
         auto sizeAnimationBorderGeometry = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-        sizeAnimationBorderGeometry.InsertKeyFrame(0.0f, {g_lastTargetWidth - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
+        sizeAnimationBorderGeometry.InsertKeyFrame(0.0f, {state.lastTargetWidth - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
         sizeAnimationBorderGeometry.InsertKeyFrame(1.0f, {targetWidthRect - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
 
         roundedRect.StartAnimation(L"Size", sizeAnimationRect);
@@ -3398,32 +3399,32 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
 
         //   // centering the clip animation
 
-        roundedRect.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY});
-        shapeVisualBorderControl.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY, 0.0f});
+        roundedRect.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY});
+        shapeVisualBorderControl.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
 
         auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-        offsetAnimationRect.InsertKeyFrame(0.0f, {g_lastTargetOffsetX, g_lastTargetOffsetY});
+        offsetAnimationRect.InsertKeyFrame(0.0f, {state.lastTargetOffsetX, state.lastTargetOffsetY});
         offsetAnimationRect.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect});
 
         auto offsetAnimationRect3V = compositorTaskBackground.CreateVector3KeyFrameAnimation();
-        offsetAnimationRect3V.InsertKeyFrame(0.0f, {g_lastTargetOffsetX, g_lastTargetOffsetY, 0.0f});
+        offsetAnimationRect3V.InsertKeyFrame(0.0f, {state.lastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
         offsetAnimationRect3V.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect, 0.0f});
 
         roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
         shapeVisualBorderControl.StartAnimation(L"Offset", offsetAnimationRect3V);
-        g_lastTargetOffsetX = offsetXRect;
-        g_lastTargetOffsetY = newOffsetYRect;
+        state.lastTargetOffsetX = offsetXRect;
+        state.lastTargetOffsetY = newOffsetYRect;
       } else {
-        g_lastTargetOffsetX = 0;
-        g_lastTargetOffsetY = 0;
-        roundedRect.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY});
-        shapeVisualBorderControl.Offset({g_lastTargetOffsetX, g_lastTargetOffsetY, 0.0f});
+        state.lastTargetOffsetX = 0;
+        state.lastTargetOffsetY = 0;
+        roundedRect.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY});
+        shapeVisualBorderControl.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
       }
     }
   }
 
-  g_wasOverflowing = isOverflowing;
-  g_lastTargetWidth = targetWidthRect;
+  state.wasOverflowing = isOverflowing;
+  state.lastTargetWidth = targetWidthRect;
 
   return true;
 }
@@ -3442,13 +3443,17 @@ void RefreshSettings() {
 }
 
 void ResetGlobalVars() {
-  g_initOffsetX = -1;
   g_invalidateDimensions = true;
 
-  g_lastTaskbarData.childrenCount = 0;
-  g_lastTaskbarData.rightMostEdge = 0.0;
-  g_lastTaskbarData.childrenWidth = 0.0;
-  g_wasOverflowing = false;
+  for (auto& [key, state] : g_taskbarStates) {
+    state.lastTaskbarData.childrenCount = 0;
+    state.lastTaskbarData.rightMostEdge = 0;
+    // state.lastTaskbarData.childrenWidth = 0;
+    state.lastChildrenWidthTaskbar = 0;
+    // state.lastTrayFrameWidth = 0;
+    state.wasOverflowing = false;
+}
+
 }
 
 void Wh_ModSettingsChanged() {
