@@ -97,3 +97,14 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
   ApplySettingsDebounced();
 }
+
+
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        *alignment=1;
+    }
+    return ret;
+}

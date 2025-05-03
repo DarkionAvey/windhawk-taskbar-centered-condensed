@@ -4,11 +4,16 @@ import re
 # Simply paste the methods of interest inside the input_block block,
 # and it will generate the mod. Useful for tracking method execution
 # and identifying potential hooks.
-
+# input_block = r"""
+# Line 168: 	Line 13333: [00149450] public: virtual int __cdecl CTaskListThumbnailWnd::GetMargins(struct tagRECT *)const
+# 	Line 173: 	Line 13338: [001497F0] public: virtual int __cdecl CTaskListThumbnailWnd::GetThumbBarRectFromIndex(int,struct tagRECT *)const
+# 	Line 177: 	Line 13342: [00149930] public: virtual int __cdecl CTaskListThumbnailWnd::GetWindowLocation(struct tagRECT *)const
+# 		Line  46: 	Line  2187: [0003F848] private: float __cdecl CTaskListThumbnailWnd::_CalcThumbnailScale(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,struct tagRECT const *,int,int,unsigned char,int *,int *,struct tagSIZE *)const
+# 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
+#
+# """
 input_block = r"""
-	Line  1901: [000339DC] private: int __cdecl CTaskListThumbnailWnd::_GetThumbRectFromIndexHelper(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,int,struct tagSIZE const *,int,int,unsigned long,struct tagRECT *,struct tagRECT *,struct tagRECT *)const 
-	Line  1902: [000342BC] private: int __cdecl CTaskListThumbnailWnd::_GetMinWidthWithThumbBar(struct ITaskThumbnail *)const 
-
+[00149930] public: virtual int __cdecl CTaskListThumbnailWnd::GetWindowLocation(struct tagRECT *)const 
 """
 
 
@@ -129,7 +134,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
 // @version 0.1
 // @author  DarkionAvey
 // @include explorer.exe
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==

@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.1
+// @version         1.4.3
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -1935,6 +1935,17 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   ApplySettingsDebounced();
 }
 
+
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        *alignment=1;
+    }
+    return ret;
+}
+
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -2017,6 +2028,11 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
         &CSecondaryTray_v_WndProc_Original,
         CSecondaryTray_v_WndProc_Hook,
+    },
+    {
+        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
+        &ITaskbarSettings_get_Alignment_Original,
+        ITaskbarSettings_get_Alignment_Hook,
     },
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},

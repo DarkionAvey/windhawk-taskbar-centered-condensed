@@ -75,3 +75,8 @@
         &CSecondaryTray_v_WndProc_Original,
         CSecondaryTray_v_WndProc_Hook,
     },
+    {
+        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
+        &ITaskbarSettings_get_Alignment_Original,
+        ITaskbarSettings_get_Alignment_Hook,
+    },
