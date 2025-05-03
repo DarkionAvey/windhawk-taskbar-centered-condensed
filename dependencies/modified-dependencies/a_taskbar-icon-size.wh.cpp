@@ -36,7 +36,7 @@ struct {
     int taskbarHeight;
     int taskbarButtonWidth;
 } g_settings_tbiconsize;
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_taskbarViewDllLoadedTBIconSize;
 std::atomic<bool> g_applyingSettings;
 std::atomic<bool> g_pendingMeasureOverride;
 std::atomic<bool> g_unloading;
@@ -1214,8 +1214,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     if (!module) {
         return module;
     }
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+    if (!g_taskbarViewDllLoadedTBIconSize && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
         if (HookTaskbarViewDllSymbols(module)) {
             Wh_ApplyHookOperations();
@@ -1232,7 +1232,7 @@ BOOL Wh_ModInitTBIconSize() {
     WindhawkUtils::Wh_SetFunctionHookT(SHAppBarMessage, SHAppBarMessage_Hook,
                                        &SHAppBarMessage_Original);
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
+        g_taskbarViewDllLoadedTBIconSize = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             return FALSE;
         }
@@ -1250,9 +1250,9 @@ BOOL Wh_ModInitTBIconSize() {
 }
 void Wh_ModAfterInitTBIconSize() {
     
-    if (!g_taskbarViewDllLoaded) {
+    if (!g_taskbarViewDllLoadedTBIconSize) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
+            if (!g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
                 if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
                     Wh_ApplyHookOperations();

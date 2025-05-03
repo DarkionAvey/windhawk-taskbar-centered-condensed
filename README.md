@@ -46,8 +46,8 @@ modify the source files in the `mod-parts` directory.
 
 1. ~~Use debounce to stop running the animations concurrently~~ ✅
 2. Proper "unloading" of mod.
-3. Taskbar dividers (partially implemented)
-4. Move widget panel to the center
+3. ~~Taskbar dividers~~ ✅
+4. Move widget panel to the center (partially implemented)
 5. Replace the taskbar weather widget with WebView for more interesting stuff to show
 6. Add support for custom taskbar icons
 7. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at
@@ -96,16 +96,17 @@ Your contributions to modding Windows are truly appreciated!
 | `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default 74) | Non-negative integer |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default 24) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default 16) | Non-negative integer |
-| `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This setting overrides the taskbar offset; this setting is always on with Full-width taskbar background (Default false) | Boolean (true/false) |
+| `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default false) | Boolean (true/false) |
 | `TaskbarBackgroundOpacity` | Background opacity | Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default 100) | Non-negative integer |
 | `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default 0) | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30) | Non-negative integer |
-| `TaskbarBorderOpacity` | Taskbar border opacity | Controls the opacity of the taskbar border. Range 0-100 (Default 20) | Non-negative integer |
-| `TaskbarBorderColorHex` | Taskbar border color (HEX) | Adjusts the color of the taskbar border. Hex color as `#RRGGBB` (Default `#ffffff`) | string hex color |
+| `TaskbarBorderOpacity` | Border opacity | Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default 20) | Non-negative integer |
+| `TaskbarBorderColorHex` | Border color (HEX) | Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default `#ffffff`) | string hex color |
 | `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default 10) | Non-negative integer |
+| `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default false) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default false) | Boolean (true/false) |
-| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the task bar (Default true) | Boolean (true/false) |
+| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default true) | Boolean (true/false) |
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default false) | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default 45) | Non-negative integer |

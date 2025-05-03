@@ -20,6 +20,7 @@ struct {
   bool userDefinedStyleTrayArea;
   bool userDefinedTrayAreaDivider;
   unsigned int borderColorR, borderColorG, borderColorB;
+  std::vector<std::wstring> userDefinedDividedAppNames;
 } g_settings;
 struct {
   int childrenCount = 0;
@@ -42,44 +43,43 @@ void ApplySettingsFromTaskbarThreadIfRequired() {
   }
 }
 
-void SetDividerForElement(FrameworkElement element, float const& panelHeight, bool dividerVisible) {
-  //  if(!element)return;
+void SetDividerForElement(FrameworkElement const& element, float const& panelHeight, bool dividerVisible)
+{
+    if (!element)
+        return;
 
-  // Wh_Log(L"Panel Height: %f", panelHeight);
-  // if (panelHeight <= 0.0f) {
-  //     Wh_Log(L"Invalid size detected! Panel Height: %f",  panelHeight);
-  //     return;
-  // }
-  // auto visual=winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(element);
-  // if(!visual)return;
-  //     auto compositor =visual .Compositor();
-  // if(!compositor)return;
 
-  //     auto shapeVisual = compositor.CreateShapeVisual();
+    if (panelHeight <= 0.0f)
+        return;
 
-  //   if (dividerVisible) {
+    auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(element);
+    if(!visual)return;
+    auto compositor = visual.Compositor();                                // :contentReference[oaicite:0]{index=0}
+    if(!compositor)return;
 
-  //     shapeVisual.Size({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness), static_cast<float>(panelHeight - g_settings.userDefinedTaskbarBorderThickness * 2.0f)});
-  //     auto borderGeometry = compositor.CreateRectangleGeometry();
-  //     borderGeometry.Size({static_cast<float>( g_settings.userDefinedTaskbarBorderThickness), static_cast<float>(panelHeight - g_settings.userDefinedTaskbarBorderThickness * 2.0f)});
-  //     auto borderShape = compositor.CreateSpriteShape(borderGeometry);
-  //     winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
-  //     borderShape.StrokeBrush(compositor.CreateColorBrush(borderColor));
-  //     borderShape.StrokeThickness(g_settings.userDefinedTaskbarBorderThickness);
-  //     borderShape.FillBrush(nullptr);
-  //     borderGeometry.Offset({0.0f, 0.0f});
-  //     shapeVisual.Shapes().Append(borderShape);
-  //     // shapeVisual.Offset({static_cast<float>(g_settings.userDefinedTrayTaskGap / -2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness), 0.0f});
-  //   }
+    auto shapeVisual = compositor.CreateShapeVisual();
+    if(!shapeVisual)return;
 
-  //     winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
+   if (dividerVisible) {
+    auto borderThicknessFloat=static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)*2.0f;
+    shapeVisual.Size({ borderThicknessFloat, panelHeight });
+    shapeVisual.Offset({ 0.0f, 0.0f, 0.0f });
+    auto lineGeometry = compositor.CreateLineGeometry();     // :contentReference[oaicite:1]{index=1}
+    lineGeometry.Start({ 0.0f, 0.0f });
+    lineGeometry.End({ 0.0f, panelHeight });
+    auto lineShape = compositor.CreateSpriteShape(lineGeometry);  // :contentReference[oaicite:2]{index=2}
+    winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
+
+    lineShape.StrokeBrush(compositor.CreateColorBrush(borderColor));
+
+    lineShape.StrokeThickness(borderThicknessFloat);
+   shapeVisual.Shapes().Append(lineShape);
+    }
+    winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);        // :contentReference[oaicite:3]{index=3}
 }
 
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {
-  SetDividerForElement(stackPanel, panelHeight, g_settings.userDefinedTrayAreaDivider);
-
-  if (!g_settings.userDefinedStyleTrayArea) return;
-
+     if (!g_settings.userDefinedStyleTrayArea) return;
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   int childCount = Media::VisualTreeHelper::GetChildrenCount(stackPanel);
   for (int i = 0; i < childCount; ++i) {
@@ -117,6 +117,7 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
 }
 
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount) {
+    const float tbHeightFloat=static_cast<float>(g_settings.userDefinedTaskbarHeight);
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   auto userDefinedTaskbarIconSize = std::to_wstring(g_settings.userDefinedTaskbarIconSize);
   double totalWidth = 0.0;
@@ -165,14 +166,25 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
           iconElementChild.Height(g_settings.userDefinedTaskbarIconSize);
 
           auto currentIconAppName = child.GetValue(winrt::Windows::UI::Xaml::Automation::AutomationProperties::NameProperty());
-          auto currentIconAppNameStr = winrt::unbox_value<winrt::hstring>(currentIconAppName);
-          //   Wh_Log(L"bbwi: %s", currentIconAppNameStr.c_str());
+          auto currentIconAppNameStr = winrt::unbox_value<winrt::hstring>(currentIconAppName).c_str();
+           // Wh_Log(L"bbwi: %s", currentIconAppNameStr);
+            SetDividerForElement(child, tbHeightFloat, false);
 
-          if (g_unloading) {
-            iconElementChild.Tag(nullptr);
-          } else {
-            UpdateIcons(iconElementChild, currentIconAppNameStr);
-          }
+    for (const auto& pat : g_settings.userDefinedDividedAppNames) {
+        if (RegexMatchInsensitive(currentIconAppNameStr, pat)) {
+            SetDividerForElement(child, tbHeightFloat, true);
+            break;
+        }
+
+    }
+
+
+
+        //   if (g_unloading) {
+        //     iconElementChild.Tag(nullptr);
+        //   } else {
+        //     UpdateIcons(iconElementChild, currentIconAppNameStr);
+        //   }
         }
       }
     } else if (className == L"Taskbar.AugmentedEntryPointButton") {  // widget element
@@ -326,6 +338,9 @@ void UpdateGlobalSettings() {
   g_settings.borderColorR = r;
   g_settings.borderColorG = g;
   g_settings.borderColorB = b;
+
+ g_settings.userDefinedDividedAppNames = SplitAndTrim(Wh_GetStringSetting(L"DividedAppNames"));
+
 
   //  g_icon_scanner.onSettingsChanged(L"C:\\Program Files (x86)\\Steam\\steamapps\\common\\MyDockFinder\\png", L"C:\\Program Files (x86)\\Steam\\steamapps\\common\\MyDockFinder\\png");
 }
@@ -709,6 +724,13 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
     return false;
   }
   ProcessStackPanelChildren(stackPanel, clipHeight);
+  auto trayOverflowArrowNotifyIconStack = FindChildByName(systemTrayFrameGrid, L"NotifyIconStack");
+  if (trayOverflowArrowNotifyIconStack){
+  SetDividerForElement(trayOverflowArrowNotifyIconStack, clipHeight, g_settings.userDefinedTrayAreaDivider);
+  }else{
+      SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider);
+  }
+
   if (widgetElement) {
     SetDividerForElement(widgetElement, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
   }
@@ -719,6 +741,12 @@ bool ApplyStyle(FrameworkElement xamlRootContent) {
   if (taskbarStroke) {
     taskbarStroke.Opacity(g_unloading ? 1.0 : 0.0);
   }
+
+  auto screenEdgeStroke = FindChildByName(rootGridTaskBar, L"ScreenEdgeStroke");
+  if (screenEdgeStroke) {
+    screenEdgeStroke.Opacity(g_unloading ? 1.0 : 0.0);
+  }
+
 
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
@@ -867,10 +895,11 @@ void Wh_ModAfterInit() {
   Wh_ModAfterInitTBIconSize();
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (hTaskbarWnd) {
-    ApplySettings(hTaskbarWnd);
-  }
   Wh_ModSettingsChanged();
-}
+    ApplySettings(hTaskbarWnd);
+  Wh_ModSettingsChanged();
+  ApplySettingsDebounced(1000);
+}}
 
 void Wh_ModBeforeUninit() {
   g_unloading = true;

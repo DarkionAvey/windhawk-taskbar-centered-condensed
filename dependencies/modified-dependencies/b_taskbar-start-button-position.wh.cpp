@@ -31,7 +31,7 @@ struct {
     bool startMenuOnTheLeft;
     int startMenuWidth;
 } g_settings_startbuttonposition;
-
+std::atomic<bool> g_taskbarViewDllLoadedStartButtonPosition;
 
 HWND g_startMenuWnd;
 int g_startMenuOriginalWidth;
@@ -548,8 +548,8 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
 }
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+    if (!g_taskbarViewDllLoadedStartButtonPosition && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
         if (HookTaskbarViewDllSymbolsStartButtonPosition(module)) {
             Wh_ApplyHookOperations();
@@ -695,7 +695,7 @@ BOOL Wh_ModInitStartButtonPosition() {
         return FALSE;
     }
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
+        g_taskbarViewDllLoadedStartButtonPosition = true;
         if (!HookTaskbarViewDllSymbolsStartButtonPosition(taskbarViewModule)) {
             return FALSE;
         }
@@ -724,9 +724,9 @@ BOOL Wh_ModInitStartButtonPosition() {
 }
 void Wh_ModAfterInitStartButtonPosition() {
     
-    if (!g_taskbarViewDllLoaded) {
+    if (!g_taskbarViewDllLoadedStartButtonPosition) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
+            if (!g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
                 if (HookTaskbarViewDllSymbolsStartButtonPosition(taskbarViewModule)) {
                     Wh_ApplyHookOperations();

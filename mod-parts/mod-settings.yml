@@ -40,7 +40,7 @@
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This setting overrides the taskbar offset; this setting is always on with Full-width taskbar background (Default false)
+  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default false)
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
@@ -59,19 +59,24 @@
   $type: unsigned int
 
 - TaskbarBorderOpacity: 20
-  $name: Taskbar border opacity
-  $description: Controls the opacity of the taskbar border. Range 0-100 (Default 20)
+  $name: Border opacity
+  $description: Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default 20)
   $type: unsigned int
 
 - TaskbarBorderColorHex: "#ffffff"
-  $name: Taskbar border color (HEX)
-  $description: Adjusts the color of the taskbar border. Hex color as `#RRGGBB` (Default `#ffffff`)
+  $name: Border color (HEX)
+  $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default `#ffffff`)
   $type: string hex color
 
 - TaskbarBorderThickness: 10
   $name: Taskbar border thickness scale
   $description: Adjusts the scale of the taskbar border. Range 0-100 (Default 10)
   $type: unsigned int
+
+- DividedAppNames: ""
+  $name: App names for divider placement
+  $description: Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive.
+  $type: string regex
 
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
@@ -85,7 +90,7 @@
 
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar (Default true)
+  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default true)
   $type: bool
 
 - StyleTrayArea: false

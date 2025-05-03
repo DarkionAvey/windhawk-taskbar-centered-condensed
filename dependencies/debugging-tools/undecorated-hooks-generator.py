@@ -6,10 +6,8 @@ import re
 # and identifying potential hooks.
 
 input_block = r"""
-[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartRequestingAttentionAnimation'::`1'::dtor$1()
-[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartRunningIndicatorSizeChangeAnimation'::`1'::dtor$2()
-[007DDA94] public: void __cdecl winrt::Taskbar::implementation::SharedAnimations::StartTransitionFromOverflowToTaskbarScaleAnimation(struct winrt::Windows::UI::Xaml::UIElement const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >)const 
-[008548A0] static  `winrt::Taskbar::implementation::SharedAnimations::StartAugmentedEntryPointEntranceAnimation'::`1'::dtor$1()
+	Line  1901: [000339DC] private: int __cdecl CTaskListThumbnailWnd::_GetThumbRectFromIndexHelper(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,int,struct tagSIZE const *,int,int,unsigned long,struct tagRECT *,struct tagRECT *,struct tagRECT *)const 
+	Line  1902: [000342BC] private: int __cdecl CTaskListThumbnailWnd::_GetMinWidthWithThumbBar(struct ITaskThumbnail *)const 
 
 """
 

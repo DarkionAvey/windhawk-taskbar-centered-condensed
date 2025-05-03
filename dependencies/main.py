@@ -85,6 +85,7 @@ class URLProcessor(ABC):
         content = re.sub(r"Wh_ModBeforeUninit\(\)", r"Wh_ModBeforeUninit" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModUninit\(\)", r"Wh_ModUninit" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModSettingsChanged\(\)", r"Wh_ModSettingsChanged" + self.name + "()", content, flags=re.DOTALL)
+        content = re.sub(r"g_taskbarViewDllLoaded", r"g_taskbarViewDllLoaded" + self.name, content, flags=re.DOTALL)
         content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub("\n+", "\n", content, flags=re.DOTALL)
         content = self.format_content(content)

@@ -59,8 +59,34 @@ def remove_cpp_comments(code: str) -> str:
     code = '\n'.join(line for line in (l.strip() for l in code.splitlines()) if line)
     return code
 
-def main(version="1.3.0"):
+
+def write_file(path, content):
+    with open(path, 'w') as f:
+        f.write(content)
+
+
+def get_next_patch_version(version_file_path):
+    if not os.path.exists(version_file_path):
+        write_file(version_file_path, '0')
+        return 0
+    with open(version_file_path, 'r+') as f:
+        try:
+            patch = int(f.read().strip())
+        except ValueError:
+            patch = 0
+        patch += 1
+        f.seek(0)
+        f.write(str(patch))
+        f.truncate()
+    return patch
+
+
+def main(major_minor="1.3"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    version_file_path = os.path.join(base_dir, 'mod-parts', 'mod-build-version.txt')
+    patch = get_next_patch_version(version_file_path)
+    version = f"{major_minor}.{patch}"
+
     readme_path = os.path.join(base_dir, 'README.md')
     dependencies_dir_path = os.path.join(base_dir, 'dependencies', 'modified-dependencies')
     output_path = os.path.join(base_dir, 'assembled-mod.cpp')
@@ -91,15 +117,13 @@ def main(version="1.3.0"):
     merged_contents = f"""
 {merged_contents.strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'ascii-art.txt')).strip()}
+{read_file(os.path.join(base_dir, 'mod-parts', 'ascii-art-and-imports.cpp')).strip()}
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-style-xml.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-set-image-source-async.cpp')).strip()}
-
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-debouncer.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-icon-scanner.cpp')).strip()}
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-icons.cpp')).strip()}
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-apply-style-helpers.cpp')).strip()}
 

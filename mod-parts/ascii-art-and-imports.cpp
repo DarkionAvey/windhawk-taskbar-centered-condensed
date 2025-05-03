@@ -47,3 +47,11 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX,
 #include <winrt/Windows.UI.Xaml.Automation.h.>
 #include <atomic>
 #include <chrono>
+#include <winrt/Windows.Foundation.h>
+#include <string>
+#include <vector>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>

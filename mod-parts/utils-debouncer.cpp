@@ -40,7 +40,7 @@ void ApplySettingsDebounced(int delayMs) {
   bool lowPriority = false;
   if (delayMs <= 0) {
     lowPriority = true;
-    delayMs = 1000;
+    delayMs = 500;
   }
 
   debounceDelayMs = delayMs;
