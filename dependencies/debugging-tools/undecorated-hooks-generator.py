@@ -13,18 +13,20 @@ import re
 #
 # """
 input_block = r"""
-	Line  4177: [000729A0] public: virtual bool __cdecl WinRTIconLoadData::IsSmallIconMode(void)
-	Line  4398: [000786A0] public: virtual unsigned int __cdecl WinRTIconLoadData::GetDPI(void)
-	[00065FB8] private: bool __cdecl IconContainer::ShouldProcessIconLoadData(struct IIconLoadData *)
+	Line  27: 	Line  1311: [00019900] remove: long __cdecl ImmersiveIcons::LoadImmersiveIconThemeAware(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *)
+	Line  29: 	Line  1602: [000274AC] remove: long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *)
+	Line  30: 	Line  1603: [0002797C] remove: long __cdecl ImmersiveIcons::_LoadImmersiveIcon(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *,struct ImmersiveIcons::IconData2 *)
+	Line  40: 	Line  2186: [0003F778] remove: long __cdecl Remove::GetIconFromBitmap(struct HBITMAP__ *,struct HICON__ * *)
+	Line  46: 	Line  2655: [00050788] remove: long __cdecl Remove::ConvertHICONToWICBitmap(struct IWICImagingFactory *,struct HICON__ *,struct IWICBitmapSource * *)
+	Line  47: 	Line  2656: [000508A4] remove: long __cdecl NotifyIconUtilities::AddMarginsToBitmap(struct _MARGINS,unsigned int,unsigned int,struct IWICBitmapSource *,struct IWICBitmap * *)
+
+	Line  74: 	Line  5402: [000870DC] remove: long __cdecl GDIHelpers::AddBackgroundForIcon(struct HBITMAP__ *,unsigned long const &,struct tagSIZE const &,struct tagSIZE const &,struct tagSIZE const &,struct HBITMAP__ * *)
+	Line  92: 	Line  8850: [000D8500] public: virtual struct HBITMAP__ * __cdecl TrayUI::GetSettingsIconBitmapForSystemMenu(void)const 
+	Line  94: 	Line  9006: [000DE9A4] private: void __cdecl TrayUI::RenderSystemGlyphIcon(struct HDC__ *,struct tagSIZE,unsigned long,unsigned long,struct HBITMAP__ * *)
+	Line 113: 	Line 13661: [00154664] remove: void __cdecl Windows::Internal::Shell::IconConverter::ConvertToGrayscale(struct IWICBitmap *)
+	Line 115: 	Line 13861: [0015E830] public: virtual long __cdecl CIconLoadingFunctions::ConvertIconToBitmap(struct HICON__ *,struct tagSIZE const &,struct HBITMAP__ * *)
+	Line 117: 	Line 13863: [0015E9C4] remove: long __cdecl Remove::CreateBitmapFromIconWithAlpha(struct HICON__ *,int,struct HBITMAP__ * *)
 	
-	Line  3754: [0006D3A0] public: virtual enum IconType __cdecl IconLoadDataBase::GetType(void)
-	Line  4174: [000729A0] public: virtual bool __cdecl IconLoadDataBase::IsSmallIconMode(void)
-	Line  4395: [000786A0] public: virtual unsigned int __cdecl IconLoadDataBase::GetDPI(void)
-	Line  4469: [0007A330] public: virtual bool __cdecl IconLoadDataBase::IsValid(void)
-	Line  5524: [00095050] public: virtual void __cdecl IconLoadDataBase::SetIcon(struct HICON__ *,int,enum IconQuality,int)
-	Line  5716: [00097370] public: virtual enum IconQuality __cdecl IconLoadDataBase::GetIconQuality(void)
-	Line  5797: [00098230] public: virtual long __cdecl IconLoadDataBase::SetDefaults(unsigned int,unsigned int,unsigned int,enum IconType,enum IconSizeMode,enum IconLoadPass,int,class tip2::tip_test<class tip2::details::merged_data<struct TaskbarTip::_tip_IconLoadTest,struct TaskbarTip::_tip_IconLoadTest> >)
-	Line  9098: [000E2D80] public: virtual void __cdecl IconLoadDataBase::SetIconQuality(enum IconQuality)
 """
 	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
 
@@ -33,7 +35,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     input_block = re.sub(string=input_block, pattern=r"\s+Line\s+\d+\:\s", repl="\n", flags=re.MULTILINE | re.DOTALL)
     pattern = re.compile(
         r'\[\w+\]\s+'
-        r'(?P<access>public:|private:|protected:|RemoveAccessToken:)?\s+'
+        r'(?P<access>public:|private:|protected:|remove:)?\s+'
         r'(?P<virtual>virtual\s+)?'
         r'(?P<return_type>[\w\s\*\d\_\:]+?)\s+'
         r'__cdecl\s+'

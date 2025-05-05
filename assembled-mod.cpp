@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.62
+// @version         1.4.63
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -1960,29 +1960,25 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
 }
 
 
-
-
-namespace ImmersiveIcons {  struct IconData2; }
-using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
-ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
-long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
-    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
-tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
-    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
-    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
-        pThis,
-        newParam1,
-        newParam2,
-        param3,
-        param4,
-        param5,
-        param6,
-        param7,
-        param8
-    );
-}
-
-
+//namespace ImmersiveIcons {  struct IconData2; }
+//using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
+//ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
+//long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
+//    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
+//tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
+//    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
+//    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
+//        pThis,
+//        newParam1,
+//        newParam2,
+//        param3,
+//        param4,
+//        param5,
+//        param6,
+//        param7,
+//        param8
+//    );
+//}
 
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
@@ -2110,13 +2106,13 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
-  ApplySettingsDebounced(10);
+  ApplySettingsDebounced(350);
 }
 
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
-  ApplySettingsDebounced(10);
+  ApplySettingsDebounced(350);
 }
 
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);

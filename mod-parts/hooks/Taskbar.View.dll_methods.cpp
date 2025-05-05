@@ -7,13 +7,13 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
-  ApplySettingsDebounced(10);
+  ApplySettingsDebounced(350);
 }
 
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
-  ApplySettingsDebounced(10);
+  ApplySettingsDebounced(350);
 }
 
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
