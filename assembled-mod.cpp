@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.60
+// @version         1.4.62
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -2672,42 +2672,12 @@ void ApplySettingsDebounced() { ApplySettingsDebounced(100); }
 
 bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
   if (!element) return false;
+
+bool scrollAnchorProperty=  winrt::unbox_value<bool>(element.GetValue(UIElement::CanBeScrollAnchorProperty()));
+  if(!scrollAnchorProperty)return true;
   auto transform = element.TransformToVisual(nullptr);
   winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
   return rect.X < 0 || rect.Y < 0;
-}
-
-void UpdateIcons(FrameworkElement& obj, winrt::hstring& currentIconAppNameStr) {
-  //
-  // auto taskbarMap = g_icon_scanner.getTaskbarAppsIconsMap();
-  // auto trayMap = g_icon_scanner.getTrayAppsIconsMap();
-  //
-  //// helper to strip extension from running app name
-  // auto stripExt = [&](std::wstring s) {
-  //   fs::path p{s};
-  //   return p.stem().wstring();
-  // };
-  //
-  // for (auto const& [key, imgPath] : taskbarMap) {
-  //   std::wstring iconKey = stripExt(key);
-  //   Wh_Log(L"UpdateIcons: iconKey %s currentIconAppNameStr: %s", iconKey.c_str(), currentIconAppNameStr.c_str());
-  //
-  //// && IsImageTagOutdatedOrNull(obj, imgPath.c_str())
-  //  if (ContainsCaseInsensitive(currentIconAppNameStr.c_str(), iconKey)) {
-  //    obj.Tag(winrt::box_value(imgPath));
-  //    SetImageAsync(obj, imgPath);
-  //  }
-  //}
-  //   for (auto const& [key, imgPath] : trayMap) {
-  //     std::wstring appNameStr = /* get your app name string here */;
-  //     std::wstring baseName = stripExt(appNameStr);
-
-  //     if (baseName == key && IsImageTagOutdatedOrNull(iconElementChild, imgPath)) {
-  //       iconElementChild.Tag(winrt::box_value(tag));
-  //       Wh_Log(L"Tray: %s", baseName.c_str());
-  //       SetImageAsync(iconElementChild, imgPath);
-  //     }
-  //   }
 }
 
 bool g_invalidateDimensions = true;
