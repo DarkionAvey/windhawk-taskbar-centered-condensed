@@ -150,9 +150,9 @@ def main(major_minor="1.4"):
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-style-xml.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-debouncer.cpp')).strip()}
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-string.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-icons.cpp')).strip()}
+{read_file(os.path.join(base_dir, 'mod-parts', 'utils-debouncer.cpp')).strip()}
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-apply-style-helpers.cpp')).strip()}
 

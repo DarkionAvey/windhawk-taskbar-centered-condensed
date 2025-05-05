@@ -255,7 +255,7 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
     Wh_Log(L"> %d", enumTaskbarSize);
     if (!g_unloading && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-        return g_settings_tbiconsize.iconSize;
+        return g_settings_tbiconsize.iconSize ;
     }
     return TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Original(
         enumTaskbarSize);
@@ -267,7 +267,7 @@ TaskbarConfiguration_GetIconHeightInViewPixels_double_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_double_Hook(double baseHeight) {
     if (!g_unloading) {
-        return g_settings_tbiconsize.iconSize;
+        return g_settings_tbiconsize.iconSize ;
     }
     return TaskbarConfiguration_GetIconHeightInViewPixels_double_Original(
         baseHeight);
@@ -880,6 +880,7 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
 void LoadSettingsTBIconSize() {
   g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
   if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
+  g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
   g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
 
   g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");

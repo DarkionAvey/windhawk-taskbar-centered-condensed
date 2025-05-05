@@ -2,13 +2,13 @@ using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
   TrayUI__Hide_Original(pThis);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
 CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
   CSecondaryTray__AutoHide_Original(pThis, param1);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
 TrayUI_WndProc_t TrayUI_WndProc_Original;
@@ -27,14 +27,14 @@ CTaskBand__ProcessWindowDestroyed_t CTaskBand__ProcessWindowDestroyed_Original;
 void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
   Wh_Log(L"CTaskBand::CTaskBand__ProcessWindowDestroyed_Hook Hook");
   CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CTaskBand__InsertItem_t = long(WINAPI*)(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2);
 CTaskBand__InsertItem_t CTaskBand__InsertItem_Original;
 long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2) {
   Wh_Log(L"CTaskBand::_InsertItem Hook");
   auto original_call = CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
-  ApplySettingsDebounced(100);
+  ApplySettingsFromTaskbarThreadIfRequired();
   return original_call;
 }
 using CTaskBand__UpdateAllIcons_t = void(WINAPI*)(void* pThis);
@@ -42,14 +42,14 @@ CTaskBand__UpdateAllIcons_t CTaskBand__UpdateAllIcons_Original;
 void WINAPI CTaskBand__UpdateAllIcons_Hook(void* pThis) {
   Wh_Log(L"CTaskBand::_UpdateAllIcons Hook");
   CTaskBand__UpdateAllIcons_Original(pThis);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CTaskBand__TaskOrderChanged_t = void(WINAPI*)(void* pThis, void* pTaskGroup, int param);
 CTaskBand__TaskOrderChanged_t CTaskBand__TaskOrderChanged_Original;
 void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int param) {
   Wh_Log(L"CTaskBand::TaskOrderChanged Hook");
   CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
@@ -88,14 +88,14 @@ CTaskBand__UpdateItemIcon_WithArgs_t CTaskBand__UpdateItemIcon_WithArgs_Original
 void WINAPI CTaskBand__UpdateItemIcon_WithArgs_Hook(void* pThis, ITaskGroup* param1, ITaskItem* param2) {
   Wh_Log(L"Method called: CTaskBand__UpdateItemIcon");
   CTaskBand__UpdateItemIcon_WithArgs_Original(pThis, param1, param2);
-  ApplySettingsDebounced(100);
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CTaskBand_RemoveIcon_WithArgs_t = void(WINAPI*)(void* pThis, ITaskItem* param1);
 CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-  ApplySettingsDebounced();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 
 
@@ -108,3 +108,28 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
     }
     return ret;
 }
+
+
+
+
+namespace ImmersiveIcons {  struct IconData2; }
+using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
+ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
+long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
+    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
+tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
+    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
+    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
+        pThis,
+        newParam1,
+        newParam2,
+        param3,
+        param4,
+        param5,
+        param6,
+        param7,
+        param8
+    );
+}
+
+

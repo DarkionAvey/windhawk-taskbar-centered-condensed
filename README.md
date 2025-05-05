@@ -110,3 +110,5 @@ Your contributions to modding Windows are truly appreciated!
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default false) | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default 45) | Non-negative integer |
+| `CustomTaskbarIconsDir` | (Experimental) Folder to custom taskbar icons | Specify a valid path to a folder containing .png files of app names for taskbar | string dir path |
+| `CustomTrayIconsDir` | (Experimental) Folder to custom tray icons | Specify a valid path to a folder containing .png files of app names for tray | string dir path |

@@ -13,15 +13,27 @@ import re
 #
 # """
 input_block = r"""
-[00149930] public: virtual int __cdecl CTaskListThumbnailWnd::GetWindowLocation(struct tagRECT *)const 
+	Line  4177: [000729A0] public: virtual bool __cdecl WinRTIconLoadData::IsSmallIconMode(void)
+	Line  4398: [000786A0] public: virtual unsigned int __cdecl WinRTIconLoadData::GetDPI(void)
+	[00065FB8] private: bool __cdecl IconContainer::ShouldProcessIconLoadData(struct IIconLoadData *)
+	
+	Line  3754: [0006D3A0] public: virtual enum IconType __cdecl IconLoadDataBase::GetType(void)
+	Line  4174: [000729A0] public: virtual bool __cdecl IconLoadDataBase::IsSmallIconMode(void)
+	Line  4395: [000786A0] public: virtual unsigned int __cdecl IconLoadDataBase::GetDPI(void)
+	Line  4469: [0007A330] public: virtual bool __cdecl IconLoadDataBase::IsValid(void)
+	Line  5524: [00095050] public: virtual void __cdecl IconLoadDataBase::SetIcon(struct HICON__ *,int,enum IconQuality,int)
+	Line  5716: [00097370] public: virtual enum IconQuality __cdecl IconLoadDataBase::GetIconQuality(void)
+	Line  5797: [00098230] public: virtual long __cdecl IconLoadDataBase::SetDefaults(unsigned int,unsigned int,unsigned int,enum IconType,enum IconSizeMode,enum IconLoadPass,int,class tip2::tip_test<class tip2::details::merged_data<struct TaskbarTip::_tip_IconLoadTest,struct TaskbarTip::_tip_IconLoadTest> >)
+	Line  9098: [000E2D80] public: virtual void __cdecl IconLoadDataBase::SetIconQuality(enum IconQuality)
 """
+	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
 
 
 def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     input_block = re.sub(string=input_block, pattern=r"\s+Line\s+\d+\:\s", repl="\n", flags=re.MULTILINE | re.DOTALL)
     pattern = re.compile(
         r'\[\w+\]\s+'
-        r'(?P<access>public:|private:|protected:)\s+'
+        r'(?P<access>public:|private:|protected:|RemoveAccessToken:)?\s+'
         r'(?P<virtual>virtual\s+)?'
         r'(?P<return_type>[\w\s\*\d\_\:]+?)\s+'
         r'__cdecl\s+'
@@ -191,7 +203,7 @@ This mod prints the names of functions being called.
         init_function.append("        anyHooked = true;")
         init_function.append("    }")
         init_function.append("")
-    init_function.append("    if (!anyHooked) {")
+    init_function.append("    if (!anyHooked) {         Wh_Log(L\"Nothing was hooked\");")
     init_function.append("        return FALSE;")
     init_function.append("    }")
     init_function.append("    return TRUE;")

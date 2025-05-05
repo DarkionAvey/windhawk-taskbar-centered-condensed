@@ -107,10 +107,13 @@ class TaskbarIconSizeMod(URLProcessor):
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
         content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);', ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));', content, flags=re.DOTALL)
+        content = re.sub(r'return g_settings_tbiconsize\.iconSize;', 'return g_settings_tbiconsize.iconSize ;', content, flags=re.DOTALL)
+
         content = re.sub(r"void LoadSettingsTBIconSize\(\) \{.*?}", r"""
 void LoadSettingsTBIconSize() {
   g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
   if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
+  g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
   g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
 
   g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");

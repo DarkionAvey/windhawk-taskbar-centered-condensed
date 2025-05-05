@@ -107,3 +107,13 @@
   $name: Tray button size
   $description: Sets the size of tray buttons, which surround the icons (Default 45)
   $type: unsigned int
+
+- CustomTaskbarIconsDir: ""
+  $name: (Experimental) Folder to custom taskbar icons
+  $description: Specify a valid path to a folder containing .png files of app names for taskbar
+  $type: string dir path
+
+- CustomTrayIconsDir: ""
+  $name: (Experimental) Folder to custom tray icons
+  $description: Specify a valid path to a folder containing .png files of app names for tray
+  $type: string dir path
