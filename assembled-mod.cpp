@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.57
+// @version         1.4.60
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -3220,7 +3220,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
     Wh_Log(L"Error: rightMostEdgeTaskbar < 0");
     return false;
   }
-
   bool rightMostEdgeChangedTaskbar = (state.lastTaskbarData.rightMostEdge != rightMostEdgeTaskbar);
 
   if (!isOverflowing && (rightMostEdgeChangedTaskbar || state.lastTaskbarData.rightMostEdge == 0.0)) {
@@ -3228,6 +3227,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
     state.lastTaskbarData.rightMostEdge = rightMostEdgeTaskbar;
     state.lastTaskbarData.childrenWidth = childrenWidthTaskbar;
   }
+
+trayFrame.Clip(nullptr);
+if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>().Value() == HorizontalAlignment::Center){
+    trayFrame.SetValue(FrameworkElement::HorizontalAlignmentProperty(), winrt::box_value(HorizontalAlignment::Right));
+}
 
   int childrenCountTray = 0;
   double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray);
@@ -3270,14 +3274,14 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
   }
   float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras;
   // tray animations
-  auto trayVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(trayFrame);
+  auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
 
-  if (!trayVisual) {
-    Wh_Log(L"Error: !trayVisual");
+  if (!systemTrayFrameGridVisual) {
+    Wh_Log(L"Error: !SystemTrayFrameGridVisual");
     return false;
   }
 
-  auto originalOffset = trayVisual.Offset();
+  auto originalOffset = systemTrayFrameGridVisual.Offset();
   if (state.initOffsetX == -1) {
     state.initOffsetX = originalOffset.x;
   }
@@ -3291,9 +3295,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
 
   // 5 pixels tolerance
-  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - trayVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
+  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
       abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
-    Wh_Log(L"newXOffsetTray is within 5 pixels of trayVisual offset %f", trayVisual.Offset().x);
+    Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f", systemTrayFrameGridVisual.Offset().x);
     Wh_Log(L"childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
@@ -3360,17 +3364,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
 
   auto taskbarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
 
-  auto trayVisualCompositor = trayVisual.Compositor();
+  auto trayVisualCompositor = systemTrayFrameGridVisual.Compositor();
   if (trayVisualCompositor) {
-    float targetOffsetXTray = (g_unloading ? (float)state.initOffsetX : static_cast<float>(newXOffsetTray));
+    float targetOffsetXTray = (g_unloading ? (float)state.initOffsetX : static_cast<float>(rightMostEdgeTaskbar+targetTaskFrameOffsetX - (rootWidth - trayFrameWidth)));
     auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
 
-    trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, taskbarVisual.Offset().y, taskbarVisual.Offset().z});
+    trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
     if (movingInwards) {
       trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
     }
 
-    trayVisual.StartAnimation(L"Offset", trayAnimation);
+    systemTrayFrameGridVisual.StartAnimation(L"Offset", trayAnimation);
   }
 
   if (widgetPresent) {
