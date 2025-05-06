@@ -454,7 +454,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
 
   auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
   bool widgetPresent = widgetElement != nullptr && winrt::unbox_value<bool>(widgetElement.GetValue(UIElement::CanBeScrollAnchorProperty()));
-  auto widgetElementWidth = widgetPresent ? widgetElement.ActualWidth() : 0;
+
+  auto widgetMainView=widgetPresent && widgetElement? FindChildByName(widgetElement,L"ExperienceToggleButtonRootPanel"):widgetElement;
+  auto widgetElementWidth = widgetPresent && widgetMainView? widgetMainView.ActualWidth() : 0;
 
   if (widgetPresent && widgetElementWidth <= 0) {
     Wh_Log(L"Error: widgetPresent && widgetElementWidth<=0");
@@ -667,21 +669,29 @@ if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt
     systemTrayFrameGridVisual.StartAnimation(L"Offset", trayAnimation);
   }
 
-  if (widgetPresent) {
-    float centered_widget = widgetElementVisibleWidth + ((rootWidth - widgetElementWidth) / 2.0f);
+  if (widgetPresent && widgetMainView) {
+    float centered_widget =  ((rootWidth - widgetElementVisibleWidth) / 2.0f);
 
     if (centered_widget <= 0) {
       Wh_Log(L"Error: centered_widget<=0");
       return false;
     }
-    auto widgetVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetElement);
+    if(widgetElement){
+    auto widgetVisualParent = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetElement);
+    if(widgetVisualParent && widgetVisualParent.Offset().x!=0.0f){
+    widgetVisualParent.Offset({0.0f,widgetVisualParent.Offset().y,widgetVisualParent.Offset().z});
+    }
+    }
+
+
+    auto widgetVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetMainView);
     if (widgetVisual) {
       auto compositorWidget = widgetVisual.Compositor();
       if (compositorWidget) {
-        float targetOffsetXWidget = static_cast<float>(centered_widget + (childrenWidthTaskbar / 2.0f) - (widgetElementWidth - widgetElementVisibleWidth)) + g_settings.userDefinedTrayTaskGap;
+        float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar+g_settings.userDefinedTrayTaskGap) ;
         auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
 
-        widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXWidget, static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
+        widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
         if (movingInwards) {
           widgetOffsetAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
         }

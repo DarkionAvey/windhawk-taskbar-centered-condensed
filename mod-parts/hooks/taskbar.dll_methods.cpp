@@ -95,7 +95,7 @@ CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-  ApplySettingsFromTaskbarThreadIfRequired();
+//   ApplySettingsFromTaskbarThreadIfRequired();
 }
 
 

@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.63
+// @version         1.4.65
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -1945,7 +1945,7 @@ CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-  ApplySettingsFromTaskbarThreadIfRequired();
+//   ApplySettingsFromTaskbarThreadIfRequired();
 }
 
 
@@ -2106,13 +2106,13 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
-  ApplySettingsDebounced(350);
+  ApplySettingsDebounced(150);
 }
 
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
-  ApplySettingsDebounced(350);
+  ApplySettingsDebounced(150);
 }
 
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
@@ -2120,7 +2120,7 @@ TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
                 Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
                 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
-  ApplySettingsDebounced(300);
+  ApplySettingsDebounced(500);
                 return ;
             }
 
@@ -2130,7 +2130,7 @@ TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_Star
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
                 Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
-  ApplySettingsDebounced(300);
+  ApplySettingsDebounced(500);
                 return  ;
             }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
@@ -3130,7 +3130,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent) {
 
   auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
   bool widgetPresent = widgetElement != nullptr && winrt::unbox_value<bool>(widgetElement.GetValue(UIElement::CanBeScrollAnchorProperty()));
-  auto widgetElementWidth = widgetPresent ? widgetElement.ActualWidth() : 0;
+
+  auto widgetMainView=widgetPresent && widgetElement? FindChildByName(widgetElement,L"ExperienceToggleButtonRootPanel"):widgetElement;
+  auto widgetElementWidth = widgetPresent && widgetMainView? widgetMainView.ActualWidth() : 0;
 
   if (widgetPresent && widgetElementWidth <= 0) {
     Wh_Log(L"Error: widgetPresent && widgetElementWidth<=0");
@@ -3343,21 +3345,29 @@ if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt
     systemTrayFrameGridVisual.StartAnimation(L"Offset", trayAnimation);
   }
 
-  if (widgetPresent) {
-    float centered_widget = widgetElementVisibleWidth + ((rootWidth - widgetElementWidth) / 2.0f);
+  if (widgetPresent && widgetMainView) {
+    float centered_widget =  ((rootWidth - widgetElementVisibleWidth) / 2.0f);
 
     if (centered_widget <= 0) {
       Wh_Log(L"Error: centered_widget<=0");
       return false;
     }
-    auto widgetVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetElement);
+    if(widgetElement){
+    auto widgetVisualParent = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetElement);
+    if(widgetVisualParent && widgetVisualParent.Offset().x!=0.0f){
+    widgetVisualParent.Offset({0.0f,widgetVisualParent.Offset().y,widgetVisualParent.Offset().z});
+    }
+    }
+
+
+    auto widgetVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetMainView);
     if (widgetVisual) {
       auto compositorWidget = widgetVisual.Compositor();
       if (compositorWidget) {
-        float targetOffsetXWidget = static_cast<float>(centered_widget + (childrenWidthTaskbar / 2.0f) - (widgetElementWidth - widgetElementVisibleWidth)) + g_settings.userDefinedTrayTaskGap;
+        float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar+g_settings.userDefinedTrayTaskGap) ;
         auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
 
-        widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXWidget, static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
+        widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
         if (movingInwards) {
           widgetOffsetAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
         }
