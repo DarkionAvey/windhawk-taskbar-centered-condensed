@@ -733,8 +733,8 @@ if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt
     SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider);
   }
 
-  if (widgetElement) {
-    SetDividerForElement(widgetElement, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
+  if (widgetPresent && widgetElementInnerChild) {
+    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
   }
 
   if (!taskbarBackground) return false;

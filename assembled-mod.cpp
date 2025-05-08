@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            Dock-like taskbar for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.65
+// @version         1.4.66
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -3409,8 +3409,8 @@ if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt
     SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider);
   }
 
-  if (widgetElement) {
-    SetDividerForElement(widgetElement, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
+  if (widgetPresent && widgetElementInnerChild) {
+    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
   }
 
   if (!taskbarBackground) return false;
