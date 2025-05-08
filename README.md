@@ -1,7 +1,7 @@
 
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 
-# Dock-like Windhawk Mod ⚒️ (Under Development)
+# Dock-like Windhawk Mod
 
 Transform your Windows 11 taskbar into a smooth, MacOS-style dock—without losing any of the original functionality!
 
