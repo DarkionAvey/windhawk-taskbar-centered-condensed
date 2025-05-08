@@ -1,20 +1,13 @@
-<p align="center">
-  <img alt="Logo" src="https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/logo-raster.png" height="200"/>
-</p>
 
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 
 # Dock-like Windhawk Mod ⚒️ (Under Development)
 
 Transform your Windows 11 taskbar into a smooth, MacOS-style dock—without losing any of the original functionality!
-Unlike other solutions that rely on third-party apps, this mod enhances the native taskbar with sleek animations and
-customizability.
-
-🚧 **Currently in development** – contributions are welcome! Feel free to submit a pull request.
 
 ---
 
-## 🚀 How to Install
+## 🚀 How to Install development build
 
 ⚠️ **Note:** Please disable any mods that affect taskbar height or taskbar icons—this mod already includes those
 features.
@@ -42,26 +35,20 @@ modify the source files in the `mod-parts` directory.
 
 ---
 
-## 🛣️ Potential roadmap
+## 🛣️ Planned features
 
-1. ~~Use debounce to stop running the animations concurrently~~ ✅
-2. Proper "unloading" of mod.
-3. ~~Taskbar dividers~~ ✅
-4. Move widget panel to the center (partially implemented)
-5. Replace the taskbar weather widget with WebView for more interesting stuff to show
-6. Add support for custom taskbar icons
-7. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at
+1. Add support for custom taskbar icons (partially implemented).
+2. Replace the taskbar weather widget with WebView for more interesting stuff to show.
+3. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at.
 
 ---
 
 ## 🙌 Credits
 
-Huge thanks to these awesome developers who made this mod possible:
+Huge thanks to these awesome developers who made this mod possible -- your contributions to modding Windows are truly appreciated!:
 
 - [`Michael Maltsev (m417z)`](https://github.com/m417z)
 - [`Valentin Radu (valinet)`](https://github.com/valinet)
-
-Your contributions to modding Windows are truly appreciated!
 
 ---
 
@@ -72,17 +59,6 @@ Your contributions to modding Windows are truly appreciated!
 - [Show All Tray Icons](https://windhawk.net/mods/taskbar-notification-icons-show-all)
 
 ---
-
-## 🎨 Showcase & Themes
-
-### To install a theme:
-
-1. Copy the theme's settings data.
-2. Open **Dock-like** in WindHawk.
-3. Navigate to `Advanced Settings` → `Mod Settings`.
-4. Paste the copied settings and click **Load**.
-
-(Gallery is work in progress)
 
 # Options
 

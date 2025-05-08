@@ -13,26 +13,47 @@ import re
 #
 # """
 input_block = r"""
-	Line  27: 	Line  1311: [00019900] remove: long __cdecl ImmersiveIcons::LoadImmersiveIconThemeAware(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *)
-	Line  29: 	Line  1602: [000274AC] remove: long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *)
-	Line  30: 	Line  1603: [0002797C] remove: long __cdecl ImmersiveIcons::_LoadImmersiveIcon(unsigned short const *,struct ImmersiveIcons::LoadIconParams const &,struct HBITMAP__ * *,struct ImmersiveIcons::IconData2 *)
-	Line  40: 	Line  2186: [0003F778] remove: long __cdecl Remove::GetIconFromBitmap(struct HBITMAP__ *,struct HICON__ * *)
-	Line  46: 	Line  2655: [00050788] remove: long __cdecl Remove::ConvertHICONToWICBitmap(struct IWICImagingFactory *,struct HICON__ *,struct IWICBitmapSource * *)
-	Line  47: 	Line  2656: [000508A4] remove: long __cdecl NotifyIconUtilities::AddMarginsToBitmap(struct _MARGINS,unsigned int,unsigned int,struct IWICBitmapSource *,struct IWICBitmap * *)
+	Line  1989: [0003752C] private: static int __cdecl ShellIconLoaderV2::s_GetShellIconSize(int)
+	Line  4901: [00080474] private: static long __cdecl ShellIconLoaderV2::s_ForceImagePresent(int,int,struct HICON__ * *)
+	Line  5534: [00095AC8] private: bool __cdecl ShellIconLoaderV2::LoadSyncWindowIcon(int,struct HICON__ * *)
+	Line  5535: [00095B44] private: void __cdecl ShellIconLoaderV2::TryLoadIconFromResourceIfNeeded(void)
+	Line  6637: [000AA788] private: static int __cdecl ShellIconLoaderV2::s_GetShellImageListSizeId(int)
+	Line 14968: [0017B75C] private: struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::ForceImagePresentAsync(int,int)
+	Line 14969: [0017B7D0] public: long __cdecl ShellIconLoaderV2::InitializeLoadWindowIconOnlyV2(void)
+	Line 14970: [0017B8A0] public: long __cdecl ShellIconLoaderV2::InitializeShellIconCacheIconOnlyV2(void)
+	Line 14971: [0017B930] public: long __cdecl ShellIconLoaderV2::InitializeWindowAndShellIconV2(void)
+	Line 14974: [0017BEF0] private: struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::LoadAsyncIcon(int)
+	Line 14975: [0017BF64] private: bool __cdecl ShellIconLoaderV2::LoadShellIconCacheIcon(int)
+	Line 14981: [0017C510] private: bool __cdecl ShellIconLoaderV2::TryLoadAsyncIcon(int)
+	Line 14985: [0017C808] public: static struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::final_release(class std::unique_ptr<class ShellIconLoaderV2,struct std::default_delete<class ShellIconLoaderV2> >)
+	Line 14986: [0017C88C] private: static long __cdecl ShellIconLoaderV2::s_LoadIconsFromResourceSync(unsigned short const *,unsigned short,int,struct HICON__ * *)
+	Line 14987: [0017C960] private: static void __cdecl ShellIconLoaderV2::s_SetIconCallback(void *,void *,int,int)
+	Line 14988: [0017CA14] private: static bool __cdecl ShellIconLoaderV2::s_ShouldLoadBetterIcon(struct _ICONINFOEXW const &,int)
 
-	Line  74: 	Line  5402: [000870DC] remove: long __cdecl GDIHelpers::AddBackgroundForIcon(struct HBITMAP__ *,unsigned long const &,struct tagSIZE const &,struct tagSIZE const &,struct tagSIZE const &,struct HBITMAP__ * *)
-	Line  92: 	Line  8850: [000D8500] public: virtual struct HBITMAP__ * __cdecl TrayUI::GetSettingsIconBitmapForSystemMenu(void)const 
-	Line  94: 	Line  9006: [000DE9A4] private: void __cdecl TrayUI::RenderSystemGlyphIcon(struct HDC__ *,struct tagSIZE,unsigned long,unsigned long,struct HBITMAP__ * *)
-	Line 113: 	Line 13661: [00154664] remove: void __cdecl Windows::Internal::Shell::IconConverter::ConvertToGrayscale(struct IWICBitmap *)
-	Line 115: 	Line 13861: [0015E830] public: virtual long __cdecl CIconLoadingFunctions::ConvertIconToBitmap(struct HICON__ *,struct tagSIZE const &,struct HBITMAP__ * *)
-	Line 117: 	Line 13863: [0015E9C4] remove: long __cdecl Remove::CreateBitmapFromIconWithAlpha(struct HICON__ *,int,struct HBITMAP__ * *)
-	
 """
 	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
+
+def remove_duplicate_lines(block):
+    lines = block.strip().splitlines()
+    seen = set()
+    unique_lines = []
+    for line in lines:
+        parts = line.split(']', 1)
+        key = parts[1].strip() if len(parts) > 1 else line.strip()
+        if key not in seen:
+            seen.add(key)
+            unique_lines.append(line)
+    return "\n".join(unique_lines)
+
+
+
+def remove_static(string:str):
+    return string.replace("static ", "").replace("void* pThis, ", "").replace("pThis, ", "")
 
 
 def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     input_block = re.sub(string=input_block, pattern=r"\s+Line\s+\d+\:\s", repl="\n", flags=re.MULTILINE | re.DOTALL)
+    input_block=remove_duplicate_lines(input_block)
     pattern = re.compile(
         r'\[\w+\]\s+'
         r'(?P<access>public:|private:|protected:|remove:)?\s+'
@@ -73,7 +94,9 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
         else:
             ret_type = ret_type_raw
 
-        param_list = ["void* pThis"]
+        is_static="static" in ret_type
+
+        param_list = ["void* pThis"] if not is_static else []
         params_clean = params_raw.strip()
         if params_clean and params_clean != "void":
             parts = [p.strip() for p in params_clean.split(",") if p.strip()]
@@ -81,17 +104,23 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
                 p_clean = p.replace("struct ", "")
                 param_list.append(f"{p_clean} param{idx}")
 
-        suffix = "_WithArgs" if len(param_list) > 1 else "_WithoutArgs"
+        suffix = "_WithArgs" if len(param_list) > (1 if not is_static else 0) else "_WithoutArgs"
 
         base_name = f"{class_name}_{method_name}"
         base_name = base_name.replace("::", "__")
         hook_base = base_name + suffix
 
-        typedef_line = f"using {hook_base}_t = {ret_type}(WINAPI*)({', '.join(param_list)});"
+        ret_type_for_using=ret_type if not is_static else remove_static(ret_type)
+
+        typedef_line = f"using {hook_base}_t = {ret_type_for_using}(WINAPI*)({', '.join(param_list)});"
         original_decl = f"{hook_base}_t {hook_base}_Original;"
+
 
         params_str = ", ".join(param_list)
         log_name = base_name
+
+        if "static" in ret_type:
+            params_str= remove_static(params_str)
 
         if ret_type == "void":
             hook_func = (
@@ -108,6 +137,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
             }}"""
             )
 
+
         hook_entry = (
             f'    {{ {{LR"({line[line.find(access):].strip()}{virtual_keyword})"}},\n'
             f'      &{hook_base}_Original,\n'
@@ -123,6 +153,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
 
         method_name_str = hook_base
         hook_names.append(method_name_str)
+
         hook_method = (
             f"bool {hook_prefix}{method_name_str}() {{\n"
             f"    HMODULE module = LoadLibrary(L\"taskbar.dll\");\n"
@@ -136,6 +167,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
             f"    return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));\n"
             f"}}\n"
         )
+
         hook_methods.append(hook_method)
 
     output_lines = []
@@ -188,6 +220,7 @@ This mod prints the names of functions being called.
 #include <winstring.h>
 #include <sstream>
 #include <string_view>
+#include <winrt/base.h>
 #include <chrono>
 """)
     output_lines.append("// Auto-generated hook definitions and functions")
@@ -214,6 +247,8 @@ This mod prints the names of functions being called.
     init_function.append("void Wh_ModUninit() {}")
     init_function.append("void Wh_ModSettingsChanged() {}")
     output_lines.extend(init_function)
+
+    output_lines=[x.replace("remove: ","").replace("Remove::","").replace("Remove_","") for x in output_lines]
 
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("\n".join(output_lines))
