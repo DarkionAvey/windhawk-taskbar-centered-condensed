@@ -23,7 +23,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
 
   auto shapeVisual = compositor.CreateShapeVisual();
   if (!shapeVisual) return;
-dividerVisible=dividerVisible && !g_unloading;
+
   if (dividerVisible) {
     auto borderThicknessFloat = static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) * 2.0f;
     shapeVisual.Size({borderThicknessFloat, panelHeight});
@@ -127,12 +127,12 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
 
     if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className == L"Taskbar.OverflowToggleButton") {
       child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      child.Width(g_settings.userDefinedTaskbarButtonSize);
+    //   child.Width(g_settings.userDefinedTaskbarButtonSize);
 
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
       if (innerElementChild) {
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-        innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
+        // innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
       }
     }
     if (className == L"Taskbar.SearchBoxButton") {

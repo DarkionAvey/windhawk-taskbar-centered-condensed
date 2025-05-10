@@ -226,7 +226,7 @@ class TaskbarStylerMod(URLProcessor):
 ######################################################################
 
 def generate_mod_art():
-    print(generate_slash_block("Dock-like"))
+    print(generate_slash_block("WinDock"))
 
 
 def process_all_mods():

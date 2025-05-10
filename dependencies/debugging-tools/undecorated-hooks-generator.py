@@ -13,22 +13,7 @@ import re
 #
 # """
 input_block = r"""
-	Line  1989: [0003752C] private: static int __cdecl ShellIconLoaderV2::s_GetShellIconSize(int)
-	Line  4901: [00080474] private: static long __cdecl ShellIconLoaderV2::s_ForceImagePresent(int,int,struct HICON__ * *)
-	Line  5534: [00095AC8] private: bool __cdecl ShellIconLoaderV2::LoadSyncWindowIcon(int,struct HICON__ * *)
-	Line  5535: [00095B44] private: void __cdecl ShellIconLoaderV2::TryLoadIconFromResourceIfNeeded(void)
-	Line  6637: [000AA788] private: static int __cdecl ShellIconLoaderV2::s_GetShellImageListSizeId(int)
-	Line 14968: [0017B75C] private: struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::ForceImagePresentAsync(int,int)
-	Line 14969: [0017B7D0] public: long __cdecl ShellIconLoaderV2::InitializeLoadWindowIconOnlyV2(void)
-	Line 14970: [0017B8A0] public: long __cdecl ShellIconLoaderV2::InitializeShellIconCacheIconOnlyV2(void)
-	Line 14971: [0017B930] public: long __cdecl ShellIconLoaderV2::InitializeWindowAndShellIconV2(void)
-	Line 14974: [0017BEF0] private: struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::LoadAsyncIcon(int)
-	Line 14975: [0017BF64] private: bool __cdecl ShellIconLoaderV2::LoadShellIconCacheIcon(int)
-	Line 14981: [0017C510] private: bool __cdecl ShellIconLoaderV2::TryLoadAsyncIcon(int)
-	Line 14985: [0017C808] public: static struct winrt::fire_and_forget __cdecl ShellIconLoaderV2::final_release(class std::unique_ptr<class ShellIconLoaderV2,struct std::default_delete<class ShellIconLoaderV2> >)
-	Line 14986: [0017C88C] private: static long __cdecl ShellIconLoaderV2::s_LoadIconsFromResourceSync(unsigned short const *,unsigned short,int,struct HICON__ * *)
-	Line 14987: [0017C960] private: static void __cdecl ShellIconLoaderV2::s_SetIconCallback(void *,void *,int,int)
-	Line 14988: [0017CA14] private: static bool __cdecl ShellIconLoaderV2::s_ShouldLoadBetterIcon(struct _ICONINFOEXW const &,int)
+[007DD67C] public: void __cdecl winrt::Taskbar::implementation::SharedAnimations::StartRunningIndicatorSizeChangeAnimation(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >)const 
 
 """
 	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)

@@ -1,9 +1,9 @@
 
 // ==WindhawkMod==
 // @id              taskbar-dock-like
-// @name            Dock-like taskbar for Windows 11
-// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a MacOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.67
+// @name            WinDock (taskbar as a dock) for Windows 11
+// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
+// @version         1.4.70
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -17,23 +17,15 @@
 
 // ==WindhawkModReadme==
 /*
-<p align="center">
-  <img alt="Logo" src="https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/logo-raster.png" height="200"/>
-</p>
-
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 
-# Dock-like Windhawk Mod ⚒️ (Under Development)
+# WinDock Windhawk Mod
 
-Transform your Windows 11 taskbar into a smooth, MacOS-style dock—without losing any of the original functionality!
-Unlike other solutions that rely on third-party apps, this mod enhances the native taskbar with sleek animations and
-customizability.
-
-🚧 **Currently in development** – contributions are welcome! Feel free to submit a pull request.
+Transform your Windows 11 taskbar into a smooth, MacOS-style dock — without losing any of the original functionality!
 
 ---
 
-## 🚀 How to Install
+## 🚀 How to Install (Development Build)
 
 ⚠️ **Note:** Please disable any mods that affect taskbar height or taskbar icons—this mod already includes those
 features.
@@ -46,7 +38,7 @@ features.
 4. Click **Compile Mod** button on the top left corner.
 5. Change the mod's settings to fit your preference.
 6. If your explorer.exe is not responding, disable the mod from Windhawk, open task manager, restart explorer.exe, wait
-   for the default taskbar to appear, then apply Dock-like.
+   for the default taskbar to appear, then apply WinDock.
 
 ---
 
@@ -61,26 +53,20 @@ modify the source files in the `mod-parts` directory.
 
 ---
 
-## 🛣️ Potential roadmap
+## 🛣️ Planned features
 
-1. ~~Use debounce to stop running the animations concurrently~~ ✅
-2. Proper "unloading" of mod.
-3. ~~Taskbar dividers~~ ✅
-4. Move widget panel to the center (partially implemented)
-5. Replace the taskbar weather widget with WebView for more interesting stuff to show
-6. Add support for custom taskbar icons
-7. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at
+1. Add support for custom taskbar icons (partially implemented).
+2. Replace the taskbar weather widget with WebView for more interesting stuff to show.
+3. Offset the 'StartMenu', 'ActionCenter', and 'WidgetPanel' layouts to where the taskbar is currently at.
 
 ---
 
 ## 🙌 Credits
 
-Huge thanks to these awesome developers who made this mod possible:
+Huge thanks to these awesome developers who made this mod possible -- your contributions to modding Windows are truly appreciated!:
 
 - [`Michael Maltsev (m417z)`](https://github.com/m417z)
 - [`Valentin Radu (valinet)`](https://github.com/valinet)
-
-Your contributions to modding Windows are truly appreciated!
 
 ---
 
@@ -91,17 +77,6 @@ Your contributions to modding Windows are truly appreciated!
 - [Show All Tray Icons](https://windhawk.net/mods/taskbar-notification-icons-show-all)
 
 ---
-
-## 🎨 Showcase & Themes
-
-### To install a theme:
-
-1. Copy the theme's settings data.
-2. Open **Dock-like** in WindHawk.
-3. Navigate to `Advanced Settings` → `Mod Settings`.
-4. Paste the copied settings and click **Load**.
-
-(Gallery is work in progress)
 
 # Options
 
@@ -2803,12 +2778,12 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
 
     if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className == L"Taskbar.OverflowToggleButton") {
       child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      child.Width(g_settings.userDefinedTaskbarButtonSize);
+    //   child.Width(g_settings.userDefinedTaskbarButtonSize);
 
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
       if (innerElementChild) {
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-        innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
+        // innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
       }
     }
     if (className == L"Taskbar.SearchBoxButton") {

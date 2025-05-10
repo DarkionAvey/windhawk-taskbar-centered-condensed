@@ -121,7 +121,7 @@ def main(major_minor="1.4"):
     output_path = os.path.join(base_dir, 'assembled-mod.cpp')
 
     readme_contents = read_file(readme_path)
-    header_contents = read_file(os.path.join(base_dir, 'mod-parts', 'dock-like-mod-header.txt'))
+    header_contents = read_file(os.path.join(base_dir, 'mod-parts', 'win-dock-mod-header.txt'))
     mod_settings_contents = read_file(os.path.join(base_dir, 'mod-parts', 'mod-settings.yml'))
 
     options_table = generate_options_table(mod_settings_contents)
@@ -156,7 +156,7 @@ def main(major_minor="1.4"):
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'utils-apply-style-helpers.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'docklike-mod.cpp')).strip()}
+{read_file(os.path.join(base_dir, 'mod-parts', 'win-dock-mod.cpp')).strip()}
 """
 
     with open(output_path, 'w', encoding='utf-8') as f:
