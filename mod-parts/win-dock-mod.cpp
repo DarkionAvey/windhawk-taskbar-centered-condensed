@@ -18,7 +18,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
 
   auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(element);
   if (!visual) return;
-  auto compositor = visual.Compositor();  // :contentReference[oaicite:0]{index=0}
+  auto compositor = visual.Compositor();
   if (!compositor) return;
 
   auto shapeVisual = compositor.CreateShapeVisual();
@@ -39,7 +39,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
     lineShape.StrokeThickness(borderThicknessFloat);
     shapeVisual.Shapes().Append(lineShape);
   }
-  winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);  // :contentReference[oaicite:3]{index=3}
+  winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
 }
 
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {

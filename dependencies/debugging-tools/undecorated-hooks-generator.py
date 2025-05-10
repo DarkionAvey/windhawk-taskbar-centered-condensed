@@ -13,7 +13,7 @@ import re
 #
 # """
 input_block = r"""
-[007DD67C] public: void __cdecl winrt::Taskbar::implementation::SharedAnimations::StartRunningIndicatorSizeChangeAnimation(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >)const 
+[007DD67C] public: void __cdecl Something::SomeFunction(int parameter) 
 
 """
 	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)

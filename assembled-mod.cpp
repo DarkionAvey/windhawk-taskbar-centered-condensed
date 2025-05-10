@@ -3,7 +3,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.70
+// @version         1.4.72
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -2368,19 +2368,20 @@ void Wh_ModSettingsChangedStartButtonPosition() {
     
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////
-////   _______    ______     ______  __  ___          __       __   __  ___  _______   ////
-////  |       \  /  __  \   /      ||  |/  /         |  |     |  | |  |/  / |   ____|  ////
-////  |  .--.  ||  |  |  | |  ,----'|  '  /   ______ |  |     |  | |  '  /  |  |__     ////
-////  |  |  |  ||  |  |  | |  |     |    <   |______||  |     |  | |    <   |   __|    ////
-////  |  '--'  ||  `--'  | |  `----.|  .  \          |  `----.|  | |  .  \  |  |____   ////
-////  |_______/  \______/   \______||__|\__\         |_______||__| |__|\__\ |_______|  ////
-////                                                                                   ////
-///////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+////  ____    __    ____  __  .__   __.  _______    ______     ______  __  ___   ////
+////  \   \  /  \  /   / |  | |  \ |  | |       \  /  __  \   /      ||  |/  /   ////
+////   \   \/    \/   /  |  | |   \|  | |  .--.  ||  |  |  | |  ,----'|  '  /    ////
+////    \            /   |  | |  . `  | |  |  |  ||  |  |  | |  |     |    <     ////
+////     \    /\    /    |  | |  |\   | |  '--'  ||  `--'  | |  `----.|  .  \    ////
+////      \__/  \__/     |__| |__| \__| |_______/  \______/   \______||__|\__\   ////
+////                                                                             ////
+/////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+
 #include <dwmapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -2669,7 +2670,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
 
   auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(element);
   if (!visual) return;
-  auto compositor = visual.Compositor();  // :contentReference[oaicite:0]{index=0}
+  auto compositor = visual.Compositor();
   if (!compositor) return;
 
   auto shapeVisual = compositor.CreateShapeVisual();
@@ -2690,7 +2691,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
     lineShape.StrokeThickness(borderThicknessFloat);
     shapeVisual.Shapes().Append(lineShape);
   }
-  winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);  // :contentReference[oaicite:3]{index=3}
+  winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
 }
 
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {
