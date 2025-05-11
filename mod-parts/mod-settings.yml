@@ -1,76 +1,76 @@
 - TrayTaskGap: 20
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default 20)
+  $description: Adjusts the space between the task area and the tray area (Default is 20)
   $type: unsigned int
 
 - TaskbarBackgroundHorizontalPadding: 6
   $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default 6)
+  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 6)
   $type: unsigned int
 
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
-  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default 6)
+  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
   $type: unsigned int
 
 - TaskbarHeight: 78
   $name: Taskbar height
-  $description: Sets the height of the taskbar (Default 78)
+  $description: Sets the height of the taskbar (Default is 78)
   $type: unsigned int
 
 - TaskbarIconSize: 44
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default 44)
+  $description: Defines the width and height of taskbar icons (Default is 44)
   $type: unsigned int
 
 - TaskbarButtonSize: 74
   $name: Taskbar button size
-  $description: Sets the size of taskbar buttons, which surround the icons (Default 74)
+  $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
   $type: unsigned int
 
 - TaskbarCornerRadius: 24
   $name: Taskbar corner radius
-  $description: Controls how rounded the taskbar corners appear (Default 24)
+  $description: Controls how rounded the taskbar corners appear (Default is 24)
   $type: unsigned int
 
 - TaskButtonCornerRadius: 16
   $name: Task button corner radius
-  $description: Controls how rounded the corners of individual task buttons are (Default 16)
+  $description: Controls how rounded the corners of individual task buttons are (Default is 16)
   $type: unsigned int
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default false)
+  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off)
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
-  $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default 100)
+  $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
   $type: unsigned int
 
 - TaskbarBackgroundTint: 0
   $name: Background tint
-  $description: Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default 0)
+  $description: Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0)
   $type: unsigned int
 
 - TaskbarBackgroundLuminosity: 30
   $name: Background luminosity
-  $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30)
+  $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30)
   $type: unsigned int
 
 - TaskbarBorderOpacity: 20
   $name: Border opacity
-  $description: Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default 20)
+  $description: Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20)
   $type: unsigned int
 
 - TaskbarBorderColorHex: "#ffffff"
   $name: Border color (HEX)
-  $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default `#ffffff`)
+  $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`)
   $type: string hex color
 
 - TaskbarBorderThickness: 10
   $name: Taskbar border thickness scale
-  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default 10)
+  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 10)
   $type: unsigned int
 
 - DividedAppNames: ""
@@ -80,40 +80,45 @@
 
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
-  $description: If enabled, the taskbar background spans the entire width of the screen (Default false)
+  $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
   $type: bool
 
 - IgnoreShowDesktopButton: false
   $name: Ignore "Show Desktop" button
-  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default false)
+  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
   $type: bool
 
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default true)
+  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default is on)
   $type: bool
 
 - StyleTrayArea: false
   $name: Modify the tray area appearance
-  $description: If enabled, the options for tray icon size will take effect (Default false)
+  $description: If enabled, the options for tray icon size will take effect (Default is off)
   $type: bool
 
 - TrayIconSize: 30
   $name: Tray icon size
-  $description: Defines the width and height of tray icons (Default 30)
+  $description: Defines the width and height of tray icons (Default is 30)
   $type: unsigned int
 
 - TrayButtonSize: 45
   $name: Tray button size
-  $description: Sets the size of tray buttons, which surround the icons (Default 45)
+  $description: Sets the size of tray buttons, which surround the icons (Default is 45)
   $type: unsigned int
 
 - CustomTaskbarIconsDir: ""
-  $name: (Experimental) Folder to custom taskbar icons
+  $name: (Experimental, not active) Folder to custom taskbar icons
   $description: Specify a valid path to a folder containing .png files of app names for taskbar
   $type: string dir path
 
 - CustomTrayIconsDir: ""
-  $name: (Experimental) Folder to custom tray icons
+  $name: (Experimental, not active) Folder to custom tray icons
   $description: Specify a valid path to a folder containing .png files of app names for tray
   $type: string dir path
+
+- MoveFlyoutWindows: true
+  $name: Move Flyout Windows with Taskbar
+  $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
+  $type: bool

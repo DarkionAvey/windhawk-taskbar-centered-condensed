@@ -12,11 +12,15 @@ import re
 # 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
 #
 # """
-input_block = r"""
-[007DD67C] public: void __cdecl Something::SomeFunction(int parameter) 
+dll_to_hook = "StartDocked.dll"
+exe_to_hook = "StartMenuExperienceHost.exe"
 
+input_block = r"""
+	Line  1846: [0005FE60] private: class Windows::Foundation::Rect __cdecl StartDocked::StartSizingFrame::GetWindowBounds(void)const 
 """
-	# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
+
+
+# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
 
 def remove_duplicate_lines(block):
     lines = block.strip().splitlines()
@@ -31,14 +35,13 @@ def remove_duplicate_lines(block):
     return "\n".join(unique_lines)
 
 
-
-def remove_static(string:str):
+def remove_static(string: str):
     return string.replace("static ", "").replace("void* pThis, ", "").replace("pThis, ", "")
 
 
 def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     input_block = re.sub(string=input_block, pattern=r"\s+Line\s+\d+\:\s", repl="\n", flags=re.MULTILINE | re.DOTALL)
-    input_block=remove_duplicate_lines(input_block)
+    input_block = remove_duplicate_lines(input_block)
     pattern = re.compile(
         r'\[\w+\]\s+'
         r'(?P<access>public:|private:|protected:|remove:)?\s+'
@@ -79,7 +82,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
         else:
             ret_type = ret_type_raw
 
-        is_static="static" in ret_type
+        is_static = "static" in ret_type
 
         param_list = ["void* pThis"] if not is_static else []
         params_clean = params_raw.strip()
@@ -95,17 +98,16 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
         base_name = base_name.replace("::", "__")
         hook_base = base_name + suffix
 
-        ret_type_for_using=ret_type if not is_static else remove_static(ret_type)
+        ret_type_for_using = ret_type if not is_static else remove_static(ret_type)
 
         typedef_line = f"using {hook_base}_t = {ret_type_for_using}(WINAPI*)({', '.join(param_list)});"
         original_decl = f"{hook_base}_t {hook_base}_Original;"
-
 
         params_str = ", ".join(param_list)
         log_name = base_name
 
         if "static" in ret_type:
-            params_str= remove_static(params_str)
+            params_str = remove_static(params_str)
 
         if ret_type == "void":
             hook_func = (
@@ -121,7 +123,6 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
                 return {hook_base}_Original({', '.join([p.split()[-1] for p in param_list])});
             }}"""
             )
-
 
         hook_entry = (
             f'    {{ {{LR"({line[line.find(access):].strip()}{virtual_keyword})"}},\n'
@@ -141,9 +142,9 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
 
         hook_method = (
             f"bool {hook_prefix}{method_name_str}() {{\n"
-            f"    HMODULE module = LoadLibrary(L\"taskbar.dll\");\n"
+            f"    HMODULE module = LoadLibrary(L\"{dll_to_hook}\");\n"
             f"    if (!module) {{\n"
-            f"        Wh_Log(L\"Failed to load taskbar.dll for {method_name_str}\");\n"
+            f"        Wh_Log(L\"Failed to load {dll_to_hook} for {method_name_str}\");\n"
             f"        return false;\n"
             f"    }}\n\n"
             f"    WindhawkUtils::SYMBOL_HOOK hook[] = {{ {{ {{LR\"({line[line.find(access):].strip()})\"}},\n"
@@ -157,14 +158,14 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
 
     output_lines = []
     output_lines.append(
-        r"""
+        fr"""
 // ==WindhawkMod==
 // @id      hooks-spy-mod
 // @name    Spy for function calls
 // @description     Print the names of functions being called
 // @version 0.1
 // @author  DarkionAvey
-// @include explorer.exe
+// @include {exe_to_hook}
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols
 // ==/WindhawkMod==
 
@@ -233,7 +234,7 @@ This mod prints the names of functions being called.
     init_function.append("void Wh_ModSettingsChanged() {}")
     output_lines.extend(init_function)
 
-    output_lines=[x.replace("remove: ","").replace("Remove::","").replace("Remove_","") for x in output_lines]
+    output_lines = [x.replace("remove: ", "").replace("Remove::", "").replace("Remove_", "") for x in output_lines]
 
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("\n".join(output_lines))

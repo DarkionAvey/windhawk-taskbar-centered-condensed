@@ -159,6 +159,8 @@ def main(major_minor="1.4"):
 {read_file(os.path.join(base_dir, 'mod-parts', 'win-dock-mod.cpp')).strip()}
 """
 
+    merged_contents = re.sub(r'[ \t]*\n', '\n', merged_contents)  # remove whitespace-only lines
+    merged_contents = re.sub(r'\n+', '\n', merged_contents).strip()
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)
 

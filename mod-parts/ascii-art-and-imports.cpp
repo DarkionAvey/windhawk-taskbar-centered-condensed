@@ -14,6 +14,15 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 #include <dwmapi.h>
+#include <chrono>
+#include <string>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+#include <unordered_map>
+#include <limits>
+#include <set>
+#include <utility>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <functional>
@@ -35,24 +44,14 @@
 #include <commctrl.h>
 #include <roapi.h>
 #include <winstring.h>
-#include <chrono>
-#include <string>
 #include <string_view>
 #include <vector>
-#include <regex>
-#include <sstream>
-#include <algorithm>
 #include <atomic>
-#include <unordered_map>
-#include <limits>
 #include <winrt/Windows.Graphics.Imaging.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.Search.h>
-#include <set>
-#include <utility>
-
 
 
 using namespace winrt::Windows::UI::Xaml;

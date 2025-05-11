@@ -1,4 +1,3 @@
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -12,9 +11,10 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool ApplyStyle(FrameworkElement const& element);
+bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);
 bool InitializeDebounce();
 DispatcherTimer debounceTimer{nullptr};
+float g_lastStartButtonX=0.0f;
 #include <windhawk_utils.h>
 #include <atomic>
 #include <functional>
@@ -32,21 +32,14 @@ struct {
     int startMenuWidth;
 } g_settings_startbuttonposition;
 std::atomic<bool> g_taskbarViewDllLoadedStartButtonPosition;
-
 HWND g_startMenuWnd;
 int g_startMenuOriginalWidth;
 HWND g_searchMenuWnd;
 int g_searchMenuOriginalX;
-
 STDAPI GetDpiForMonitor(HMONITOR hmonitor,
                         MONITOR_DPI_TYPE dpiType,
                         UINT* dpiX,
                         UINT* dpiY);
-
-
-
-
-
 void* CTaskBand_ITaskListWndSite_vftable;
 void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
@@ -175,23 +168,21 @@ void ApplySettingsFromTaskbarThread() {
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
-            
 if (!debounceTimer) {
   RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
   return TRUE;
 }
 const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
 if (!xamlRootContent || !debounceTimer) return TRUE;
-
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
-  xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
-    if (!ApplyStyle(xamlRootContent)) {
+std::wstring monitorName = GetMonitorName(hWnd);
+  xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
+    if (!ApplyStyle(xamlRootContent,monitorName)) {
       Wh_Log(L"ApplyStyles failed");
     }
   });
   return TRUE;
 }
-
             return TRUE;
         },
         0);
@@ -206,7 +197,6 @@ IUIElement_Arrange_t IUIElement_Arrange_Original;
 HRESULT WINAPI
 IUIElement_Arrange_Hook(void* pThis,
                         const winrt::Windows::Foundation::Rect* rect) {
-    
     auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };
     if (g_unloading) {
         return original();
@@ -246,8 +236,7 @@ IUIElement_Arrange_Hook(void* pThis,
             return true;
         });
     if (!widgetElement) {
-        element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { 
-
+        element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() {
                 double width = element.ActualWidth();
                 double minX = std::numeric_limits<double>::infinity();
                 auto taskbarFrameRepeater =
@@ -266,11 +255,9 @@ IUIElement_Arrange_Hook(void* pThis,
                                   });
                 if (minX < width) {
                     Thickness margin = element.Margin();
-                    
                     element.Margin(margin);
                 } else if (minX > width * 2) {
                     Thickness margin = element.Margin();
-                    
                     element.Margin(margin);
                 }
             });
@@ -281,9 +268,7 @@ IUIElement_Arrange_Hook(void* pThis,
 }
 using AugmentedEntryPointButton_UpdateButtonPadding_t =
     void(WINAPI*)(void* pThis);
-
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPosition(void* pThis) {
-    
     AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
     if (g_unloading) {
         return;
@@ -404,8 +389,6 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
 //   ApplySettingsFromTaskbarThreadIfRequired();
 }
-
-
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
@@ -415,8 +398,6 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
     }
     return ret;
 }
-
-
 //namespace ImmersiveIcons {  struct IconData2; }
 //using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
 //ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
@@ -436,7 +417,6 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
 //        param8
 //    );
 //}
-
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -444,9 +424,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         return false;
     }
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
-
     {{LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"}, &CTaskBand__UpdateItemIcon_WithArgs_Original, CTaskBand__UpdateItemIcon_WithArgs_Hook},
-
     {
         {LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
         &CImpWndProc__WndProc_Original,
@@ -467,38 +445,32 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &CTaskBand__WndProc_Original,
         CTaskBand__WndProc_Hook,
     },
-
     {
         {LR"(protected: virtual __int64 __cdecl CTaskListWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
         &CTaskListWnd__WndProc_Original,
         CTaskListWnd__WndProc_Hook,
     },
-
     /////////////////////////////////////
     {
         {LR"(protected: long __cdecl CTaskBand::_InsertItem(struct HWND__ *,struct ITaskItem * *,struct HWND__ *,struct HWND__ *))"},
         &CTaskBand__InsertItem_Original,
         CTaskBand__InsertItem_Hook,
     },
-
     {
         {LR"(protected: void __cdecl CTaskBand::_UpdateAllIcons(void))"},
         &CTaskBand__UpdateAllIcons_Original,
         CTaskBand__UpdateAllIcons_Hook,
     },
-
     {
         {LR"(public: virtual void __cdecl CTaskBand::TaskOrderChanged(struct ITaskGroup *,int))"},
         &CTaskBand__TaskOrderChanged_Original,
         CTaskBand__TaskOrderChanged_Hook,
     },
-
     {
         {LR"(protected: void __cdecl CTaskBand::_ProcessWindowDestroyed(struct HWND__ *))"},
         &CTaskBand__ProcessWindowDestroyed_Original,
         CTaskBand__ProcessWindowDestroyed_Hook,
     },
-
     {
         {LR"(public: void __cdecl TrayUI::_Hide(void))"},
         &TrayUI__Hide_Original,
@@ -509,7 +481,6 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &CSecondaryTray__AutoHide_Original,
         CSecondaryTray__AutoHide_Hook,
     },
-
     {
         {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
         &TrayUI_WndProc_Original,
@@ -525,12 +496,9 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &ITaskbarSettings_get_Alignment_Original,
         ITaskbarSettings_get_Alignment_Hook,
     },
-
 //     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
 //                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
 //                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
-
-
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -556,22 +524,18 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
 }
 using TaskbarTelemetry_StartItemEntranceAnimation_t = void(WINAPI*)(const bool&);
 static TaskbarTelemetry_StartItemEntranceAnimation_t orig_StartItemEntranceAnimation = nullptr;
-
 using TaskbarTelemetry_StartItemPlateEntranceAnimation_t = void(WINAPI*)(const bool&);
 static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEntranceAnimation = nullptr;
-
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
   ApplySettingsDebounced(150);
 }
-
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
   ApplySettingsDebounced(150);
 }
-
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
@@ -580,8 +544,6 @@ static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_
   ApplySettingsDebounced(500);
                 return ;
             }
-
-
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
@@ -592,20 +554,13 @@ TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
             }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
-
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
-
 { {LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"},
                                          &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original,
                                          TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook },
-
-
  { {LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"},
                                          &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original,
                                          TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook },
-
-
-
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
             &IUIElement_Arrange_Original,
@@ -619,7 +574,6 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     };
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
-
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     if (!g_taskbarViewDllLoadedStartButtonPosition && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
@@ -630,7 +584,6 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     }
 }
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-
 HMODULE WINAPI LoadLibraryExW_Hook_StartButtonPosition(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
@@ -682,10 +635,11 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     if (!hwnd || !GetWindowThreadProcessId(hwnd, &processId)) {
         return original();
     }
-    std::wstring processFileName = GetProcessFileName(processId);
+    TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);
+std::wstring processFileName = GetProcessFileName(processId);
     enum class Target {
         StartMenu,
-        SearchHost,
+        SearchHost,ShellExperienceHost,ShellHost,
     };
     Target target;
     if (_wcsicmp(processFileName.c_str(), L"StartMenuExperienceHost.exe") ==
@@ -693,6 +647,10 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         target = Target::StartMenu;
     } else if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
         target = Target::SearchHost;
+    }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
+        target = Target::ShellExperienceHost;
+    } else if (_wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0) {
+        target = Target::ShellHost;
     } else {
         return original();
     }
@@ -704,6 +662,12 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         .cbSize = sizeof(MONITORINFO),
     };
     GetMonitorInfo(monitor, &monitorInfo);
+    auto monitorName = GetMonitorName(monitor);
+    auto iterationTbStates = g_taskbarStates.find(monitorName);
+    if (iterationTbStates == g_taskbarStates.end()) {
+      return original();
+    }
+    TaskbarState& taskbarState = iterationTbStates->second;
     RECT targetRect;
     if (!GetWindowRect(hwnd, &targetRect)) {
         return original();
@@ -712,58 +676,62 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int y = targetRect.top;
     int cx = targetRect.right - targetRect.left;
     int cy = targetRect.bottom - targetRect.top;
+    float dpiScale = monitorDpiX / 96.0f;
+    float absStartX = taskbarState.lastStartButtonX * dpiScale;
+    float absRootWidth = taskbarState.lastRootWidth * dpiScale;
+    float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
     if (target == Target::StartMenu) {
-        int cxNew;
-        if (g_settings_startbuttonposition.startMenuOnTheLeft) {
-            cxNew = MulDiv(
-                g_settings_startbuttonposition.startMenuWidth ? g_settings_startbuttonposition.startMenuWidth : 660,
-                monitorDpiX, 96);
-            g_startMenuWnd = hwnd;
-            g_startMenuOriginalWidth = cx;
-        } else {
-            if (!g_startMenuOriginalWidth) {
-                return original();
-            }
-            cxNew = g_startMenuOriginalWidth;
-            g_startMenuWnd = nullptr;
-            g_startMenuOriginalWidth = 0;
+      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+        g_startMenuWnd = hwnd;
+        g_startMenuOriginalWidth = cx;
+      } else {
+        if (g_startMenuOriginalWidth) {
+          cx = g_startMenuOriginalWidth;
         }
-        if (cxNew == cx) {
-            return original();
-        }
-        cx = cxNew;
+        g_startMenuWnd = nullptr;
+        g_startMenuOriginalWidth = 0;
+      }
+      x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
     } else if (target == Target::SearchHost) {
-        int xNew;
-        if (g_settings_startbuttonposition.startMenuOnTheLeft) {
-            if (x == monitorInfo.rcWork.left) {
-                return original();
-            }
-            xNew = monitorInfo.rcWork.left;
-            g_searchMenuWnd = hwnd;
-            g_searchMenuOriginalX = x;
-        } else {
-            if (!g_searchMenuOriginalX) {
-                return original();
-            }
-            xNew = g_searchMenuOriginalX;
-            g_searchMenuWnd = nullptr;
-            g_searchMenuOriginalX = 0;
+      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+        g_searchMenuWnd = hwnd;
+        g_searchMenuOriginalX = x;
+      } else {
+        if (!g_searchMenuOriginalX) {
+          return original();
         }
-        if (xNew == x) {
-            return original();
+        g_searchMenuWnd = nullptr;
+        g_searchMenuOriginalX = 0;
+      }
+      x = static_cast<int>(absStartX - cx / 2.0f);
+      x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+    } else if (target == Target::ShellExperienceHost) {
+        if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
+            x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);
+            x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+        }else{
+          x = static_cast<int>(absRootWidth - cx);
         }
-        x = xNew;
     }
-    SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    Wh_Log(L"Recalc: g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+      taskbarState.lastStartButtonX,
+      taskbarState.lastRootWidth,
+      cx,
+      x,
+      target,
+      taskbarState.lastTargetWidth,
+      absStartX,
+      absRootWidth,
+      absTargetWidth);
+SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
 void LoadSettingsStartButtonPosition() {
-    g_settings_startbuttonposition.startMenuOnTheLeft = 0;
-    g_settings_startbuttonposition.startMenuWidth = 0;
+    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutWindows");
+    g_settings_startbuttonposition.startMenuWidth = 660;
 }
 BOOL Wh_ModInitStartButtonPosition() {
-    
-    
+    LoadSettingsStartButtonPosition();
     if (!HookTaskbarDllSymbolsStartButtonPosition()) {
         return FALSE;
     }
@@ -782,7 +750,7 @@ BOOL Wh_ModInitStartButtonPosition() {
                                            LoadLibraryExW_Hook_StartButtonPosition,
                                            &LoadLibraryExW_Original);
     }
-    HMODULE dwmapiModule = nullptr;
+    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
     if (dwmapiModule) {
         auto pDwmSetWindowAttribute =
             (decltype(&DwmSetWindowAttribute))GetProcAddress(
@@ -796,7 +764,6 @@ BOOL Wh_ModInitStartButtonPosition() {
     return TRUE;
 }
 void Wh_ModAfterInitStartButtonPosition() {
-    
     if (!g_taskbarViewDllLoadedStartButtonPosition) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
@@ -807,15 +774,11 @@ void Wh_ModAfterInitStartButtonPosition() {
             }
         }
     }
-    
 }
 void Wh_ModBeforeUninitStartButtonPosition() {
-    
     g_unloading = true;
-    
 }
 void Wh_ModUninitStartButtonPosition() {if(true)return;
-    
     if (g_startMenuWnd && g_startMenuOriginalWidth) {
         RECT rect;
         if (GetWindowRect(g_startMenuWnd, &rect)) {
@@ -846,6 +809,5 @@ void Wh_ModUninitStartButtonPosition() {if(true)return;
     }
 }
 void Wh_ModSettingsChangedStartButtonPosition() {
-    
-    
+    LoadSettingsStartButtonPosition();
 }

@@ -63,27 +63,28 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
-| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default 20) | Non-negative integer |
-| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default 6) | Non-negative integer |
-| `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default 6) | Non-negative integer |
-| `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default 78) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default 44) | Non-negative integer |
-| `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default 74) | Non-negative integer |
-| `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default 24) | Non-negative integer |
-| `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default 16) | Non-negative integer |
-| `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default false) | Boolean (true/false) |
-| `TaskbarBackgroundOpacity` | Background opacity | Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default 100) | Non-negative integer |
-| `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default 0) | Non-negative integer |
-| `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default 30) | Non-negative integer |
-| `TaskbarBorderOpacity` | Border opacity | Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default 20) | Non-negative integer |
-| `TaskbarBorderColorHex` | Border color (HEX) | Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default `#ffffff`) | string hex color |
-| `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default 10) | Non-negative integer |
+| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default is 20) | Non-negative integer |
+| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default is 6) | Non-negative integer |
+| `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
+| `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 78) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 44) | Non-negative integer |
+| `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default is 74) | Non-negative integer |
+| `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 24) | Non-negative integer |
+| `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default is 16) | Non-negative integer |
+| `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off) | Boolean (true/false) |
+| `TaskbarBackgroundOpacity` | Background opacity | Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100) | Non-negative integer |
+| `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0) | Non-negative integer |
+| `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
+| `TaskbarBorderOpacity` | Border opacity | Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20) | Non-negative integer |
+| `TaskbarBorderColorHex` | Border color (HEX) | Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
+| `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default is 10) | Non-negative integer |
 | `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
-| `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default false) | Boolean (true/false) |
-| `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default false) | Boolean (true/false) |
-| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default true) | Boolean (true/false) |
-| `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default false) | Boolean (true/false) |
-| `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default 30) | Non-negative integer |
-| `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default 45) | Non-negative integer |
-| `CustomTaskbarIconsDir` | (Experimental) Folder to custom taskbar icons | Specify a valid path to a folder containing .png files of app names for taskbar | string dir path |
-| `CustomTrayIconsDir` | (Experimental) Folder to custom tray icons | Specify a valid path to a folder containing .png files of app names for tray | string dir path |
+| `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default is off) | Boolean (true/false) |
+| `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default is off) | Boolean (true/false) |
+| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default is on) | Boolean (true/false) |
+| `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
+| `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
+| `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
+| `CustomTaskbarIconsDir` | (Experimental, not active) Folder to custom taskbar icons | Specify a valid path to a folder containing .png files of app names for taskbar | string dir path |
+| `CustomTrayIconsDir` | (Experimental, not active) Folder to custom tray icons | Specify a valid path to a folder containing .png files of app names for tray | string dir path |
+| `MoveFlyoutWindows` | Move Flyout Windows with Taskbar | Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on). | Boolean (true/false) |
