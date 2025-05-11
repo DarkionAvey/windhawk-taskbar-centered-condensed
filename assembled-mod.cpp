@@ -2,10 +2,11 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.113
+// @version         1.4.116
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
+// @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols
 // ==/WindhawkMod==
@@ -178,6 +179,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+int g_lastRecordedStartMenuWidth=670;
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -2133,6 +2135,7 @@ std::wstring processFileName = GetProcessFileName(processId);
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
     if (target == Target::StartMenu) {
+    g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
@@ -2144,6 +2147,7 @@ std::wstring processFileName = GetProcessFileName(processId);
         g_startMenuOriginalWidth = 0;
       }
       x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
+      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
@@ -2518,6 +2522,16 @@ bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& e
   auto transform = element.TransformToVisual(nullptr);
   winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
   return rect.X < 0 || rect.Y < 0;
+}
+using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
+StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
+void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
+  StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
+  Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
+  if (g_lastRecordedStartMenuWidth != param1.Width) {
+    g_lastRecordedStartMenuWidth = static_cast<int>(param1.Width);
+    Wh_SetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
+  }
 }
 bool g_invalidateDimensions = true;
 void ApplySettingsFromTaskbarThreadIfRequired() {
@@ -3209,7 +3223,11 @@ void ResetGlobalVars() {
     state.wasOverflowing = false;
   }
 }
+bool g_StartDockedDllInstance=false;
 void Wh_ModSettingsChanged() {
+      if(g_StartDockedDllInstance){
+        return;
+    }
   Wh_Log(L"Settings Changed");
   ResetGlobalVars();
   RefreshSettings();
@@ -3225,6 +3243,14 @@ BOOL Wh_ModInit() {
   if (isInitialThread) {
     return FALSE;
   }
+    HMODULE module = LoadLibrary(L"StartDocked.dll");
+    if (module) {
+         WindhawkUtils::SYMBOL_HOOK hook[] = { { {LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
+                                         &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
+                                         StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook } };
+        g_StartDockedDllInstance=true;
+        return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
+    }
   g_unloading = false;
   if (!Wh_ModInitTBIconSize()) {
     Wh_Log(L"Wh_ModInitTBIconSize failed");
@@ -3237,6 +3263,10 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 void Wh_ModAfterInit() {
+    if(g_StartDockedDllInstance){
+g_lastRecordedStartMenuWidth=   Wh_GetIntValue(L"lastRecordedStartMenuWidth",g_lastRecordedStartMenuWidth);
+        return;
+    }
   Wh_ModAfterInitTBIconSize();
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (hTaskbarWnd) {
@@ -3252,6 +3282,9 @@ void Wh_ModAfterInit() {
   // }
 }
 void Wh_ModBeforeUninit() {
+       if(g_StartDockedDllInstance){
+        return;
+    }
   g_unloading = true;
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
@@ -3263,6 +3296,9 @@ void Wh_ModBeforeUninit() {
   //  CleanupWatchers();
 }
 void Wh_ModUninit() {
+      if(g_StartDockedDllInstance){
+        return;
+    }
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();
   CleanupDebounce();

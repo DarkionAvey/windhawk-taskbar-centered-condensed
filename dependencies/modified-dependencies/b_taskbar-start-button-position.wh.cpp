@@ -681,6 +681,7 @@ std::wstring processFileName = GetProcessFileName(processId);
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
     if (target == Target::StartMenu) {
+    g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
@@ -692,6 +693,7 @@ std::wstring processFileName = GetProcessFileName(processId);
         g_startMenuOriginalWidth = 0;
       }
       x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
+      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;

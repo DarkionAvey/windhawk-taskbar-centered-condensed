@@ -1,3 +1,15 @@
+using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
+StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
+void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
+  StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
+  Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
+
+  if (g_lastRecordedStartMenuWidth != param1.Width) {
+    g_lastRecordedStartMenuWidth = static_cast<int>(param1.Width);
+    Wh_SetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
+  }
+}
+
 bool g_invalidateDimensions = true;
 void ApplySettingsFromTaskbarThreadIfRequired() {
   if (!g_scheduled_low_priority_update) {
@@ -860,8 +872,11 @@ void ResetGlobalVars() {
     state.wasOverflowing = false;
   }
 }
-
+bool g_StartDockedDllInstance=false;
 void Wh_ModSettingsChanged() {
+      if(g_StartDockedDllInstance){
+        return;
+    }
   Wh_Log(L"Settings Changed");
   ResetGlobalVars();
   RefreshSettings();
@@ -879,6 +894,15 @@ BOOL Wh_ModInit() {
     return FALSE;
   }
 
+    HMODULE module = LoadLibrary(L"StartDocked.dll");
+    if (module) {
+         WindhawkUtils::SYMBOL_HOOK hook[] = { { {LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
+                                         &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
+                                         StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook } };
+        g_StartDockedDllInstance=true;
+        return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
+    }
+
   g_unloading = false;
 
   if (!Wh_ModInitTBIconSize()) {
@@ -893,6 +917,10 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if(g_StartDockedDllInstance){
+g_lastRecordedStartMenuWidth=   Wh_GetIntValue(L"lastRecordedStartMenuWidth",g_lastRecordedStartMenuWidth);
+        return;
+    }
   Wh_ModAfterInitTBIconSize();
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (hTaskbarWnd) {
@@ -910,6 +938,9 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
+       if(g_StartDockedDllInstance){
+        return;
+    }
   g_unloading = true;
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
@@ -922,6 +953,9 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+      if(g_StartDockedDllInstance){
+        return;
+    }
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();
   CleanupDebounce();

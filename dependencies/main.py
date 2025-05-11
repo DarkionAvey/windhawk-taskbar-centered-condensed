@@ -6,7 +6,7 @@ import re
 from art import *
 
 mod_parts_dir = "mod-parts"
-hooks_dir = os.path.join(mod_parts_dir,"hooks")
+hooks_dir = os.path.join(mod_parts_dir, "hooks")
 
 
 def read_file(path):
@@ -107,11 +107,11 @@ class TaskbarIconSizeMod(URLProcessor):
         super().__init__(url, "TBIconSize", "a")
 
     def format_content(self, content):
-        content = "void ApplySettingsDebounced(int delayMs);\nvoid ApplySettingsDebounced();\nvoid ApplySettingsFromTaskbarThreadIfRequired();\n" + content
+        content = "void ApplySettingsDebounced(int delayMs);\nvoid ApplySettingsDebounced();\nvoid ApplySettingsFromTaskbarThreadIfRequired();\nint g_lastRecordedStartMenuWidth=670;\n" + "\n" + content
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
 
-        content = re.sub(r'STDAPI GetDpiForMonitor', read_file(os.path.join(mod_parts_dir,"taskbar-states.cpp"))+"""
+        content = re.sub(r'STDAPI GetDpiForMonitor', read_file(os.path.join(mod_parts_dir, "taskbar-states.cpp")) + """
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
@@ -124,7 +124,7 @@ std::wstring GetMonitorName(HWND hwnd) {
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     return GetMonitorName(monitor);
 }        
-STDAPI GetDpiForMonitor""", content, flags=re.DOTALL|re.MULTILINE)
+STDAPI GetDpiForMonitor""", content, flags=re.DOTALL | re.MULTILINE)
 
         content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);', ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));', content, flags=re.DOTALL)
         content = re.sub(r'return g_settings_tbiconsize\.iconSize;', 'return g_settings_tbiconsize.iconSize ;', content, flags=re.DOTALL)
@@ -187,7 +187,6 @@ class StartButtonPosition(URLProcessor):
     TaskbarState& taskbarState = iterationTbStates->second;
 """, content, flags=re.MULTILINE | re.DOTALL)
 
-
         content = re.sub(r"if \(target == Target::StartMenu\).*?\}\s+SetWindowPos", """
     float dpiScale = monitorDpiX / 96.0f;
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
@@ -195,6 +194,7 @@ class StartButtonPosition(URLProcessor):
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
     
     if (target == Target::StartMenu) {
+    g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
@@ -206,6 +206,7 @@ class StartButtonPosition(URLProcessor):
         g_startMenuOriginalWidth = 0;
       }
       x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);  
+      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
@@ -377,9 +378,7 @@ HMODULE GetCurrentModuleHandle() {
 
         content = re.sub(r"switch \(mutationType\).*?}", "", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = re.sub(r"Wh_Log\(L\"=.*?;", "", content, flags= re.DOTALL)
-
-
+        content = re.sub(r"Wh_Log\(L\"=.*?;", "", content, flags=re.DOTALL)
 
         remove_imports_pattern = r'#include <(?:{})>\n?'.format('|'.join(map(re.escape, [
             "unordered_map", "unordered_set", "variant", "vector",
