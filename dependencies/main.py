@@ -198,28 +198,32 @@ class StartButtonPosition(URLProcessor):
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
+        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);  
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
         }
         g_startMenuWnd = nullptr;
         g_startMenuOriginalWidth = 0;
+        x = 0;  
       }
-      x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);  
-      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
+    
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
+        x = static_cast<int>(absStartX - cx / 2.0f);
+        x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
         if (!g_searchMenuOriginalX) {
           return original();
         }
+        x = g_searchMenuOriginalX;
         g_searchMenuWnd = nullptr;
         g_searchMenuOriginalX = 0;
       }
-      x = static_cast<int>(absStartX - cx / 2.0f);
-      x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+
     } else if (target == Target::ShellExperienceHost) {
         if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
             x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);

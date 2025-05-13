@@ -284,8 +284,7 @@ void UpdateGlobalSettings() {
     value = 0;
   else if (value > 100)
     value = 100;
-  g_settings.userDefinedTaskbarBackgroundOpacity = value > 0 ? value : 100;
-
+  g_settings.userDefinedTaskbarBackgroundOpacity = value >= 0 ? value : 100;
   value = Wh_GetIntSetting(L"TaskbarBackgroundTint");
   value = abs(value);
   if (value > 100) value = 100;
@@ -294,8 +293,7 @@ void UpdateGlobalSettings() {
   value = Wh_GetIntSetting(L"TaskbarBackgroundLuminosity");
   value = abs(value);
   if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBackgroundLuminosity = value > 0 ? value : 30;
-
+  g_settings.userDefinedTaskbarBackgroundLuminosity = value >= 0 ? value : 30;
   value = Wh_GetIntSetting(L"TaskbarBorderOpacity");
   value = abs(value);
   if (value > 100) value = 100;
