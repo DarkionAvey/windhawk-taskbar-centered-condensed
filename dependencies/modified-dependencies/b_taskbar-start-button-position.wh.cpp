@@ -387,7 +387,7 @@ CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-//   ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
@@ -529,19 +529,19 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
-  ApplySettingsDebounced(150);
+  ApplySettingsDebounced(50);
 }
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
-  ApplySettingsDebounced(150);
+  ApplySettingsDebounced(50);
 }
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
                 Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
                 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
-  ApplySettingsDebounced(500);
+  ApplySettingsDebounced(300);
                 return ;
             }
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
@@ -549,7 +549,7 @@ TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_Star
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
                 Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
-  ApplySettingsDebounced(500);
+  ApplySettingsDebounced(300);
                 return  ;
             }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
@@ -685,28 +685,30 @@ std::wstring processFileName = GetProcessFileName(processId);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
+        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
         }
         g_startMenuWnd = nullptr;
         g_startMenuOriginalWidth = 0;
+        x = 0;
       }
-      x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
-      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
+        x = static_cast<int>(absStartX - cx / 2.0f);
+        x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
         if (!g_searchMenuOriginalX) {
           return original();
         }
+        x = g_searchMenuOriginalX;
         g_searchMenuWnd = nullptr;
         g_searchMenuOriginalX = 0;
       }
-      x = static_cast<int>(absStartX - cx / 2.0f);
-      x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
     } else if (target == Target::ShellExperienceHost) {
         if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
             x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);

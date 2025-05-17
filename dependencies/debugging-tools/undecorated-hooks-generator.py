@@ -16,7 +16,8 @@ dll_to_hook = "StartDocked.dll"
 exe_to_hook = "StartMenuExperienceHost.exe"
 
 input_block = r"""
-	Line  1846: [0005FE60] private: class Windows::Foundation::Rect __cdecl StartDocked::StartSizingFrame::GetWindowBounds(void)const 
+[002404C0] public: virtual int __cdecl winrt::impl::produce::get_BlurAmount(float *)
+
 """
 
 

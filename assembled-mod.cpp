@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.116
+// @version         1.4.120
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -1841,7 +1841,7 @@ CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-//   ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadIfRequired();
 }
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
@@ -1983,19 +1983,19 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
-  ApplySettingsDebounced(150);
+  ApplySettingsDebounced(50);
 }
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
-  ApplySettingsDebounced(150);
+  ApplySettingsDebounced(50);
 }
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
                 Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
                 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
-  ApplySettingsDebounced(500);
+  ApplySettingsDebounced(300);
                 return ;
             }
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
@@ -2003,7 +2003,7 @@ TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_Star
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
                 Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
-  ApplySettingsDebounced(500);
+  ApplySettingsDebounced(300);
                 return  ;
             }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
@@ -2139,28 +2139,30 @@ std::wstring processFileName = GetProcessFileName(processId);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
+        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
         }
         g_startMenuWnd = nullptr;
         g_startMenuOriginalWidth = 0;
+        x = 0;
       }
-      x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
-      x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
     } else if (target == Target::SearchHost) {
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
+        x = static_cast<int>(absStartX - cx / 2.0f);
+        x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
         if (!g_searchMenuOriginalX) {
           return original();
         }
+        x = g_searchMenuOriginalX;
         g_searchMenuWnd = nullptr;
         g_searchMenuOriginalX = 0;
       }
-      x = static_cast<int>(absStartX - cx / 2.0f);
-      x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
     } else if (target == Target::ShellExperienceHost) {
         if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
             x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);
@@ -2628,7 +2630,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
     auto transform = child.TransformToVisual(nullptr);
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
-    if (rect.X < 0 | rect.Y < 0) {
+    if (rect.X < 0 || rect.Y < 0) {
       continue;
     }
     auto className = winrt::get_class_name(child);
@@ -2687,6 +2689,25 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
       }
       continue;
     }
+if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
+  if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
+    if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
+      if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
+        if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
+          if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
+            grid.Height(4);
+            if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
+                progressBarTrack.Opacity(0.5);
+            }
+          }
+        }
+      }
+    }
+  } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
+    runningIndicator.Height(3);
+    runningIndicator.Opacity(1);
+  }
+}
     totalWidth += rect.Width;
     childrenCount++;
   }
@@ -2714,41 +2735,40 @@ void UpdateGlobalSettings() {
   value = Wh_GetIntSetting(L"StyleTrayArea");
   g_settings.userDefinedStyleTrayArea = value != 0;
   value = Wh_GetIntSetting(L"TrayTaskGap");
-  if (value <= 0) value = 20;
+  if (value < 0) value = 0;
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
   value = Wh_GetIntSetting(L"TaskbarBackgroundHorizontalPadding");
-  if (value <= 0) value = 6;
+  if (value < 0) value = 0;
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : value;
   value = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (value < 0) value = 6;
+  if (value < 0) value = 0;
   g_settings.userDefinedTaskbarOffsetY = -1 * abs(value);
   if (g_settings.userDefinedFlatTaskbarBottomCorners || g_unloading) {
     g_settings.userDefinedTaskbarOffsetY = 0;
   }
   value = Wh_GetIntSetting(L"TaskbarHeight");
-  if (value <= 0) value = 78;
   value = abs(value);
   if (value > 200) value = 200;
   if (value < 44) value = 44;
   g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : value;
   value = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (value <= 0) value = 44;
+  if (value <=24) value =24;
   g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : value;
   value = Wh_GetIntSetting(L"TrayIconSize");
-  if (value <= 0) value = 30;
+  if (value <= 30) value = 30;
   g_settings.userDefinedTrayIconSize = value;
   value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 0) value = 74;
+  if (value <= 44) value = 44;
   g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : value;
   value = Wh_GetIntSetting(L"TrayButtonSize");
   if (value <= 0) value = 45;
   g_settings.userDefinedTrayButtonSize = value;
   value = Wh_GetIntSetting(L"TaskbarCornerRadius");
-  if (value <= 0) value = 24;
+  if (value <= 0) value = 0;
   g_settings.userDefinedTaskbarCornerRadius = g_unloading ? 0.0f : static_cast<float>(abs(value));
   if (g_settings.userDefinedTaskbarCornerRadius > g_settings.userDefinedTaskbarHeight / 2.0f) g_settings.userDefinedTaskbarCornerRadius = g_settings.userDefinedTaskbarHeight / 2.0f;
   value = Wh_GetIntSetting(L"TaskButtonCornerRadius");
-  if (value <= 0) value = 16;
+  if (value <= 0) value = 0;
   value = abs(value);
   if (value > (int)(g_settings.userDefinedTaskbarHeight / 2)) value = g_settings.userDefinedTaskbarHeight / 2;
   g_settings.userDefinedTaskButtonCornerRadius = g_unloading ? 0 : value;
@@ -2758,7 +2778,7 @@ void UpdateGlobalSettings() {
     value = 0;
   else if (value > 100)
     value = 100;
-  g_settings.userDefinedTaskbarBackgroundOpacity = value > 0 ? value : 100;
+  g_settings.userDefinedTaskbarBackgroundOpacity = value >= 0 ? value : 100;
   value = Wh_GetIntSetting(L"TaskbarBackgroundTint");
   value = abs(value);
   if (value > 100) value = 100;
@@ -2766,7 +2786,7 @@ void UpdateGlobalSettings() {
   value = Wh_GetIntSetting(L"TaskbarBackgroundLuminosity");
   value = abs(value);
   if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBackgroundLuminosity = value > 0 ? value : 30;
+  g_settings.userDefinedTaskbarBackgroundLuminosity = value >= 0 ? value : 30;
   value = Wh_GetIntSetting(L"TaskbarBorderOpacity");
   value = abs(value);
   if (value > 100) value = 100;
@@ -3137,7 +3157,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
         roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
         auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
-        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
+        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f, g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f});
         roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
         borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
         auto shapeVisualBorderControl = compositorTaskBackground.CreateShapeVisual();

@@ -128,7 +128,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
     auto transform = child.TransformToVisual(nullptr);
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
-    if (rect.X < 0 | rect.Y < 0) {
+    if (rect.X < 0 || rect.Y < 0) {
       continue;
     }
     auto className = winrt::get_class_name(child);
@@ -195,6 +195,28 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
       continue;
     }
 
+
+if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
+  if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
+    if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
+      if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
+        if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
+          if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
+            grid.Height(4);
+            if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
+                progressBarTrack.Opacity(0.5);
+            }
+          }
+        }
+      }
+    }
+  } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
+    runningIndicator.Height(3);
+    runningIndicator.Opacity(1);
+  }
+}
+
+
     totalWidth += rect.Width;
     childrenCount++;
   }
@@ -229,15 +251,15 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedStyleTrayArea = value != 0;
 
   value = Wh_GetIntSetting(L"TrayTaskGap");
-  if (value <= 0) value = 20;
+  if (value < 0) value = 0;
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
 
   value = Wh_GetIntSetting(L"TaskbarBackgroundHorizontalPadding");
-  if (value <= 0) value = 6;
+  if (value < 0) value = 0;
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : value;
 
   value = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (value < 0) value = 6;
+  if (value < 0) value = 0;
   g_settings.userDefinedTaskbarOffsetY = -1 * abs(value);
 
   if (g_settings.userDefinedFlatTaskbarBottomCorners || g_unloading) {
@@ -245,22 +267,21 @@ void UpdateGlobalSettings() {
   }
 
   value = Wh_GetIntSetting(L"TaskbarHeight");
-  if (value <= 0) value = 78;
   value = abs(value);
   if (value > 200) value = 200;
   if (value < 44) value = 44;
   g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : value;
 
   value = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (value <= 0) value = 44;
+  if (value <=24) value =24;
   g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : value;
 
   value = Wh_GetIntSetting(L"TrayIconSize");
-  if (value <= 0) value = 30;
+  if (value <= 30) value = 30;
   g_settings.userDefinedTrayIconSize = value;
 
   value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 0) value = 74;
+  if (value <= 44) value = 44;
   g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : value;
 
   value = Wh_GetIntSetting(L"TrayButtonSize");
@@ -268,12 +289,12 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTrayButtonSize = value;
 
   value = Wh_GetIntSetting(L"TaskbarCornerRadius");
-  if (value <= 0) value = 24;
+  if (value <= 0) value = 0;
   g_settings.userDefinedTaskbarCornerRadius = g_unloading ? 0.0f : static_cast<float>(abs(value));
   if (g_settings.userDefinedTaskbarCornerRadius > g_settings.userDefinedTaskbarHeight / 2.0f) g_settings.userDefinedTaskbarCornerRadius = g_settings.userDefinedTaskbarHeight / 2.0f;
 
   value = Wh_GetIntSetting(L"TaskButtonCornerRadius");
-  if (value <= 0) value = 16;
+  if (value <= 0) value = 0;
   value = abs(value);
   if (value > (int)(g_settings.userDefinedTaskbarHeight / 2)) value = g_settings.userDefinedTaskbarHeight / 2;
   g_settings.userDefinedTaskButtonCornerRadius = g_unloading ? 0 : value;
@@ -765,8 +786,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
 
         auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
-        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
-
+        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f, g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f});
         roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
         borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
 
