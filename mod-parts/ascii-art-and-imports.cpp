@@ -52,7 +52,11 @@
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.Search.h>
-
+#include <chrono>
+#include <thread>
+#include <atomic>
+#include <windows.h>
+#include <psapi.h>
 
 using namespace winrt::Windows::UI::Xaml;
 

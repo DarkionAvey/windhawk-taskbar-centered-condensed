@@ -38,6 +38,7 @@ Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_v
 }
 
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue, bool isXamlValue) {
+  if(!obj) return;
   std::wstring outXamlResult;
   try {
     std::wstring xamlSetter = L"<Setter Property=\"";

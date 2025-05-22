@@ -1,4 +1,4 @@
-bool g_scheduled_low_priority_update = false;
+std::atomic<bool> g_scheduled_low_priority_update = false;
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
@@ -33,16 +33,23 @@ void CleanupDebounce() {
   }
 }
 void ApplySettingsDebounced(int delayMs) {
-  if (!debounceTimer) return;
   HWND hTaskbarWnd = GetTaskbarWnd();
-  if (!hTaskbarWnd) return;
+  if (!hTaskbarWnd) {
+    Wh_Log(L"ApplySettingsDebounced aborted: could not find hTaskbarWnd");
+    return;
+  }
+
+if (!debounceTimer) {
+    RunFromWindowThread(hTaskbarWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+    Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    return;
+  }
 
   bool lowPriority = false;
   if (delayMs <= 0) {
     lowPriority = true;
-    delayMs = 1000;
+    delayMs = 700;
   }
-
   debounceDelayMs = delayMs;
   if (!lowPriority) RunFromWindowThread(hTaskbarWnd, [](void* pParam) { debounceTimer.Stop(); }, 0);
   RunFromWindowThread(

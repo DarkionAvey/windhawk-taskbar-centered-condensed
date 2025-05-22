@@ -12,12 +12,11 @@ import re
 # 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
 #
 # """
-dll_to_hook = "StartDocked.dll"
-exe_to_hook = "StartMenuExperienceHost.exe"
+dll_to_hook = "Taskbar.View.dll"
+exe_to_hook = "explorer.exe"
 
 input_block = r"""
-[002404C0] public: virtual int __cdecl winrt::impl::produce::get_BlurAmount(float *)
-
+	Line  57947: [0078C67C] private: void __cdecl winrt::Taskbar::implementation::TaskListButton::InitializeRunningIndicator(void)	
 """
 
 
@@ -209,6 +208,48 @@ This mod prints the names of functions being called.
 #include <string_view>
 #include <winrt/base.h>
 #include <chrono>
+#include <dwmapi.h>
+#include <chrono>
+#include <string>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+#include <unordered_map>
+#include <limits>
+#include <set>
+#include <utility>
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <functional>
+#undef GetCurrentTime
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+#include <commctrl.h>
+#include <roapi.h>
+#include <winstring.h>
+#include <string_view>
+#include <vector>
+#include <atomic>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.Storage.Search.h>
+
+
+
 """)
     output_lines.append("// Auto-generated hook definitions and functions")
     output_lines.append("")

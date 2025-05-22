@@ -2,11 +2,13 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.120
+// @version         1.4.126
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
+// @include         ShellHost.exe
+// @include         ShellExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols
 // ==/WindhawkMod==
@@ -2321,6 +2323,11 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.Search.h>
+#include <chrono>
+#include <thread>
+#include <atomic>
+#include <windows.h>
+#include <psapi.h>
 using namespace winrt::Windows::UI::Xaml;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 struct {
@@ -2387,6 +2394,7 @@ Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_v
   return styleInspectable.as<Style>();
 }
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue, bool isXamlValue) {
+  if(!obj) return;
   std::wstring outXamlResult;
   try {
     std::wstring xamlSetter = L"<Setter Property=\"";
@@ -2466,7 +2474,7 @@ bool ContainsCaseInsensitive(std::wstring const& haystack,
   std::transform(n.begin(), n.end(), n.begin(), towlower);
   return h.find(n) != std::wstring::npos;
 }
-bool g_scheduled_low_priority_update = false;
+std::atomic<bool> g_scheduled_low_priority_update = false;
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
@@ -2500,13 +2508,20 @@ void CleanupDebounce() {
   }
 }
 void ApplySettingsDebounced(int delayMs) {
-  if (!debounceTimer) return;
   HWND hTaskbarWnd = GetTaskbarWnd();
-  if (!hTaskbarWnd) return;
+  if (!hTaskbarWnd) {
+    Wh_Log(L"ApplySettingsDebounced aborted: could not find hTaskbarWnd");
+    return;
+  }
+if (!debounceTimer) {
+    RunFromWindowThread(hTaskbarWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+    Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    return;
+  }
   bool lowPriority = false;
   if (delayMs <= 0) {
     lowPriority = true;
-    delayMs = 1000;
+    delayMs = 700;
   }
   debounceDelayMs = delayMs;
   if (!lowPriority) RunFromWindowThread(hTaskbarWnd, [](void* pParam) { debounceTimer.Stop(); }, 0);
@@ -2536,11 +2551,24 @@ void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void*
   }
 }
 bool g_invalidateDimensions = true;
+std::atomic<int64_t> g_update_flag_set_time_ms = 0;
+int64_t NowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+void ResetFlagAfterDelay() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1400));
+    int64_t now = NowMs();
+    int64_t set_time = g_update_flag_set_time_ms.load();
+    if (g_scheduled_low_priority_update && (now - set_time >= 1400)) {
+        g_scheduled_low_priority_update = false;
+    }
+}
 void ApplySettingsFromTaskbarThreadIfRequired() {
   if (!g_scheduled_low_priority_update) {
     g_scheduled_low_priority_update = true;
-    Wh_Log(L"Scheduled low priority update");  // it's low priority in the debounce
-                                               // sense, not the required sense.
+        g_update_flag_set_time_ms = NowMs();
+        std::thread(ResetFlagAfterDelay).detach();
+        Wh_Log(L"Scheduled low priority update");
     ApplySettingsDebounced(-1);
   }
 }
@@ -2704,7 +2732,7 @@ if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
       }
     }
   } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
-    runningIndicator.Height(3);
+    runningIndicator.Height(3.5);
     runningIndicator.Opacity(1);
   }
 }
@@ -2895,7 +2923,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto stackPanel = FindChildByClassName(itemsPresenter, L"Windows.UI.Xaml.Controls.StackPanel");
   if (!stackPanel) return false;
   auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
-  bool widgetPresent = widgetElement != nullptr && winrt::unbox_value<bool>(widgetElement.GetValue(UIElement::CanBeScrollAnchorProperty()));
+  bool widgetPresent = widgetElement != nullptr;
   auto widgetMainView = widgetPresent && widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
   if (widgetPresent && widgetElementWidth <= 0) {
@@ -3145,10 +3173,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource "
-                               L"CardStrokeColorDefaultSolid}\" TintOpacity=\"" +
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" +
                                    userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
+  // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
   if (!g_unloading) {
@@ -3253,23 +3281,27 @@ void Wh_ModSettingsChanged() {
   RefreshSettings();
   ApplySettingsFromTaskbarThread();
 }
+bool IsExplorer() {
+    wchar_t processPath[MAX_PATH];
+    if (GetModuleFileName(NULL, processPath, MAX_PATH)) {
+        const wchar_t* processName = wcsrchr(processPath, L'\\');
+        if (processName && _wcsicmp(processName + 1, L"explorer.exe") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
 BOOL Wh_ModInit() {
-#ifdef _WIN64
-  const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
-#else
-  const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
-#endif
-  bool isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
-  if (isInitialThread) {
-    return FALSE;
-  }
-    HMODULE module = LoadLibrary(L"StartDocked.dll");
+    if(!IsExplorer()){
+        Wh_Log(L"StartDocked to hook");
+ HMODULE module = GetModuleHandle(L"StartDocked.dll");
     if (module) {
          WindhawkUtils::SYMBOL_HOOK hook[] = { { {LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
                                          &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
                                          StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook } };
         g_StartDockedDllInstance=true;
         return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
+    }
     }
   g_unloading = false;
   if (!Wh_ModInitTBIconSize()) {
@@ -3287,14 +3319,9 @@ void Wh_ModAfterInit() {
 g_lastRecordedStartMenuWidth=   Wh_GetIntValue(L"lastRecordedStartMenuWidth",g_lastRecordedStartMenuWidth);
         return;
     }
-  Wh_ModAfterInitTBIconSize();
-  HWND hTaskbarWnd = GetTaskbarWnd();
-  if (hTaskbarWnd) {
-    Wh_ModSettingsChanged();
-    ApplySettings(hTaskbarWnd);
-    Wh_ModSettingsChanged();
-    ApplySettingsDebounced(1000);
-  }
+ Wh_ModAfterInitTBIconSize();
+ Wh_ModSettingsChanged();
+ ApplySettingsDebounced(300);
   //  const std::wstring customTaskbarIconsDir = Wh_GetStringSetting(L"CustomTaskbarIconsDir");
   //  const std::wstring customTrayIconsDir = Wh_GetStringSetting(L"CustomTrayIconsDir");
   // if (!customTaskbarIconsDir.empty() || !customTrayIconsDir.empty()) {
