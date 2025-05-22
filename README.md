@@ -77,7 +77,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
 | `TaskbarBorderOpacity` | Border opacity | Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20) | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
-| `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default is 10) | Non-negative integer |
+| `TaskbarBorderThickness` | Taskbar border thickness scale | Adjusts the scale of the taskbar border. Range 0-100 (Default is 8) | Non-negative integer |
 | `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default is off) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default is off) | Boolean (true/false) |

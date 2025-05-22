@@ -68,9 +68,9 @@
   $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`)
   $type: string hex color
 
-- TaskbarBorderThickness: 10
+- TaskbarBorderThickness: 8
   $name: Taskbar border thickness scale
-  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 10)
+  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 8)
   $type: unsigned int
 
 - DividedAppNames: ""
