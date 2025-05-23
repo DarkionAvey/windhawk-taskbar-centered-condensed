@@ -637,6 +637,7 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }
     TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);
 std::wstring processFileName = GetProcessFileName(processId);
+Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassName.c_str());
     enum class Target {
         StartMenu,
         SearchHost,ShellExperienceHost,ShellHost,
@@ -680,6 +681,9 @@ std::wstring processFileName = GetProcessFileName(processId);
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+    if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
+        return original();
+    }
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {

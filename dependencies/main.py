@@ -169,7 +169,8 @@ class StartButtonPosition(URLProcessor):
 
         content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
         content = re.sub(r" cx = cxNew;", " cx = g_lastStartButtonX;", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring processFileName = GetProcessFileName\(processId\);", "TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);\nstd::wstring processFileName = GetProcessFileName(processId);", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"std::wstring processFileName = GetProcessFileName\(processId\);",
+                         "TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);\nstd::wstring processFileName = GetProcessFileName(processId);\nWh_Log(L\"process: %s, windowClassName: %s\",processFileName.c_str(),windowClassName.c_str());", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"SearchHost,", "SearchHost,ShellExperienceHost,ShellHost,", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"target = Target::SearchHost;\s+}", """target = Target::SearchHost;
     }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
@@ -192,7 +193,9 @@ class StartButtonPosition(URLProcessor):
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
-    
+    if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
+        return original();
+    }
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {

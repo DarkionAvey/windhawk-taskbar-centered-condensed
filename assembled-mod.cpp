@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.129
+// @version         1.4.131
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -2093,6 +2093,7 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }
     TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);
 std::wstring processFileName = GetProcessFileName(processId);
+Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassName.c_str());
     enum class Target {
         StartMenu,
         SearchHost,ShellExperienceHost,ShellHost,
@@ -2136,6 +2137,9 @@ std::wstring processFileName = GetProcessFileName(processId);
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+    if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
+        return original();
+    }
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
