@@ -12,25 +12,23 @@ void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void*
 
 bool g_invalidateDimensions = true;
 std::atomic<int64_t> g_update_flag_set_time_ms = 0;
-int64_t NowMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
+int64_t NowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 void ResetFlagAfterDelay() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1400));
-    int64_t now = NowMs();
-    int64_t set_time = g_update_flag_set_time_ms.load();
-    if (g_scheduled_low_priority_update && (now - set_time >= 1400)) {
-        g_scheduled_low_priority_update = false;
-    }
+  std::this_thread::sleep_for(std::chrono::milliseconds(1400));
+  int64_t now = NowMs();
+  int64_t set_time = g_update_flag_set_time_ms.load();
+  if (g_scheduled_low_priority_update && (now - set_time >= 1400)) {
+    g_scheduled_low_priority_update = false;
+  }
 }
 
 void ApplySettingsFromTaskbarThreadIfRequired() {
   if (!g_scheduled_low_priority_update) {
     g_scheduled_low_priority_update = true;
-        g_update_flag_set_time_ms = NowMs();
-        std::thread(ResetFlagAfterDelay).detach();
-        Wh_Log(L"Scheduled low priority update");
+    g_update_flag_set_time_ms = NowMs();
+    std::thread(ResetFlagAfterDelay).detach();
+    Wh_Log(L"Scheduled low priority update");
     ApplySettingsDebounced(-1);
   }
 }
@@ -53,13 +51,16 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
     shapeVisual.Size({borderThicknessFloat, panelHeight});
     shapeVisual.Offset({0.0f, 0.0f, 0.0f});
     auto lineGeometry = compositor.CreateLineGeometry();
+    if (!lineGeometry) return;
     lineGeometry.Start({0.0f, 0.0f});
     lineGeometry.End({0.0f, panelHeight});
     auto lineShape = compositor.CreateSpriteShape(lineGeometry);
+    if (!lineShape) return;
     winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
+    auto strokeBrush = compositor.CreateColorBrush(borderColor);
+    if (!strokeBrush) return;
 
-    lineShape.StrokeBrush(compositor.CreateColorBrush(borderColor));
-
+    lineShape.StrokeBrush(strokeBrush);
     lineShape.StrokeThickness(borderThicknessFloat);
     shapeVisual.Shapes().Append(lineShape);
   }
@@ -128,6 +129,7 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
 }
 
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount) {
+  if (!element) return 0.0;
   const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   auto userDefinedTaskbarIconSize = std::to_wstring(g_settings.userDefinedTaskbarIconSize);
@@ -210,27 +212,25 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
       continue;
     }
 
-
-if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
-  if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
-    if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
-      if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
-        if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
-          if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
-            grid.Height(4);
-            if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
-                progressBarTrack.Opacity(0.5);
+    if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
+      if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
+        if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
+          if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
+            if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
+              if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
+                grid.Height(4);
+                if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
+                  progressBarTrack.Opacity(0.5);
+                }
+              }
             }
           }
         }
+      } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
+        runningIndicator.Height(3.5);
+        runningIndicator.Opacity(1);
       }
     }
-  } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
-    runningIndicator.Height(3.5);
-    runningIndicator.Opacity(1);
-  }
-}
-
 
     totalWidth += rect.Width;
     childrenCount++;
@@ -288,7 +288,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : value;
 
   value = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (value <=24) value =24;
+  if (value <= 24) value = 24;
   g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : value;
 
   value = Wh_GetIntSetting(L"TrayIconSize");
@@ -785,8 +785,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" +
-                                   userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
+                                   userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
@@ -799,7 +799,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
 
         auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
-        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f, g_settings.userDefinedTaskbarCornerRadius-static_cast<float>(g_settings.userDefinedTaskbarBorderThickness)/2.0f});
+        borderGeometry.CornerRadius(
+            {g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f, g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f});
         roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
         borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
 
@@ -903,42 +904,40 @@ void ResetGlobalVars() {
     state.wasOverflowing = false;
   }
 }
-bool g_StartDockedDllInstance=false;
+bool g_StartDockedDllInstance = false;
 void Wh_ModSettingsChanged() {
-      if(g_StartDockedDllInstance){
-        return;
-    }
+  if (g_StartDockedDllInstance) {
+    return;
+  }
   Wh_Log(L"Settings Changed");
   ResetGlobalVars();
   RefreshSettings();
   ApplySettingsFromTaskbarThread();
 }
 
-
 bool IsExplorer() {
-    wchar_t processPath[MAX_PATH];
-    if (GetModuleFileName(NULL, processPath, MAX_PATH)) {
-        const wchar_t* processName = wcsrchr(processPath, L'\\');
-        if (processName && _wcsicmp(processName + 1, L"explorer.exe") == 0) {
-            return true;
-        }
+  wchar_t processPath[MAX_PATH];
+  if (GetModuleFileName(NULL, processPath, MAX_PATH)) {
+    const wchar_t* processName = wcsrchr(processPath, L'\\');
+    if (processName && _wcsicmp(processName + 1, L"explorer.exe") == 0) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
-
 BOOL Wh_ModInit() {
-    if(!IsExplorer()){
-        Wh_Log(L"StartDocked to hook");
- HMODULE module = GetModuleHandle(L"StartDocked.dll");
+  if (!IsExplorer()) {
+    Wh_Log(L"StartDocked to hook");
+    HMODULE module = GetModuleHandle(L"StartDocked.dll");
     if (module) {
-         WindhawkUtils::SYMBOL_HOOK hook[] = { { {LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
-                                         &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
-                                         StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook } };
-        g_StartDockedDllInstance=true;
-        return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
+      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
+                                            &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
+                                            StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
+      g_StartDockedDllInstance = true;
+      return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
     }
-    }
+  }
 
   g_unloading = false;
 
@@ -954,13 +953,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if(g_StartDockedDllInstance){
-g_lastRecordedStartMenuWidth=   Wh_GetIntValue(L"lastRecordedStartMenuWidth",g_lastRecordedStartMenuWidth);
-        return;
-    }
- Wh_ModAfterInitTBIconSize();
- Wh_ModSettingsChanged();
- ApplySettingsDebounced(300);
+  if (g_StartDockedDllInstance) {
+    g_lastRecordedStartMenuWidth = Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
+    return;
+  }
+  Wh_ModAfterInitTBIconSize();
+  Wh_ModSettingsChanged();
+  ApplySettingsDebounced(300);
   //  const std::wstring customTaskbarIconsDir = Wh_GetStringSetting(L"CustomTaskbarIconsDir");
   //  const std::wstring customTrayIconsDir = Wh_GetStringSetting(L"CustomTrayIconsDir");
   // if (!customTaskbarIconsDir.empty() || !customTrayIconsDir.empty()) {
@@ -969,9 +968,9 @@ g_lastRecordedStartMenuWidth=   Wh_GetIntValue(L"lastRecordedStartMenuWidth",g_l
 }
 
 void Wh_ModBeforeUninit() {
-       if(g_StartDockedDllInstance){
-        return;
-    }
+  if (g_StartDockedDllInstance) {
+    return;
+  }
   g_unloading = true;
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
@@ -984,9 +983,9 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-      if(g_StartDockedDllInstance){
-        return;
-    }
+  if (g_StartDockedDllInstance) {
+    return;
+  }
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();
   CleanupDebounce();

@@ -54,14 +54,12 @@
 #include <winrt/Windows.Storage.Search.h>
 #include <chrono>
 #include <thread>
-#include <atomic>
 #include <windows.h>
 #include <psapi.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
-
 
 struct {
   int userDefinedTrayTaskGap;
