@@ -421,7 +421,10 @@ void LogAllSettings() {
 }
 
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
-  if (!xamlRootContent) return false;
+    if (!xamlRootContent) {
+    Wh_Log(L"xamlRootContent is null");
+    return false;
+  }
 
   auto& state = g_taskbarStates[monitorName];
 
@@ -441,40 +444,76 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   g_invalidateDimensions = false;
 
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
-  if (!taskFrame) return false;
+  if (!taskFrame) {
+    Wh_Log(L"Failed to find Taskbar.TaskbarFrame");
+    return false;
+  }
 
   auto rootGridTaskBar = FindChildByName(taskFrame, L"RootGrid");
-  if (!rootGridTaskBar) return false;
+  if (!rootGridTaskBar) {
+    Wh_Log(L"Failed to find RootGrid in taskFrame");
+    return false;
+  }
 
   auto taskbarFrameRepeater = FindChildByName(rootGridTaskBar, L"TaskbarFrameRepeater");
-  if (!taskbarFrameRepeater) return false;
+  if (!taskbarFrameRepeater) {
+    Wh_Log(L"Failed to find TaskbarFrameRepeater in rootGridTaskBar");
+    return false;
+  }
 
   auto trayFrame = FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
-  if (!trayFrame) return false;
+  if (!trayFrame) {
+    Wh_Log(L"Failed to find SystemTray.SystemTrayFrame");
+    return false;
+  }
 
   auto systemTrayFrameGrid = FindChildByName(trayFrame, L"SystemTrayFrameGrid");
-  if (!systemTrayFrameGrid) return false;
+  if (!systemTrayFrameGrid) {
+    Wh_Log(L"Failed to find SystemTrayFrameGrid in trayFrame");
+    return false;
+  }
 
   auto showDesktopButton = FindChildByName(systemTrayFrameGrid, L"ShowDesktopStack");
-  if (!showDesktopButton) return false;
+  if (!showDesktopButton) {
+    Wh_Log(L"Failed to find ShowDesktopStack in systemTrayFrameGrid");
+    return false;
+  }
 
   auto taskbarBackground = FindChildByClassName(rootGridTaskBar, L"Taskbar.TaskbarBackground");
-  if (!taskbarBackground) return false;
+  if (!taskbarBackground) {
+    Wh_Log(L"Failed to find Taskbar.TaskbarBackground in rootGridTaskBar");
+    return false;
+  }
 
   auto backgroundFillParent = FindChildByClassName(taskbarBackground, L"Windows.UI.Xaml.Controls.Grid");
-  if (!backgroundFillParent) return false;
+  if (!backgroundFillParent) {
+    Wh_Log(L"Failed to find backgroundFillParent in taskbarBackground");
+    return false;
+  }
 
   auto backgroundFillChild = FindChildByName(backgroundFillParent, L"BackgroundFill");
-  if (!backgroundFillChild) return false;
+  if (!backgroundFillChild) {
+    Wh_Log(L"Failed to find BackgroundFill in backgroundFillParent");
+    return false;
+  }
 
   auto notificationAreaIcons = FindChildByName(systemTrayFrameGrid, L"NotificationAreaIcons");
-  if (!notificationAreaIcons) return false;
+  if (!notificationAreaIcons) {
+    Wh_Log(L"Failed to find NotificationAreaIcons in systemTrayFrameGrid");
+    return false;
+  }
 
   auto itemsPresenter = FindChildByClassName(notificationAreaIcons, L"Windows.UI.Xaml.Controls.ItemsPresenter");
-  if (!itemsPresenter) return false;
+  if (!itemsPresenter) {
+    Wh_Log(L"Failed to find ItemsPresenter in notificationAreaIcons");
+    return false;
+  }
 
   auto stackPanel = FindChildByClassName(itemsPresenter, L"Windows.UI.Xaml.Controls.StackPanel");
-  if (!stackPanel) return false;
+  if (!stackPanel) {
+    Wh_Log(L"Failed to find StackPanel in itemsPresenter");
+    return false;
+  }
 
   auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
   bool widgetPresent = widgetElement != nullptr;
@@ -608,8 +647,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   // 5 pixels tolerance
   if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
       abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
-    Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f", systemTrayFrameGridVisual.Offset().x);
-    Wh_Log(L"childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", childrenWidthTaskbar, state.lastTrayFrameWidth);
+        Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d",
+        systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
 
@@ -685,12 +724,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     if (!g_unloading) {
       float targetOffsetXTray = static_cast<float>(rightMostEdgeTaskbar + targetTaskFrameOffsetX - (rootWidth - trayFrameWidth));
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
-
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
         trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
       }
-
       systemTrayFrameGridVisual.StartAnimation(L"Offset", trayAnimation);
     } else {
       systemTrayFrameGridVisual.Offset({0.0f, 0.0f, 0.0f});
@@ -718,9 +755,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         if (compositorWidget) {
           float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar + g_settings.userDefinedTrayTaskGap);
           auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
-
-          widgetOffsetAnimation.InsertKeyFrame(1.0f,
-                                               winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
+          widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
           if (movingInwards) {
             widgetOffsetAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
           }
@@ -737,6 +772,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     state.lastTargetWidth = static_cast<float>(rootWidth);
 
     if (!g_unloading && state.lastTargetWidth <= 0) {
+      Wh_Log(L"Error: g_unloading && state.lastTargetWidth <= 0");
       return false;
     }
   }
