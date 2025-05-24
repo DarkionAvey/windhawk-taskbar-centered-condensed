@@ -218,7 +218,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
           if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
             if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
               if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
-                grid.Height(4);
+                grid.Height(3.8);
                 if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
                   progressBarTrack.Opacity(0.5);
                 }
@@ -264,6 +264,9 @@ void UpdateGlobalSettings() {
 
   value = Wh_GetIntSetting(L"StyleTrayArea");
   g_settings.userDefinedStyleTrayArea = value != 0;
+
+  value = Wh_GetIntSetting(L"AlignFlyoutInner");
+  g_settings.userDefinedAlignFlyoutInner = value != 0;
 
   value = Wh_GetIntSetting(L"TrayTaskGap");
   if (value < 0) value = 0;
@@ -439,8 +442,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.lastApplyStyleTime = now;
 
   if (!xamlRootContent) return false;
-
-  bool invalidateLayoutRequest = g_invalidateDimensions;
+  bool invalidateLayoutRequested = g_invalidateDimensions;
   g_invalidateDimensions = false;
 
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
@@ -645,7 +647,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
   state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
   // 5 pixels tolerance
-  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
+  if (!invalidateLayoutRequested && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
       abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
         Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d",
         systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
@@ -679,7 +681,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
   }
-  if (invalidateLayoutRequest) {
+  if (invalidateLayoutRequested) {
     if (g_settings.userDefinedTaskbarHeight <= 0) {
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
@@ -723,6 +725,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (trayVisualCompositor) {
     if (!g_unloading) {
       float targetOffsetXTray = static_cast<float>(rightMostEdgeTaskbar + targetTaskFrameOffsetX - (rootWidth - trayFrameWidth));
+      state.lastRightMostEdgeTaskbar = rightMostEdgeTaskbar;
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
@@ -821,7 +824,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
                                    userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
   // you can also try SystemAccentColor

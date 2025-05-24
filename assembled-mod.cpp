@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.131
+// @version         1.4.133
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -63,7 +63,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default is 6) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
 | `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 78) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 44) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 48) | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default is 74) | Non-negative integer |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 24) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default is 16) | Non-negative integer |
@@ -77,13 +77,14 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default is off) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default is off) | Boolean (true/false) |
-| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default is on) | Boolean (true/false) |
+| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on) | Boolean (true/false) |
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
 | `CustomTaskbarIconsDir` | (Experimental, not active) Folder to custom taskbar icons | Specify a valid path to a folder containing .png files of app names for taskbar | string dir path |
 | `CustomTrayIconsDir` | (Experimental, not active) Folder to custom tray icons | Specify a valid path to a folder containing .png files of app names for tray | string dir path |
 | `MoveFlyoutWindows` | Move Flyout Windows with Taskbar | Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on). | Boolean (true/false) |
+| `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). |  |
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -100,9 +101,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarHeight: 78
   $name: Taskbar height
   $description: Sets the height of the taskbar (Default is 78)
-- TaskbarIconSize: 44
+- TaskbarIconSize: 48
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 44)
+  $description: Defines the width and height of taskbar icons (Default is 48)
 - TaskbarButtonSize: 74
   $name: Taskbar button size
   $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
@@ -144,7 +145,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
   $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default is on)
+  $description: If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on)
 - StyleTrayArea: false
   $name: Modify the tray area appearance
   $description: If enabled, the options for tray icon size will take effect (Default is off)
@@ -163,6 +164,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - MoveFlyoutWindows: true
   $name: Move Flyout Windows with Taskbar
   $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
+- AlignFlyoutInner: true
+  $name: Align flyout windows to the inside of the taskbar
+  $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
 */
 // ==/WindhawkModSettings==
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,8 +242,34 @@ struct TaskbarState {
   float lastStartButtonX=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
+  float lastRightMostEdgeTaskbar{0};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
+struct {
+  int userDefinedTrayTaskGap;
+  int userDefinedTaskbarBackgroundHorizontalPadding;
+  unsigned int userDefinedTaskbarOffsetY;
+  unsigned int userDefinedTaskbarHeight;
+  unsigned int userDefinedTaskbarIconSize;
+  unsigned int userDefinedTrayIconSize;
+  unsigned int userDefinedTaskbarButtonSize;
+  unsigned int userDefinedTrayButtonSize;
+  float userDefinedTaskbarCornerRadius;
+  unsigned int userDefinedTaskButtonCornerRadius;
+  bool userDefinedFlatTaskbarBottomCorners;
+  unsigned int userDefinedTaskbarBackgroundOpacity;
+  unsigned int userDefinedTaskbarBackgroundTint;
+  unsigned int userDefinedTaskbarBackgroundLuminosity;
+  uint8_t userDefinedTaskbarBorderOpacity;
+  double userDefinedTaskbarBorderThickness;
+  bool userDefinedFullWidthTaskbarBackground;
+  bool userDefinedIgnoreShowDesktopButton;
+  bool userDefinedStyleTrayArea;
+  bool userDefinedTrayAreaDivider;
+  unsigned int borderColorR, borderColorG, borderColorB;
+  std::vector<std::wstring> userDefinedDividedAppNames;
+  bool userDefinedAlignFlyoutInner;
+} g_settings;
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
@@ -1845,34 +1875,34 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
   ApplySettingsFromTaskbarThreadIfRequired();
 }
-using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
-HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
-    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
-    if (SUCCEEDED(ret)) {
-        *alignment=1;
-    }
-    return ret;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
+  HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+  if (SUCCEEDED(ret)) {
+    *alignment = 1;
+  }
+  return ret;
 }
-//namespace ImmersiveIcons {  struct IconData2; }
-//using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
-//ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
-//long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
-//    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
-//tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
-//    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
-//    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
-//        pThis,
-//        newParam1,
-//        newParam2,
-//        param3,
-//        param4,
-//        param5,
-//        param6,
-//        param7,
-//        param8
-//    );
-//}
+// namespace ImmersiveIcons {  struct IconData2; }
+// using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
+// ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
+// long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
+//     Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
+// tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
+//     tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
+//     return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
+//         pThis,
+//         newParam1,
+//         newParam2,
+//         param3,
+//         param4,
+//         param5,
+//         param6,
+//         param7,
+//         param8
+//     );
+// }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -1952,9 +1982,9 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &ITaskbarSettings_get_Alignment_Original,
         ITaskbarSettings_get_Alignment_Hook,
     },
-//     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
-//                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
-//                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
+    //     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
+    //                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
+    //                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -1995,28 +2025,55 @@ void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-                Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
-                TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
+  Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
+  TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
   ApplySettingsDebounced(300);
-                return ;
-            }
+  return;
+}
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
-                Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
+  TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
+  Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
   ApplySettingsDebounced(300);
-                return  ;
-            }
+  return;
+}
+using winrt__impl__produce_get_IsMultiWindow1_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow1_WithArgs_t winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow1_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow1, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
+using winrt__impl__produce_get_IsMultiWindow2_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow2_WithArgs_t winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow2_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow2, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
+using winrt__impl__produce_get_IsMultiWindow3_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow3_WithArgs_t winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow3_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow3, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
-{ {LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"},
-                                         &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original,
-                                         TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook },
- { {LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"},
-                                         &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original,
-                                         TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook },
+    {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
+    {{LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"}, &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsMultiWindow(bool *))"}, &winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original, winrt__impl__produce_get_IsMultiWindow1_WithArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *))"},
+     &winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original,
+     winrt__impl__produce_get_IsMultiWindow2_WithArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *))"},
+     &winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original,
+     winrt__impl__produce_get_IsMultiWindow3_WithArgs_Hook},
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
             &IUIElement_Arrange_Original,
@@ -2137,6 +2194,17 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+    Wh_Log(L"original: taskbarState.lastRightMostEdgeTaskbar: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+       taskbarState.lastRightMostEdgeTaskbar,
+      taskbarState.lastStartButtonX,
+      taskbarState.lastRootWidth,
+      cx,
+      x,
+      target,
+      taskbarState.lastTargetWidth,
+      absStartX,
+      absRootWidth,
+      absTargetWidth);
     if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
         return original();
     }
@@ -2145,8 +2213,8 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
-        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
-        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
+        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
@@ -2159,7 +2227,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
-        x = static_cast<int>(absStartX - cx / 2.0f);
+        x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
         x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
         if (!g_searchMenuOriginalX) {
@@ -2170,10 +2238,13 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         g_searchMenuOriginalX = 0;
       }
     } else if (target == Target::ShellExperienceHost) {
-        if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
-            x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);
-            x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-        }else{
+        if ((x + (cx / 2.0)) < ((taskbarState.lastRightMostEdgeTaskbar * dpiScale))) {
+          return original();
+        }
+        if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+          x = static_cast<int>(absStartX + absTargetWidth -(g_settings.userDefinedAlignFlyoutInner? (cx-(12 * dpiScale)) :( cx / 2.0f)));
+          x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+        } else {
           x = static_cast<int>(absRootWidth - cx);
         }
     }
@@ -2333,30 +2404,6 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 #include <psapi.h>
 using namespace winrt::Windows::UI::Xaml;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
-struct {
-  int userDefinedTrayTaskGap;
-  int userDefinedTaskbarBackgroundHorizontalPadding;
-  unsigned int userDefinedTaskbarOffsetY;
-  unsigned int userDefinedTaskbarHeight;
-  unsigned int userDefinedTaskbarIconSize;
-  unsigned int userDefinedTrayIconSize;
-  unsigned int userDefinedTaskbarButtonSize;
-  unsigned int userDefinedTrayButtonSize;
-  float userDefinedTaskbarCornerRadius;
-  unsigned int userDefinedTaskButtonCornerRadius;
-  bool userDefinedFlatTaskbarBottomCorners;
-  unsigned int userDefinedTaskbarBackgroundOpacity;
-  unsigned int userDefinedTaskbarBackgroundTint;
-  unsigned int userDefinedTaskbarBackgroundLuminosity;
-  uint8_t userDefinedTaskbarBorderOpacity;
-  double userDefinedTaskbarBorderThickness;
-  bool userDefinedFullWidthTaskbarBackground;
-  bool userDefinedIgnoreShowDesktopButton;
-  bool userDefinedStyleTrayArea;
-  bool userDefinedTrayAreaDivider;
-  unsigned int borderColorR, borderColorG, borderColorB;
-  std::vector<std::wstring> userDefinedDividedAppNames;
-} g_settings;
 bool g_invalidateCustomIcons = false;
 static std::set<std::pair<std::wstring, std::wstring>> g_taskbarIcons;
 static std::set<std::pair<std::wstring, std::wstring>> g_trayIcons;
@@ -2729,7 +2776,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
           if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
             if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
               if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
-                grid.Height(4);
+                grid.Height(3.8);
                 if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
                   progressBarTrack.Opacity(0.5);
                 }
@@ -2768,6 +2815,8 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTrayAreaDivider = value != 0 && !g_unloading;
   value = Wh_GetIntSetting(L"StyleTrayArea");
   g_settings.userDefinedStyleTrayArea = value != 0;
+  value = Wh_GetIntSetting(L"AlignFlyoutInner");
+  g_settings.userDefinedAlignFlyoutInner = value != 0;
   value = Wh_GetIntSetting(L"TrayTaskGap");
   if (value < 0) value = 0;
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
@@ -2905,7 +2954,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
   state.lastApplyStyleTime = now;
   if (!xamlRootContent) return false;
-  bool invalidateLayoutRequest = g_invalidateDimensions;
+  bool invalidateLayoutRequested = g_invalidateDimensions;
   g_invalidateDimensions = false;
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
   if (!taskFrame) {
@@ -3069,7 +3118,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
   state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
   // 5 pixels tolerance
-  if (!invalidateLayoutRequest && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
+  if (!invalidateLayoutRequested && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
       abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
         Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d",
         systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
@@ -3097,7 +3146,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
   }
-  if (invalidateLayoutRequest) {
+  if (invalidateLayoutRequested) {
     if (g_settings.userDefinedTaskbarHeight <= 0) {
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
@@ -3132,6 +3181,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (trayVisualCompositor) {
     if (!g_unloading) {
       float targetOffsetXTray = static_cast<float>(rightMostEdgeTaskbar + targetTaskFrameOffsetX - (rootWidth - trayFrameWidth));
+      state.lastRightMostEdgeTaskbar = rightMostEdgeTaskbar;
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
@@ -3218,7 +3268,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
                                    userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
   // you can also try SystemAccentColor

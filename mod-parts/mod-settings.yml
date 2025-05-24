@@ -18,9 +18,9 @@
   $description: Sets the height of the taskbar (Default is 78)
   $type: unsigned int
 
-- TaskbarIconSize: 44
+- TaskbarIconSize: 48
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 44)
+  $description: Defines the width and height of taskbar icons (Default is 48)
   $type: unsigned int
 
 - TaskbarButtonSize: 74
@@ -90,7 +90,7 @@
 
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the task bar. Will also apply to widget element if available (Default is on)
+  $description: If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on)
   $type: bool
 
 - StyleTrayArea: false
@@ -122,3 +122,7 @@
   $name: Move Flyout Windows with Taskbar
   $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
   $type: bool
+
+- AlignFlyoutInner: true
+  $name: Align flyout windows to the inside of the taskbar
+  $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).

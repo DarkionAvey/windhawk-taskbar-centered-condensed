@@ -389,34 +389,34 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
   ApplySettingsFromTaskbarThreadIfRequired();
 }
-using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
-HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
-    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
-    if (SUCCEEDED(ret)) {
-        *alignment=1;
-    }
-    return ret;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
+  HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+  if (SUCCEEDED(ret)) {
+    *alignment = 1;
+  }
+  return ret;
 }
-//namespace ImmersiveIcons {  struct IconData2; }
-//using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
-//ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
-//long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
-//    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
-//tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
-//    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
-//    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
-//        pThis,
-//        newParam1,
-//        newParam2,
-//        param3,
-//        param4,
-//        param5,
-//        param6,
-//        param7,
-//        param8
-//    );
-//}
+// namespace ImmersiveIcons {  struct IconData2; }
+// using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
+// ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
+// long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
+//     Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
+// tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
+//     tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
+//     return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
+//         pThis,
+//         newParam1,
+//         newParam2,
+//         param3,
+//         param4,
+//         param5,
+//         param6,
+//         param7,
+//         param8
+//     );
+// }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -496,9 +496,9 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &ITaskbarSettings_get_Alignment_Original,
         ITaskbarSettings_get_Alignment_Hook,
     },
-//     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
-//                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
-//                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
+    //     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
+    //                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
+    //                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -539,28 +539,55 @@ void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-                Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
-                TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
+  Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
+  TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
   ApplySettingsDebounced(300);
-                return ;
-            }
+  return;
+}
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
-                Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
+  TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
+  Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
   ApplySettingsDebounced(300);
-                return  ;
-            }
+  return;
+}
+using winrt__impl__produce_get_IsMultiWindow1_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow1_WithArgs_t winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow1_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow1, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
+using winrt__impl__produce_get_IsMultiWindow2_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow2_WithArgs_t winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow2_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow2, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
+using winrt__impl__produce_get_IsMultiWindow3_WithArgs_t = int(WINAPI*)(void* pThis, bool* param1);
+winrt__impl__produce_get_IsMultiWindow3_WithArgs_t winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original;
+int WINAPI winrt__impl__produce_get_IsMultiWindow3_WithArgs_Hook(void* pThis, bool* param1) {
+  Wh_Log(L"Method called: winrt__impl__produce_get_IsMultiWindow3, param1 = %d", *param1);
+  int result = winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original(pThis, param1);
+  *param1 = false;
+  return result;
+}
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
-{ {LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"},
-                                         &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original,
-                                         TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook },
- { {LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"},
-                                         &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original,
-                                         TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook },
+    {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
+    {{LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"}, &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsMultiWindow(bool *))"}, &winrt__impl__produce_get_IsMultiWindow1_WithArgs_Original, winrt__impl__produce_get_IsMultiWindow1_WithArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *))"},
+     &winrt__impl__produce_get_IsMultiWindow2_WithArgs_Original,
+     winrt__impl__produce_get_IsMultiWindow2_WithArgs_Hook},
+    {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *))"},
+     &winrt__impl__produce_get_IsMultiWindow3_WithArgs_Original,
+     winrt__impl__produce_get_IsMultiWindow3_WithArgs_Hook},
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
             &IUIElement_Arrange_Original,
@@ -681,6 +708,17 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+    Wh_Log(L"original: taskbarState.lastRightMostEdgeTaskbar: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+       taskbarState.lastRightMostEdgeTaskbar,
+      taskbarState.lastStartButtonX,
+      taskbarState.lastRootWidth,
+      cx,
+      x,
+      target,
+      taskbarState.lastTargetWidth,
+      absStartX,
+      absRootWidth,
+      absTargetWidth);
     if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
         return original();
     }
@@ -689,8 +727,8 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
-        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth);
-        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + 12 * dpiScale), x));
+        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
@@ -703,7 +741,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
-        x = static_cast<int>(absStartX - cx / 2.0f);
+        x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
         x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
         if (!g_searchMenuOriginalX) {
@@ -714,10 +752,13 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         g_searchMenuOriginalX = 0;
       }
     } else if (target == Target::ShellExperienceHost) {
-        if(g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading){
-            x = static_cast<int>(absStartX + absTargetWidth - cx / 2.0f);
-            x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-        }else{
+        if ((x + (cx / 2.0)) < ((taskbarState.lastRightMostEdgeTaskbar * dpiScale))) {
+          return original();
+        }
+        if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+          x = static_cast<int>(absStartX + absTargetWidth -(g_settings.userDefinedAlignFlyoutInner? (cx-(12 * dpiScale)) :( cx / 2.0f)));
+          x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+        } else {
           x = static_cast<int>(absRootWidth - cx);
         }
     }

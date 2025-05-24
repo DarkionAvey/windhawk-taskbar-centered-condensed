@@ -71,8 +71,34 @@ struct TaskbarState {
   float lastStartButtonX=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
+  float lastRightMostEdgeTaskbar{0};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
+struct {
+  int userDefinedTrayTaskGap;
+  int userDefinedTaskbarBackgroundHorizontalPadding;
+  unsigned int userDefinedTaskbarOffsetY;
+  unsigned int userDefinedTaskbarHeight;
+  unsigned int userDefinedTaskbarIconSize;
+  unsigned int userDefinedTrayIconSize;
+  unsigned int userDefinedTaskbarButtonSize;
+  unsigned int userDefinedTrayButtonSize;
+  float userDefinedTaskbarCornerRadius;
+  unsigned int userDefinedTaskButtonCornerRadius;
+  bool userDefinedFlatTaskbarBottomCorners;
+  unsigned int userDefinedTaskbarBackgroundOpacity;
+  unsigned int userDefinedTaskbarBackgroundTint;
+  unsigned int userDefinedTaskbarBackgroundLuminosity;
+  uint8_t userDefinedTaskbarBorderOpacity;
+  double userDefinedTaskbarBorderThickness;
+  bool userDefinedFullWidthTaskbarBackground;
+  bool userDefinedIgnoreShowDesktopButton;
+  bool userDefinedStyleTrayArea;
+  bool userDefinedTrayAreaDivider;
+  unsigned int borderColorR, borderColorG, borderColorB;
+  std::vector<std::wstring> userDefinedDividedAppNames;
+  bool userDefinedAlignFlyoutInner;
+} g_settings;
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);

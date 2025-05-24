@@ -98,34 +98,32 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   ApplySettingsFromTaskbarThreadIfRequired();
 }
 
-
-using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,int* alignment);
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
-HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,int* alignment) {
-    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
-    if (SUCCEEDED(ret)) {
-        *alignment=1;
-    }
-    return ret;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
+  HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+  if (SUCCEEDED(ret)) {
+    *alignment = 1;
+  }
+  return ret;
 }
 
-
-//namespace ImmersiveIcons {  struct IconData2; }
-//using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
-//ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
-//long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
-//    Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
-//tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
-//    tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
-//    return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
-//        pThis,
-//        newParam1,
-//        newParam2,
-//        param3,
-//        param4,
-//        param5,
-//        param6,
-//        param7,
-//        param8
-//    );
-//}
+// namespace ImmersiveIcons {  struct IconData2; }
+// using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
+// ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
+// long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
+//     Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
+// tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
+//     tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
+//     return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
+//         pThis,
+//         newParam1,
+//         newParam2,
+//         param3,
+//         param4,
+//         param5,
+//         param6,
+//         param7,
+//         param8
+//     );
+// }

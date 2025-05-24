@@ -16,7 +16,10 @@ dll_to_hook = "Taskbar.View.dll"
 exe_to_hook = "explorer.exe"
 
 input_block = r"""
-	Line  57947: [0078C67C] private: void __cdecl winrt::Taskbar::implementation::TaskListButton::InitializeRunningIndicator(void)	
+	Line   6375: [00025DF0] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *)
+	Line  27254: [002EDED0] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *)
+	Line  58305: [0078A250] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsMultiWindow(bool *)
+
 """
 
 

@@ -1,0 +1,25 @@
+struct {
+  int userDefinedTrayTaskGap;
+  int userDefinedTaskbarBackgroundHorizontalPadding;
+  unsigned int userDefinedTaskbarOffsetY;
+  unsigned int userDefinedTaskbarHeight;
+  unsigned int userDefinedTaskbarIconSize;
+  unsigned int userDefinedTrayIconSize;
+  unsigned int userDefinedTaskbarButtonSize;
+  unsigned int userDefinedTrayButtonSize;
+  float userDefinedTaskbarCornerRadius;
+  unsigned int userDefinedTaskButtonCornerRadius;
+  bool userDefinedFlatTaskbarBottomCorners;
+  unsigned int userDefinedTaskbarBackgroundOpacity;
+  unsigned int userDefinedTaskbarBackgroundTint;
+  unsigned int userDefinedTaskbarBackgroundLuminosity;
+  uint8_t userDefinedTaskbarBorderOpacity;
+  double userDefinedTaskbarBorderThickness;
+  bool userDefinedFullWidthTaskbarBackground;
+  bool userDefinedIgnoreShowDesktopButton;
+  bool userDefinedStyleTrayArea;
+  bool userDefinedTrayAreaDivider;
+  unsigned int borderColorR, borderColorG, borderColorB;
+  std::vector<std::wstring> userDefinedDividedAppNames;
+  bool userDefinedAlignFlyoutInner;
+} g_settings;

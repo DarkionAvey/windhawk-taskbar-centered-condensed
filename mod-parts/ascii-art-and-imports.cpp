@@ -61,32 +61,6 @@ using namespace winrt::Windows::UI::Xaml;
 
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 
-struct {
-  int userDefinedTrayTaskGap;
-  int userDefinedTaskbarBackgroundHorizontalPadding;
-  unsigned int userDefinedTaskbarOffsetY;
-  unsigned int userDefinedTaskbarHeight;
-  unsigned int userDefinedTaskbarIconSize;
-  unsigned int userDefinedTrayIconSize;
-  unsigned int userDefinedTaskbarButtonSize;
-  unsigned int userDefinedTrayButtonSize;
-  float userDefinedTaskbarCornerRadius;
-  unsigned int userDefinedTaskButtonCornerRadius;
-  bool userDefinedFlatTaskbarBottomCorners;
-  unsigned int userDefinedTaskbarBackgroundOpacity;
-  unsigned int userDefinedTaskbarBackgroundTint;
-  unsigned int userDefinedTaskbarBackgroundLuminosity;
-  uint8_t userDefinedTaskbarBorderOpacity;
-  double userDefinedTaskbarBorderThickness;
-  bool userDefinedFullWidthTaskbarBackground;
-  bool userDefinedIgnoreShowDesktopButton;
-  bool userDefinedStyleTrayArea;
-  bool userDefinedTrayAreaDivider;
-  unsigned int borderColorR, borderColorG, borderColorB;
-  std::vector<std::wstring> userDefinedDividedAppNames;
-} g_settings;
-
-
 bool g_invalidateCustomIcons = false;
 static std::set<std::pair<std::wstring, std::wstring>> g_taskbarIcons;
 static std::set<std::pair<std::wstring, std::wstring>> g_trayIcons;
