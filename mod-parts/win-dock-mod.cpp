@@ -422,7 +422,22 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorG, L"borderColorG");
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
 }
-
+bool IsTaskbarWidgetsEnabled() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(hKey, L"TaskbarDa", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            return value == 1;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
     if (!xamlRootContent) {
     Wh_Log(L"xamlRootContent is null");
@@ -516,10 +531,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Failed to find StackPanel in itemsPresenter");
     return false;
   }
-
-  auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
+  bool widgetPresent = IsTaskbarWidgetsEnabled();
+  auto widgetElement = widgetPresent?FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton"):nullptr;
   auto widgetMainView = widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
-  bool widgetPresent = widgetElement != nullptr && widgetMainView!=nullptr;
+  widgetPresent=widgetPresent && widgetMainView!=nullptr;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
 
   if (widgetPresent && widgetElementWidth <= 0) {
