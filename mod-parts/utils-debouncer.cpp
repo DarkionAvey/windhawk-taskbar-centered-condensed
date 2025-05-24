@@ -4,6 +4,7 @@ winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
 bool InitializeDebounce() {
   if (debounceTimer) return true;
+  g_already_requested_debounce_initializing=true;
   debounceTimer = DispatcherTimer();
   debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
@@ -18,6 +19,7 @@ bool InitializeDebounce() {
 }
 
 void CleanupDebounce() {
+  g_already_requested_debounce_initializing=false;
   if (debounceTimer) {
     if (auto debounceHwnd = GetTaskbarWnd()) {
       RunFromWindowThread(
@@ -32,6 +34,7 @@ void CleanupDebounce() {
     }
   }
 }
+
 void ApplySettingsDebounced(int delayMs) {
   HWND hTaskbarWnd = GetTaskbarWnd();
   if (!hTaskbarWnd) {
@@ -40,8 +43,11 @@ void ApplySettingsDebounced(int delayMs) {
   }
 
 if (!debounceTimer) {
-    RunFromWindowThread(hTaskbarWnd, [](void* pParam) { InitializeDebounce(); }, 0);
-    Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    if(!g_already_requested_debounce_initializing){
+        g_already_requested_debounce_initializing = true;
+        ApplySettingsFromTaskbarThread();
+        Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    }
     return;
   }
 

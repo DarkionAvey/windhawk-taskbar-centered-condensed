@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.133
+// @version         1.4.136
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -270,6 +270,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
 } g_settings;
+std::atomic<bool> g_already_requested_debounce_initializing = false;
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
@@ -1650,16 +1651,21 @@ void ApplySettingsFromTaskbarThread() {
             } else {
                 return TRUE;
             }
-            if (!xamlRoot) {
+            if (!xamlRoot) {g_already_requested_debounce_initializing=false;
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
+const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent) {
+g_already_requested_debounce_initializing=false;
+return TRUE;
+}
 if (!debounceTimer) {
-  RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+     xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+     InitializeDebounce();
+  });
   return TRUE;
 }
-const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-if (!xamlRootContent || !debounceTimer) return TRUE;
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
 std::wstring monitorName = GetMonitorName(hWnd);
   xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
@@ -2530,6 +2536,7 @@ winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
 bool InitializeDebounce() {
   if (debounceTimer) return true;
+  g_already_requested_debounce_initializing=true;
   debounceTimer = DispatcherTimer();
   debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
@@ -2543,6 +2550,7 @@ bool InitializeDebounce() {
   return false;
 }
 void CleanupDebounce() {
+  g_already_requested_debounce_initializing=false;
   if (debounceTimer) {
     if (auto debounceHwnd = GetTaskbarWnd()) {
       RunFromWindowThread(
@@ -2564,8 +2572,11 @@ void ApplySettingsDebounced(int delayMs) {
     return;
   }
 if (!debounceTimer) {
-    RunFromWindowThread(hTaskbarWnd, [](void* pParam) { InitializeDebounce(); }, 0);
-    Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    if(!g_already_requested_debounce_initializing){
+        g_already_requested_debounce_initializing = true;
+        ApplySettingsFromTaskbarThread();
+        Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+    }
     return;
   }
   bool lowPriority = false;
@@ -3017,8 +3028,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   auto widgetElement = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton");
-  bool widgetPresent = widgetElement != nullptr;
-  auto widgetMainView = widgetPresent && widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
+  auto widgetMainView = widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
+  bool widgetPresent = widgetElement != nullptr && widgetMainView!=nullptr;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
   if (widgetPresent && widgetElementWidth <= 0) {
     Wh_Log(L"Error: widgetPresent && widgetElementWidth<=0");

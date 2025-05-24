@@ -114,6 +114,7 @@ class TaskbarIconSizeMod(URLProcessor):
         content = re.sub(r'STDAPI GetDpiForMonitor',
                          read_file(os.path.join(mod_parts_dir, "taskbar-states.cpp")) + "\n" +
                          read_file(os.path.join(mod_parts_dir, "g_settings.cpp")) + "\n" +
+                         read_file(os.path.join(mod_parts_dir, "top-level-variables.cpp")) + "\n" +
                          """
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
@@ -284,18 +285,24 @@ SetWindowPos""", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"element\.Dispatcher\(\)\.TryRunAsync\(\s+winrt::Windows::UI::Core::CoreDispatcherPriority::High,\s+\[element\]\(\) {", "element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { \\n", content,
                          flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"HWND hTaskbarWnd = GetTaskbarWnd.*?}", "", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"if \(!xamlRoot\) \{", "if (!xamlRoot) {g_already_requested_debounce_initializing=false;\n", content, flags=re.DOTALL | re.MULTILINE)
 
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
         content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content, flags=re.DOTALL)
         content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\) \{.*?}",
                          r"""
+const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent) {
+g_already_requested_debounce_initializing=false;
+return TRUE;
+}
 if (!debounceTimer) {
-  RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+     xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+     InitializeDebounce(); 
+  });
   return TRUE;
 }
-const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-if (!xamlRootContent || !debounceTimer) return TRUE;
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
 std::wstring monitorName = GetMonitorName(hWnd);
   xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {

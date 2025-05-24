@@ -99,6 +99,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
 } g_settings;
+std::atomic<bool> g_already_requested_debounce_initializing = false;
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);

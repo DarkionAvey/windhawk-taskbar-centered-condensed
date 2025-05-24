@@ -164,16 +164,21 @@ void ApplySettingsFromTaskbarThread() {
             } else {
                 return TRUE;
             }
-            if (!xamlRoot) {
+            if (!xamlRoot) {g_already_requested_debounce_initializing=false;
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
+const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent) {
+g_already_requested_debounce_initializing=false;
+return TRUE;
+}
 if (!debounceTimer) {
-  RunFromWindowThread(hWnd, [](void* pParam) { InitializeDebounce(); }, 0);
+     xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+     InitializeDebounce();
+  });
   return TRUE;
 }
-const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-if (!xamlRootContent || !debounceTimer) return TRUE;
 if (xamlRootContent && xamlRootContent.Dispatcher()) {
 std::wstring monitorName = GetMonitorName(hWnd);
   xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
