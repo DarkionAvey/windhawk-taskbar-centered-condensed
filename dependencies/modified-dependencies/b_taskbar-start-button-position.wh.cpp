@@ -672,7 +672,7 @@ std::wstring processFileName = GetProcessFileName(processId);
 Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassName.c_str());
     enum class Target {
         StartMenu,
-        SearchHost,ShellExperienceHost,ShellHost,
+        SearchHost,ShellExperienceHost,
     };
     Target target;
     if (_wcsicmp(processFileName.c_str(), L"StartMenuExperienceHost.exe") ==
@@ -682,9 +682,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         target = Target::SearchHost;
     }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
         target = Target::ShellExperienceHost;
-    } else if (_wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0) {
-        target = Target::ShellHost;
-    } else {
+    }  else {
         return original();
     }
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -713,8 +711,8 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
     float absStartX = taskbarState.lastStartButtonX * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
-    Wh_Log(L"original: taskbarState.lastRightMostEdgeTaskbar: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-       taskbarState.lastRightMostEdgeTaskbar,
+    Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+       taskbarState.lastLeftMostEdgeTray,
       taskbarState.lastStartButtonX,
       taskbarState.lastRootWidth,
       cx,
@@ -724,9 +722,6 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       absStartX,
       absRootWidth,
       absTargetWidth);
-    if(target == Target::ShellExperienceHost && targetRect.right<(absRootWidth-cx)){
-        return original();
-    }
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
@@ -757,11 +752,12 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         g_searchMenuOriginalX = 0;
       }
     } else if (target == Target::ShellExperienceHost) {
-        if ((x + (cx / 2.0)) < ((taskbarState.lastRightMostEdgeTaskbar * dpiScale))) {
+        int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
+        if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
           return original();
         }
         if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-          x = static_cast<int>(absStartX + absTargetWidth -(g_settings.userDefinedAlignFlyoutInner? (cx-(12 * dpiScale)) :( cx / 2.0f)));
+          x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
           x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
         } else {
           x = static_cast<int>(absRootWidth - cx);

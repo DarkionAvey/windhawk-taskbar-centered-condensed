@@ -12,14 +12,12 @@ import re
 # 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
 #
 # """
-dll_to_hook = "Taskbar.View.dll"
-exe_to_hook = "explorer.exe"
+dll_to_hook = "ControlCenter.dll"
+exe_to_hook = "ShellHost.exe"
 
 input_block = r"""
-	Line   6375: [00025DF0] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *)
-	Line  27254: [002EDED0] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsMultiWindow(bool *)
-	Line  58305: [0078A250] public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsMultiWindow(bool *)
-
+	Line  4260: [00081960] private: static __int64 __cdecl winrt::ControlCenter::ControlCenterApplication::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)
+	Line  4261: [00081A20] private: __int64 __cdecl winrt::ControlCenter::ControlCenterApplication::OnWindowMessage(struct HWND__ *,unsigned int,unsigned __int64,__int64)
 """
 
 

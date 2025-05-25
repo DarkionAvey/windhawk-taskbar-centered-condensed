@@ -15,6 +15,7 @@ struct TaskbarState {
   float lastStartButtonX=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
-  float lastRightMostEdgeTaskbar{0};
+  float lastLeftMostEdgeTray{0};
+  int lastRightMostEdgeTray{0};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;

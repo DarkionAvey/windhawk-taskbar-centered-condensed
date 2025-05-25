@@ -740,7 +740,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (trayVisualCompositor) {
     if (!g_unloading) {
       float targetOffsetXTray = static_cast<float>(rightMostEdgeTaskbar + targetTaskFrameOffsetX - (rootWidth - trayFrameWidth));
-      state.lastRightMostEdgeTaskbar = rightMostEdgeTaskbar;
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
@@ -785,7 +784,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     }
   }
 
-  // borders and corners
   if (state.lastTargetWidth <= 10) {
     state.lastTargetWidth = static_cast<float>(rootWidth);
 
@@ -800,13 +798,22 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
 
+
+ int rightMostEdgeTray=static_cast<int>((rootWidth - targetWidth) / 2+targetWidth);
+      if (state.lastRightMostEdgeTray != rightMostEdgeTray) {
+        state.lastRightMostEdgeTray=rightMostEdgeTray;
+    Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(),  rightMostEdgeTray);
+  }
+            state.lastLeftMostEdgeTray = rightMostEdgeTray-trayFrameWidth;
+
+
+
   const auto targetHeightPrelim = (!g_settings.userDefinedFullWidthTaskbarBackground ? g_settings.userDefinedTaskbarHeight : xamlRootContent.ActualHeight());
   if (!g_unloading && targetHeightPrelim <= 0) {
     Wh_Log(L"Error: targetHeightPrelim<=0");
     return false;
   }
   const auto clipHeight = static_cast<float>(targetHeightPrelim + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? (targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius) : 0.0f));
-
   if (!g_unloading && clipHeight <= 0) {
     Wh_Log(L"Error: clipHeight<=0");
     return false;
@@ -846,6 +853,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
 
+  // borders and corners
   if (!g_unloading) {
     if (backgroundFillVisual) {
       if (compositorTaskBackground) {
@@ -958,9 +966,9 @@ void ResetGlobalVars() {
     state.wasOverflowing = false;
   }
 }
-bool g_StartDockedDllInstance = false;
+bool g_PartialMode = false;
 void Wh_ModSettingsChanged() {
-  if (g_StartDockedDllInstance) {
+  if (g_PartialMode) {
     return;
   }
   Wh_Log(L"Settings Changed");
@@ -980,19 +988,106 @@ bool IsExplorer() {
   return false;
 }
 
-BOOL Wh_ModInit() {
-  if (!IsExplorer()) {
-    Wh_Log(L"StartDocked to hook");
-    HMODULE module = GetModuleHandle(L"StartDocked.dll");
-    if (module) {
-      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
-                                            &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
-                                            StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
-      g_StartDockedDllInstance = true;
-      return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));
+using SetWindowPos_t = BOOL(WINAPI*)(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
+SetWindowPos_t SetWindowPos_Original = nullptr;
+std::wstring GetProcessExeName(DWORD processId)
+{
+    std::wstring result = L"<unknown>";
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (hProcess) {
+        WCHAR path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+            std::wstring fullPath = path;
+            size_t pos = fullPath.find_last_of(L"\\/");
+            result = (pos != std::wstring::npos) ? fullPath.substr(pos + 1) : fullPath;
+        }
+        CloseHandle(hProcess);
+    }
+    return result;
+}
+
+BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
+  DWORD processId = 0;
+  if (g_unloading|| !Wh_GetIntSetting(L"MoveFlyoutWindows")|| !hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+  }
+
+  WCHAR className[256] = L"<unknown>";
+  GetClassNameW(hWnd, className, ARRAYSIZE(className));
+  std::wstring windowClassName = className;
+  std::wstring processFileName = GetProcessExeName(processId);
+  if (true) {
+    Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X", processId, processFileName.c_str(), windowClassName.c_str(), hWnd, X, Y, cx, cy, uFlags);
+  }
+
+  if (_wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+    auto monitorName = GetMonitorName(monitor);
+    int lastRecordedTrayRightMostEdgeForMonitor = Wh_GetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), -1);
+
+    if (lastRecordedTrayRightMostEdgeForMonitor > 0) {
+              UINT monitorDpiX = 96;
+    UINT monitorDpiY = 96;
+    GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+    float dpiScale = monitorDpiX / 96.0f;
+
+        X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor*dpiScale + (12 * dpiScale)- (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
+      Wh_Log(L"[SetWindowPos] New X %d", X);
+    } else {
+      Wh_Log(L"[SetWindowPos] No reference state for monitor %s", monitorName.c_str());
     }
   }
 
+  return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+
+
+BOOL Wh_ModInit() {
+
+     HMODULE moduleUser32 = LoadLibraryW(L"user32.dll");
+    if (moduleUser32) {
+         auto pSetWindowPos = (SetWindowPos_t)GetProcAddress(moduleUser32, "SetWindowPos");
+    if (pSetWindowPos) {
+
+if (WindhawkUtils::Wh_SetFunctionHookT(pSetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original)) {
+        Wh_Log(L"Successfully hooked SetWindowPos");
+    } else {
+        Wh_Log(L"Failed to hook SetWindowPos");
+    }
+
+    }else{
+        Wh_Log(L"Failed to get address of SetWindowPos");
+    }
+        }else {
+                Wh_Log(L"Failed to load user32.dll");
+        }
+
+
+
+  if (!IsExplorer()) {
+    g_PartialMode = true;
+    Wh_Log(L"Not explorer.exe; setting g_PartialMode to true");
+
+    HMODULE moduleStartDocked = GetModuleHandle(L"StartDocked.dll");
+    if (moduleStartDocked) {
+      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
+                                            &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
+                                            StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
+
+      return WindhawkUtils::HookSymbols(moduleStartDocked, hook, ARRAYSIZE(hook));
+  }
+
+
+
+return true;
+  }
   g_unloading = false;
 
   if (!Wh_ModInitTBIconSize()) {
@@ -1007,7 +1102,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-  if (g_StartDockedDllInstance) {
+  if (g_PartialMode) {
     g_lastRecordedStartMenuWidth = Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
     return;
   }
@@ -1022,7 +1117,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-  if (g_StartDockedDllInstance) {
+  if (g_PartialMode) {
     return;
   }
   g_unloading = true;
@@ -1037,7 +1132,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-  if (g_StartDockedDllInstance) {
+  if (g_PartialMode) {
     return;
   }
   Wh_ModUninitTBIconSize();
