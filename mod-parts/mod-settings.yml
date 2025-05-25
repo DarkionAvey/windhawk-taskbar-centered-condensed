@@ -108,16 +108,6 @@
   $description: Sets the size of tray buttons, which surround the icons (Default is 45)
   $type: unsigned int
 
-- CustomTaskbarIconsDir: ""
-  $name: (Experimental, not active) Folder to custom taskbar icons
-  $description: Specify a valid path to a folder containing .png files of app names for taskbar
-  $type: string dir path
-
-- CustomTrayIconsDir: ""
-  $name: (Experimental, not active) Folder to custom tray icons
-  $description: Specify a valid path to a folder containing .png files of app names for tray
-  $type: string dir path
-
 - MoveFlyoutWindows: true
   $name: Move Flyout Windows with Taskbar
   $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).

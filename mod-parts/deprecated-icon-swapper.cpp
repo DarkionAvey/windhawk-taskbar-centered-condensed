@@ -1,3 +1,13 @@
+//- CustomTaskbarIconsDir: ""
+//  $name: (Experimental, not active) Folder to custom taskbar icons
+//  $description: Specify a valid path to a folder containing .png files of app names for taskbar
+//  $type: string dir path
+//
+//- CustomTrayIconsDir: ""
+//  $name: (Experimental, not active) Folder to custom tray icons
+//  $description: Specify a valid path to a folder containing .png files of app names for tray
+//  $type: string dir path
+
 
 static winrt::Windows::Storage::Search::StorageFileQueryResult g_taskbarQuery{
     nullptr};
