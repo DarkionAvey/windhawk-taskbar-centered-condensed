@@ -10,15 +10,15 @@ Transform your Windows 11 taskbar into a smooth, MacOS-style dock — without lo
 
 ⚠️ **Note:** Please disable any mods that affect taskbar height or taskbar icons—this mod already includes those
 features.
-0. [Install Windhawk](https://windhawk.net/)
-1. Copy the contents of [
+1. [Install Windhawk](https://windhawk.net/) if you haven't already.
+2. Copy the contents of [
    `assembled-mod.cpp`](https://raw.githubusercontent.com/DarkionAvey/windhawk-taskbar-centered-condensed/main/assembled-mod.cpp)
    to your clipboard.
-2. Open **WindHawk** and navigate to: `Explore` → `Create a new mod`.
-3. Press `Ctrl+A` to select all, then `Ctrl+V` to paste.
-4. Click **Compile Mod** button on the top left corner.
-5. Change the mod's settings to fit your preference.
-6. If your explorer.exe is not responding, disable the mod from Windhawk, open task manager, restart explorer.exe, wait
+3. Open **WindHawk** and navigate to: `Explore` → `Create a new mod`.
+4. Press `Ctrl+A` to select all, then `Ctrl+V` to paste.
+5. Click **Compile Mod** button on the top left corner.
+6. Change the mod's settings to fit your preference.
+7. If your explorer.exe is not responding, disable the mod from Windhawk, open task manager, restart explorer.exe, wait
    for the default taskbar to appear, then apply WinDock.
 
 ---
