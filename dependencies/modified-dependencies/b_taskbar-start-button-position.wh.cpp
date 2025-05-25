@@ -744,12 +744,9 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
         x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
       } else {
-        if (!g_searchMenuOriginalX) {
-          return original();
-        }
-        x = g_searchMenuOriginalX;
-        g_searchMenuWnd = nullptr;
-        g_searchMenuOriginalX = 0;
+       x = g_unloading && IsStartMenuOrbLeftAligned() ? g_searchMenuOriginalX : (absRootWidth-cx)/2;
+       g_searchMenuWnd = nullptr;
+       g_searchMenuOriginalX = 0;
       }
     } else if (target == Target::ShellExperienceHost) {
         int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;

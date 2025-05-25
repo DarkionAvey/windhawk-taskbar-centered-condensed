@@ -763,8 +763,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     state.lastRightMostEdgeTray = rightMostEdgeTray;
     Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), rightMostEdgeTray);
   }
-  state.lastLeftMostEdgeTray = rightMostEdgeTray - trayFrameWidth;
-
+  float leftMostEdgeTray = rightMostEdgeTray - trayFrameWidth;
+  if (leftMostEdgeTray != state.lastLeftMostEdgeTray) {
+    state.lastLeftMostEdgeTray = leftMostEdgeTray;
+    Wh_SetIntValue((L"lastLeftMostEdgeTray_" + monitorName).c_str(), static_cast<int>(leftMostEdgeTray));
+  }
   const auto targetHeightPrelim = (!g_settings.userDefinedFullWidthTaskbarBackground ? g_settings.userDefinedTaskbarHeight : xamlRootContent.ActualHeight());
   if (!g_unloading && targetHeightPrelim <= 0) {
     Wh_Log(L"Error: targetHeightPrelim<=0");
@@ -802,9 +805,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  SetElementPropertyFromString(
-      backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-      L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>", true);
+  SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
+                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
+                                   L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
+                               true);
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
@@ -961,7 +965,8 @@ std::wstring GetProcessExeName(DWORD processId) {
 
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
   DWORD processId = 0;
-  if (g_unloading || !Wh_GetIntSetting(L"MoveFlyoutWindows") || !hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
+  bool userDefinedMoveFlyoutWindows = Wh_GetIntSetting(L"MoveFlyoutWindows");
+  if (!hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
   }
 
@@ -972,8 +977,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   if (true) {
     Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X", processId, processFileName.c_str(), windowClassName.c_str(), hWnd, X, Y, cx, cy, uFlags);
   }
-
-  if (_wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
+  if (!g_unloading && userDefinedMoveFlyoutWindows && _wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),
@@ -1065,7 +1069,6 @@ void Wh_ModBeforeUninit() {
   if (hTaskbarWnd) {
     ApplySettings(hTaskbarWnd);
   }
-  //  CleanupWatchers();
 }
 
 void Wh_ModUninit() {
