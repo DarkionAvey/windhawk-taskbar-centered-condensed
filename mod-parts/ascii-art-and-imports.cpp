@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <unordered_map>
 #include <limits>
-#include <set>
 #include <utility>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -59,8 +58,3 @@
 
 using namespace winrt::Windows::UI::Xaml;
 
-STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
-
-bool g_invalidateCustomIcons = false;
-static std::set<std::pair<std::wstring, std::wstring>> g_taskbarIcons;
-static std::set<std::pair<std::wstring, std::wstring>> g_trayIcons;

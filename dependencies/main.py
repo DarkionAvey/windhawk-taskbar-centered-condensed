@@ -107,7 +107,6 @@ class TaskbarIconSizeMod(URLProcessor):
         super().__init__(url, "TBIconSize", "a")
 
     def format_content(self, content):
-        content = "void ApplySettingsDebounced(int delayMs);\nvoid ApplySettingsDebounced();\nvoid ApplySettingsFromTaskbarThreadIfRequired();\nint g_lastRecordedStartMenuWidth=670;\n" + "\n" + content
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
 

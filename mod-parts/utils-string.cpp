@@ -1,6 +1,5 @@
-
-std::vector<std::wstring> SplitAndTrim(
-    const std::optional<std::wstring>& input) {
+#include <regex>
+std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input) {
   std::vector<std::wstring> result;
 
   if (!input.has_value() || input->empty()) {
@@ -22,20 +21,11 @@ std::vector<std::wstring> SplitAndTrim(
   return result;
 }
 
-bool RegexMatchInsensitive(const std::wstring& haystack,
-                           const std::wstring& pattern) {
+bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pattern) {
   try {
     std::wregex regexPattern(pattern, std::regex_constants::icase);
     return std::regex_search(haystack, regexPattern);
   } catch (const std::regex_error&) {
     return false;
   }
-}
-
-bool ContainsCaseInsensitive(std::wstring const& haystack,
-                             std::wstring const& needle) {
-  std::wstring h = haystack, n = needle;
-  std::transform(h.begin(), h.end(), h.begin(), towlower);
-  std::transform(n.begin(), n.end(), n.begin(), towlower);
-  return h.find(n) != std::wstring::npos;
 }

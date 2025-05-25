@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.142
+// @version         1.4.150
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -81,8 +81,6 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
-| `CustomTaskbarIconsDir` | (Experimental, not active) Folder to custom taskbar icons | Specify a valid path to a folder containing .png files of app names for taskbar | string dir path |
-| `CustomTrayIconsDir` | (Experimental, not active) Folder to custom tray icons | Specify a valid path to a folder containing .png files of app names for tray | string dir path |
 | `MoveFlyoutWindows` | Move Flyout Windows with Taskbar | Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on). | Boolean (true/false) |
 | `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). |  |
 */
@@ -155,12 +153,6 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TrayButtonSize: 45
   $name: Tray button size
   $description: Sets the size of tray buttons, which surround the icons (Default is 45)
-- CustomTaskbarIconsDir: ""
-  $name: (Experimental, not active) Folder to custom taskbar icons
-  $description: Specify a valid path to a folder containing .png files of app names for taskbar
-- CustomTrayIconsDir: ""
-  $name: (Experimental, not active) Folder to custom tray icons
-  $description: Specify a valid path to a folder containing .png files of app names for tray
 - MoveFlyoutWindows: true
   $name: Move Flyout Windows with Taskbar
   $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
@@ -182,10 +174,6 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ApplySettingsDebounced(int delayMs);
-void ApplySettingsDebounced();
-void ApplySettingsFromTaskbarThreadIfRequired();
-int g_lastRecordedStartMenuWidth=670;
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -271,7 +259,12 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
 } g_settings;
+void ApplySettingsDebounced(int delayMs);
+void ApplySettingsDebounced();
+void ApplySettingsFromTaskbarThreadIfRequired();
+int g_lastRecordedStartMenuWidth=670;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
+STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 std::wstring GetMonitorName(HMONITOR monitor) {
     MONITORINFOEX monitorInfo = {};
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
@@ -2370,7 +2363,6 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 #include <algorithm>
 #include <unordered_map>
 #include <limits>
-#include <set>
 #include <utility>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -2406,10 +2398,6 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 #include <windows.h>
 #include <psapi.h>
 using namespace winrt::Windows::UI::Xaml;
-STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
-bool g_invalidateCustomIcons = false;
-static std::set<std::pair<std::wstring, std::wstring>> g_taskbarIcons;
-static std::set<std::pair<std::wstring, std::wstring>> g_trayIcons;
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
   std::wstring buffer;
   buffer.reserve(data.size());
@@ -2491,8 +2479,8 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
   }
 }
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
-std::vector<std::wstring> SplitAndTrim(
-    const std::optional<std::wstring>& input) {
+#include <regex>
+std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input) {
   std::vector<std::wstring> result;
   if (!input.has_value() || input->empty()) {
     return result;
@@ -2511,8 +2499,7 @@ std::vector<std::wstring> SplitAndTrim(
   }
   return result;
 }
-bool RegexMatchInsensitive(const std::wstring& haystack,
-                           const std::wstring& pattern) {
+bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pattern) {
   try {
     std::wregex regexPattern(pattern, std::regex_constants::icase);
     return std::regex_search(haystack, regexPattern);
@@ -2520,20 +2507,13 @@ bool RegexMatchInsensitive(const std::wstring& haystack,
     return false;
   }
 }
-bool ContainsCaseInsensitive(std::wstring const& haystack,
-                             std::wstring const& needle) {
-  std::wstring h = haystack, n = needle;
-  std::transform(h.begin(), h.end(), h.begin(), towlower);
-  std::transform(n.begin(), n.end(), n.begin(), towlower);
-  return h.find(n) != std::wstring::npos;
-}
 std::atomic<bool> g_scheduled_low_priority_update = false;
 int debounceDelayMs = 300;
 winrt::event_token debounceToken{};
 void ApplySettings(HWND hTaskbarWnd);
 bool InitializeDebounce() {
   if (debounceTimer) return true;
-  g_already_requested_debounce_initializing=true;
+  g_already_requested_debounce_initializing = true;
   debounceTimer = DispatcherTimer();
   debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
@@ -2547,7 +2527,7 @@ bool InitializeDebounce() {
   return false;
 }
 void CleanupDebounce() {
-  g_already_requested_debounce_initializing=false;
+  g_already_requested_debounce_initializing = false;
   if (debounceTimer) {
     if (auto debounceHwnd = GetTaskbarWnd()) {
       RunFromWindowThread(
@@ -2555,7 +2535,7 @@ void CleanupDebounce() {
           [](void* pParam) {
             g_scheduled_low_priority_update = false;
             debounceTimer.Stop();
-            debounceTimer.Tick(debounceToken);  // remove handler
+            debounceTimer.Tick(debounceToken);
             debounceTimer = nullptr;
           },
           0);
@@ -2568,11 +2548,11 @@ void ApplySettingsDebounced(int delayMs) {
     Wh_Log(L"ApplySettingsDebounced aborted: could not find hTaskbarWnd");
     return;
   }
-if (!debounceTimer) {
-    if(!g_already_requested_debounce_initializing){
-        g_already_requested_debounce_initializing = true;
-        ApplySettingsFromTaskbarThread();
-        Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
+  if (!debounceTimer) {
+    if (!g_already_requested_debounce_initializing) {
+      g_already_requested_debounce_initializing = true;
+      ApplySettingsFromTaskbarThread();
+      Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
     }
     return;
   }
@@ -2597,6 +2577,22 @@ bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& e
   auto transform = element.TransformToVisual(nullptr);
   winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
   return rect.X < 0 || rect.Y < 0;
+}
+bool IsTaskbarWidgetsEnabled() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(hKey, L"TaskbarDa", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            return value == 1;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
 }
 using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
 StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
@@ -2658,7 +2654,7 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
   winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
 }
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {
-  if (!g_settings.userDefinedStyleTrayArea && g_trayIcons.empty()) return;
+  if (!g_settings.userDefinedStyleTrayArea) return;
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   int childCount = Media::VisualTreeHelper::GetChildrenCount(stackPanel);
   for (int i = 0; i < childCount; ++i) {
@@ -2687,19 +2683,6 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
       image.Width(g_settings.userDefinedTrayIconSize);
       image.Height(g_settings.userDefinedTrayIconSize);
     }
-    //    unsigned int targetImageSize = g_settings.userDefinedStyleTrayArea ? g_settings.userDefinedTrayIconSize : image.ActualWidth();
-    //    if (targetImageSize <= 1) {
-    //      continue;
-    //    }
-    //    auto currentIconAppName = notifyItemIcon.GetValue(winrt::Windows::UI::Xaml::Automation::AutomationProperties::NameProperty());
-    //    const std::wstring currentIconAppNameStr = winrt::unbox_value<winrt::hstring>(currentIconAppName).c_str();
-    //    if (currentIconAppNameStr.empty()) continue;
-    //    for (const auto& [iconName, iconPath] : g_trayIcons) {
-    //      if (RegexMatchInsensitive(currentIconAppNameStr, iconName)) {
-    //        SetImageFromFileAsync(imageCtrl, iconPath, targetImageSize, true);
-    //        break;
-    //      }
-    //    }
   }
 }
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount) {
@@ -2759,14 +2742,6 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
                 break;
               }
             }
-            //            if (auto imageControl = iconElementChild.try_as<winrt::Windows::UI::Xaml::Controls::Image>()) {
-            //              for (const auto& [iconName, iconPath] : g_taskbarIcons) {
-            //                if (RegexMatchInsensitive(currentIconAppNameStr, iconName)) {
-            //                  SetImageFromFileAsync(imageControl, iconPath, g_settings.userDefinedTaskbarButtonSize, false);
-            //                  break;
-            //                }
-            //              }
-            //            }
           }
         }
       }
@@ -2948,24 +2923,8 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorG, L"borderColorG");
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
 }
-bool IsTaskbarWidgetsEnabled() {
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        if (RegQueryValueExW(hKey, L"TaskbarDa", nullptr, nullptr,
-                             reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
-            RegCloseKey(hKey);
-            return value == 1;
-        }
-        RegCloseKey(hKey);
-    }
-    return false;
-}
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
-    if (!xamlRootContent) {
+  if (!xamlRootContent) {
     Wh_Log(L"xamlRootContent is null");
     return false;
   }
@@ -3041,9 +3000,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   bool widgetPresent = IsTaskbarWidgetsEnabled();
-  auto widgetElement = widgetPresent?FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton"):nullptr;
+  auto widgetElement = widgetPresent ? FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton") : nullptr;
   auto widgetMainView = widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
-  widgetPresent=widgetPresent && widgetMainView!=nullptr;
+  widgetPresent = widgetPresent && widgetMainView != nullptr;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
   if (widgetPresent && widgetElementWidth <= 0) {
     Wh_Log(L"Error: widgetPresent && widgetElementWidth<=0");
@@ -3143,10 +3102,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
   state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
   // 5 pixels tolerance
-  if (!invalidateLayoutRequested && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth &&
-      abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
-        Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d",
-        systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
+  if (!invalidateLayoutRequested && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
+    Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
   if (childrenWidthTaskbar < 1) {
@@ -3258,12 +3215,12 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: targetWidthRect<=0");
     return false;
   }
- int rightMostEdgeTray=static_cast<int>((rootWidth - targetWidth) / 2+targetWidth);
-      if (state.lastRightMostEdgeTray != rightMostEdgeTray) {
-        state.lastRightMostEdgeTray=rightMostEdgeTray;
-    Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(),  rightMostEdgeTray);
+  int rightMostEdgeTray = static_cast<int>((rootWidth - targetWidth) / 2 + targetWidth);
+  if (state.lastRightMostEdgeTray != rightMostEdgeTray) {
+    state.lastRightMostEdgeTray = rightMostEdgeTray;
+    Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), rightMostEdgeTray);
   }
-            state.lastLeftMostEdgeTray = rightMostEdgeTray-trayFrameWidth;
+  state.lastLeftMostEdgeTray = rightMostEdgeTray - trayFrameWidth;
   const auto targetHeightPrelim = (!g_settings.userDefinedFullWidthTaskbarBackground ? g_settings.userDefinedTaskbarHeight : xamlRootContent.ActualHeight());
   if (!g_unloading && targetHeightPrelim <= 0) {
     Wh_Log(L"Error: targetHeightPrelim<=0");
@@ -3296,10 +3253,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" +
-                                   userDefinedTaskbarBackgroundOpacity + L"\"/>",
-                               true);
+  SetElementPropertyFromString(
+      backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
+      L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>", true);
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
@@ -3310,8 +3266,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
         roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
         auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
-        borderGeometry.CornerRadius(
-            {g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f, g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f});
+        borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f, g_settings.userDefinedTaskbarCornerRadius - static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) / 2.0f});
         roundedRect.Size({!g_settings.userDefinedFullWidthTaskbarBackground ? state.lastTargetWidth : targetWidthRect, clipHeight});
         borderGeometry.Offset({static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f), static_cast<float>(g_settings.userDefinedTaskbarBorderThickness / 2.0f)});
         auto shapeVisualBorderControl = compositorTaskBackground.CreateShapeVisual();
@@ -3373,7 +3328,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.wasOverflowing = isOverflowing;
   state.lastTargetWidth = targetWidthRect;
   state.lastTargetWidth = targetWidth;
-  g_invalidateCustomIcons = false;
   return true;
 }
 void ApplySettings(HWND hTaskbarWnd) {
@@ -3387,7 +3341,6 @@ void RefreshSettings() {
 }
 void ResetGlobalVars() {
   g_invalidateDimensions = true;
-  g_invalidateCustomIcons = true;
   for (auto& [key, state] : g_taskbarStates) {
     state.lastTaskbarData.childrenCount = 0;
     state.lastTaskbarData.rightMostEdge = 0;
@@ -3419,25 +3372,24 @@ bool IsExplorer() {
 }
 using SetWindowPos_t = BOOL(WINAPI*)(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
 SetWindowPos_t SetWindowPos_Original = nullptr;
-std::wstring GetProcessExeName(DWORD processId)
-{
-    std::wstring result = L"<unknown>";
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (hProcess) {
-        WCHAR path[MAX_PATH];
-        DWORD size = ARRAYSIZE(path);
-        if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-            std::wstring fullPath = path;
-            size_t pos = fullPath.find_last_of(L"\\/");
-            result = (pos != std::wstring::npos) ? fullPath.substr(pos + 1) : fullPath;
-        }
-        CloseHandle(hProcess);
+std::wstring GetProcessExeName(DWORD processId) {
+  std::wstring result = L"<unknown>";
+  HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+  if (hProcess) {
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+      std::wstring fullPath = path;
+      size_t pos = fullPath.find_last_of(L"\\/");
+      result = (pos != std::wstring::npos) ? fullPath.substr(pos + 1) : fullPath;
     }
-    return result;
+    CloseHandle(hProcess);
+  }
+  return result;
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
   DWORD processId = 0;
-  if (g_unloading|| !Wh_GetIntSetting(L"MoveFlyoutWindows")|| !hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
+  if (g_unloading || !Wh_GetIntSetting(L"MoveFlyoutWindows") || !hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
   }
   WCHAR className[256] = L"<unknown>";
@@ -3456,11 +3408,11 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
     auto monitorName = GetMonitorName(monitor);
     int lastRecordedTrayRightMostEdgeForMonitor = Wh_GetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), -1);
     if (lastRecordedTrayRightMostEdgeForMonitor > 0) {
-              UINT monitorDpiX = 96;
-    UINT monitorDpiY = 96;
-    GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
-    float dpiScale = monitorDpiX / 96.0f;
-        X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor*dpiScale + (12 * dpiScale)- (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
+      UINT monitorDpiX = 96;
+      UINT monitorDpiY = 96;
+      GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+      float dpiScale = monitorDpiX / 96.0f;
+      X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale + (12 * dpiScale) - (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
       Wh_Log(L"[SetWindowPos] New X %d", X);
     } else {
       Wh_Log(L"[SetWindowPos] No reference state for monitor %s", monitorName.c_str());
@@ -3469,32 +3421,30 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 BOOL Wh_ModInit() {
-     HMODULE moduleUser32 = LoadLibraryW(L"user32.dll");
-    if (moduleUser32) {
-         auto pSetWindowPos = (SetWindowPos_t)GetProcAddress(moduleUser32, "SetWindowPos");
+  HMODULE moduleUser32 = LoadLibraryW(L"user32.dll");
+  if (moduleUser32) {
+    auto pSetWindowPos = (SetWindowPos_t)GetProcAddress(moduleUser32, "SetWindowPos");
     if (pSetWindowPos) {
-if (WindhawkUtils::Wh_SetFunctionHookT(pSetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original)) {
+      if (WindhawkUtils::Wh_SetFunctionHookT(pSetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original)) {
         Wh_Log(L"Successfully hooked SetWindowPos");
-    } else {
+      } else {
         Wh_Log(L"Failed to hook SetWindowPos");
+      }
+    } else {
+      Wh_Log(L"Failed to get address of SetWindowPos");
     }
-    }else{
-        Wh_Log(L"Failed to get address of SetWindowPos");
-    }
-        }else {
-                Wh_Log(L"Failed to load user32.dll");
-        }
+  } else {
+    Wh_Log(L"Failed to load user32.dll");
+  }
   if (!IsExplorer()) {
     g_PartialMode = true;
     Wh_Log(L"Not explorer.exe; setting g_PartialMode to true");
     HMODULE moduleStartDocked = GetModuleHandle(L"StartDocked.dll");
     if (moduleStartDocked) {
-      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"},
-                                            &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original,
-                                            StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
+      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
       return WindhawkUtils::HookSymbols(moduleStartDocked, hook, ARRAYSIZE(hook));
-  }
-return true;
+    }
+    return true;
   }
   g_unloading = false;
   if (!Wh_ModInitTBIconSize()) {
@@ -3515,11 +3465,6 @@ void Wh_ModAfterInit() {
   Wh_ModAfterInitTBIconSize();
   Wh_ModSettingsChanged();
   ApplySettingsDebounced(300);
-  //  const std::wstring customTaskbarIconsDir = Wh_GetStringSetting(L"CustomTaskbarIconsDir");
-  //  const std::wstring customTrayIconsDir = Wh_GetStringSetting(L"CustomTrayIconsDir");
-  // if (!customTaskbarIconsDir.empty() || !customTrayIconsDir.empty()) {
-  //   InitializeWatchers(customTaskbarIconsDir,customTrayIconsDir);
-  // }
 }
 void Wh_ModBeforeUninit() {
   if (g_PartialMode) {
