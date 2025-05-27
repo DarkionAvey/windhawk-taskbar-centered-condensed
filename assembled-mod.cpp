@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.161
+// @version         1.4.162
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -67,6 +67,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 24) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default is 16) | Non-negative integer |
 | `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off) | Boolean (true/false) |
+| `CustomizeTaskbarBackground` | Stylize the taskbar background | If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on) | Boolean (true/false) |
 | `TaskbarBackgroundOpacity` | Background opacity | Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100) | Non-negative integer |
 | `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0) | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
@@ -113,6 +114,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
   $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off)
+- CustomizeTaskbarBackground: true
+  $name: Stylize the taskbar background
+  $description: If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
   $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
@@ -257,6 +261,7 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int borderColorR, borderColorG, borderColorB;
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
+  bool userDefinedCustomizeTaskbarBackground;
 } g_settings;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
@@ -2813,6 +2818,8 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedStyleTrayArea = value != 0;
   value = Wh_GetIntSetting(L"AlignFlyoutInner");
   g_settings.userDefinedAlignFlyoutInner = value != 0;
+  value = Wh_GetIntSetting(L"CustomizeTaskbarBackground");
+  g_settings.userDefinedCustomizeTaskbarBackground = value != 0;
   value = Wh_GetIntSetting(L"TrayTaskGap");
   if (value < 0) value = 0;
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
@@ -3270,10 +3277,12 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
+  if(g_settings.userDefinedCustomizeTaskbarBackground){
+    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
                                L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
                                    L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
+  }
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();

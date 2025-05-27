@@ -95,6 +95,7 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int borderColorR, borderColorG, borderColorB;
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
+  bool userDefinedCustomizeTaskbarBackground;
 } g_settings;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();

@@ -43,6 +43,11 @@
   $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off)
   $type: bool
 
+- CustomizeTaskbarBackground: true
+  $name: Stylize the taskbar background
+  $description: If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
+  $type: bool
+
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
   $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)

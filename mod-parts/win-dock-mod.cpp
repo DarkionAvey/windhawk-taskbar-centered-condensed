@@ -246,6 +246,9 @@ void UpdateGlobalSettings() {
   value = Wh_GetIntSetting(L"AlignFlyoutInner");
   g_settings.userDefinedAlignFlyoutInner = value != 0;
 
+  value = Wh_GetIntSetting(L"CustomizeTaskbarBackground");
+  g_settings.userDefinedCustomizeTaskbarBackground = value != 0;
+
   value = Wh_GetIntSetting(L"TrayTaskGap");
   if (value < 0) value = 0;
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
@@ -805,10 +808,13 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
+  if(g_settings.userDefinedCustomizeTaskbarBackground){
+    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
                                L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
                                    L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
                                true);
+  }
+
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
   auto compositorTaskBackground = backgroundFillVisual.Compositor();

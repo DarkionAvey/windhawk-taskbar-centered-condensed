@@ -22,4 +22,5 @@ struct {
   unsigned int borderColorR, borderColorG, borderColorB;
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
+  bool userDefinedCustomizeTaskbarBackground;
 } g_settings;
