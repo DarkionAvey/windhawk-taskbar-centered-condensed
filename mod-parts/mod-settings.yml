@@ -113,9 +113,19 @@
   $description: Sets the size of tray buttons, which surround the icons (Default is 45)
   $type: unsigned int
 
-- MoveFlyoutWindows: true
-  $name: Move Flyout Windows with Taskbar
-  $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
+- MoveFlyoutStartMenu: true
+  $name: Move Start Menu with Taskbar
+  $description: Dynamically repositions the Start menu to align with taskbar size and location (Default is on).
+  $type: bool
+
+- MoveFlyoutControlCenter: true
+  $name: Move Control Center with Taskbar
+  $description: Dynamically repositions the Control Center to align with taskbar size and location (Default is on).
+  $type: bool
+
+- MoveFlyoutNotificationCenter: true
+  $name: Move Notification Center with Taskbar
+  $description: Dynamically repositions the Notification Center to align with taskbar size and location (Default is on).
   $type: bool
 
 - AlignFlyoutInner: true

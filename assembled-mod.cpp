@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.163
+// @version         1.4.169
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -81,7 +81,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
-| `MoveFlyoutWindows` | Move Flyout Windows with Taskbar | Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on). | Boolean (true/false) |
+| `MoveFlyoutStartMenu` | Move Start Menu with Taskbar | Dynamically repositions the Start menu to align with taskbar size and location (Default is on). | Boolean (true/false) |
+| `MoveFlyoutControlCenter` | Move Control Center with Taskbar | Dynamically repositions the Control Center to align with taskbar size and location (Default is on). | Boolean (true/false) |
+| `MoveFlyoutNotificationCenter` | Move Notification Center with Taskbar | Dynamically repositions the Notification Center to align with taskbar size and location (Default is on). | Boolean (true/false) |
 | `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). | Boolean (true/false) |
 */
 // ==/WindhawkModReadme==
@@ -156,9 +158,15 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TrayButtonSize: 45
   $name: Tray button size
   $description: Sets the size of tray buttons, which surround the icons (Default is 45)
-- MoveFlyoutWindows: true
-  $name: Move Flyout Windows with Taskbar
-  $description: Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on).
+- MoveFlyoutStartMenu: true
+  $name: Move Start Menu with Taskbar
+  $description: Dynamically repositions the Start menu to align with taskbar size and location (Default is on).
+- MoveFlyoutControlCenter: true
+  $name: Move Control Center with Taskbar
+  $description: Dynamically repositions the Control Center to align with taskbar size and location (Default is on).
+- MoveFlyoutNotificationCenter: true
+  $name: Move Notification Center with Taskbar
+  $description: Dynamically repositions the Notification Center to align with taskbar size and location (Default is on).
 - AlignFlyoutInner: true
   $name: Align flyout windows to the inside of the taskbar
   $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
@@ -1532,7 +1540,7 @@ using namespace winrt::Windows::UI::Xaml;
 struct {
     bool startMenuOnTheLeft;
     int startMenuWidth;
-} g_settings_startbuttonposition;
+;bool MoveFlyoutNotificationCenter=true;} g_settings_startbuttonposition;
 std::atomic<bool> g_taskbarViewDllLoadedStartButtonPosition;
 HWND g_startMenuWnd;
 int g_startMenuOriginalWidth;
@@ -2255,7 +2263,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
           return original();
         }
-        if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+        if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
           x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
           x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
         } else {
@@ -2276,7 +2284,8 @@ SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
 void LoadSettingsStartButtonPosition() {
-    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutWindows");
+    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");
+g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
     g_settings_startbuttonposition.startMenuWidth = 660;
 }
 BOOL Wh_ModInitStartButtonPosition() {
@@ -3416,7 +3425,7 @@ std::wstring GetProcessExeName(DWORD processId) {
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
   DWORD processId = 0;
-  bool userDefinedMoveFlyoutWindows = Wh_GetIntSetting(L"MoveFlyoutWindows");
+  bool userDefinedMoveFlyoutControlCenter = Wh_GetIntSetting(L"MoveFlyoutControlCenter");
   if (!hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
   }
@@ -3427,7 +3436,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   if (true) {
     Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X", processId, processFileName.c_str(), windowClassName.c_str(), hWnd, X, Y, cx, cy, uFlags);
   }
-  if (!g_unloading && userDefinedMoveFlyoutWindows && _wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
+  if (!g_unloading && userDefinedMoveFlyoutControlCenter && _wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),

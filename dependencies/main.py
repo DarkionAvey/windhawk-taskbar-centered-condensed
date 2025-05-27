@@ -176,6 +176,7 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"std::atomic<bool> g_taskbarViewDllLoaded;", "", content, flags=re.DOTALL)
         content = re.sub(r"std::atomic<bool> g_unloading;", "", content, flags=re.DOTALL)
         content = re.sub(r"typedef enum MONITOR_DPI_TYPE {.*?} MONITOR_DPI_TYPE;", "", content, flags=re.DOTALL)
+        content = re.sub(r"} g_settings_startbuttonposition;", ";bool MoveFlyoutNotificationCenter=true;} g_settings_startbuttonposition;", content, flags=re.DOTALL)
 
         content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
         content = re.sub(r" cx = cxNew;", " cx = g_lastStartButtonX;", content, flags=re.MULTILINE | re.DOTALL)
@@ -248,7 +249,7 @@ class StartButtonPosition(URLProcessor):
         if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
           return original();
         }
-        if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+        if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
           x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
           x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
         } else {
@@ -324,7 +325,9 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILI
         content = re.sub(r"bool HookTaskbarViewDllSymbolsStartButtonPosition\(HMODULE module\) \{", fr"""{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_methods.cpp"))}
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {{""", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = re.sub(r"Wh_GetIntSetting\(L\"startMenuOnTheLeft\"\);", "Wh_GetIntSetting(L\"MoveFlyoutWindows\");", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"Wh_GetIntSetting\(L\"startMenuOnTheLeft\"\);", """Wh_GetIntSetting(L\"MoveFlyoutStartMenu\");
+g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
+""", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuWidth\"\);", "660;", content, flags=re.MULTILINE | re.DOTALL)
 
         content = "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\nfloat g_lastStartButtonX=0.0f;\n" + content

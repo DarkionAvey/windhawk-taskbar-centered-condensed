@@ -30,7 +30,7 @@ using namespace winrt::Windows::UI::Xaml;
 struct {
     bool startMenuOnTheLeft;
     int startMenuWidth;
-} g_settings_startbuttonposition;
+;bool MoveFlyoutNotificationCenter=true;} g_settings_startbuttonposition;
 std::atomic<bool> g_taskbarViewDllLoadedStartButtonPosition;
 HWND g_startMenuWnd;
 int g_startMenuOriginalWidth;
@@ -753,7 +753,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
         if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
           return original();
         }
-        if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+        if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
           x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
           x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
         } else {
@@ -774,7 +774,8 @@ SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
 void LoadSettingsStartButtonPosition() {
-    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutWindows");
+    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");
+g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
     g_settings_startbuttonposition.startMenuWidth = 660;
 }
 BOOL Wh_ModInitStartButtonPosition() {
