@@ -85,4 +85,4 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
 | `MoveFlyoutWindows` | Move Flyout Windows with Taskbar | Dynamically repositions the Start menu and Notification Center to align with the taskbar size and location (Default is on). | Boolean (true/false) |
-| `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). |  |
+| `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). | Boolean (true/false) |

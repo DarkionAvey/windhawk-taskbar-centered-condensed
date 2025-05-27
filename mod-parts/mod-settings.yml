@@ -121,3 +121,4 @@
 - AlignFlyoutInner: true
   $name: Align flyout windows to the inside of the taskbar
   $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
+  $type: bool
