@@ -161,6 +161,7 @@ def main(major_minor="1.4"):
 
     merged_contents = re.sub(r'[ \t]*\n', '\n', merged_contents)  # remove whitespace-only lines
     merged_contents = re.sub(r'\n+', '\n', merged_contents).strip()
+    merged_contents = merged_contents.replace("LoadLibrary(L", "GetModuleHandle(L")
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)
 

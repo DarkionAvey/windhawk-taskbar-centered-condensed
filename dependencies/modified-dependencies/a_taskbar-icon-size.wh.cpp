@@ -50,7 +50,7 @@ typedef enum MONITOR_DPI_TYPE {
     MDT_RAW_DPI = 2,
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
-struct TaskbarState {
+        struct TaskbarState {
   std::chrono::steady_clock::time_point lastApplyStyleTime{};
   struct Data {
     int childrenCount;
@@ -71,7 +71,7 @@ struct TaskbarState {
   int lastRightMostEdgeTray{0};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
-struct {
+        struct {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
   unsigned int userDefinedTaskbarOffsetY;
@@ -96,7 +96,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
 } g_settings;
-void ApplySettingsDebounced(int delayMs);
+        void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
 int g_lastRecordedStartMenuWidth=670;
@@ -108,7 +108,7 @@ bool IsStartMenuOrbLeftAligned() {
     DWORD size = sizeof(value);
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+                     LR"(Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced)",
                       0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         if (RegQueryValueExW(hKey, L"TaskbarAl", nullptr, nullptr,
                              reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
@@ -119,19 +119,19 @@ bool IsStartMenuOrbLeftAligned() {
     }
     return false;
 }
-std::wstring GetMonitorName(HMONITOR monitor) {
-    MONITORINFOEX monitorInfo = {};
-    monitorInfo.cbSize = sizeof(MONITORINFOEX);
-    if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
-        return std::wstring(monitorInfo.szDevice);
-    }
-    return L"default";
-}
-std::wstring GetMonitorName(HWND hwnd) {
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    return GetMonitorName(monitor);
-}
-STDAPI GetDpiForMonitor(HMONITOR hmonitor,
+        std::wstring GetMonitorName(HMONITOR monitor) {
+            MONITORINFOEX monitorInfo = {};
+            monitorInfo.cbSize = sizeof(MONITORINFOEX);
+            if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
+                return std::wstring(monitorInfo.szDevice);
+            }
+            return L"default";
+        }
+        std::wstring GetMonitorName(HWND hwnd) {
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            return GetMonitorName(monitor);
+        }
+        STDAPI GetDpiForMonitor(HMONITOR hmonitor,
                         MONITOR_DPI_TYPE dpiType,
                         UINT* dpiX,
                         UINT* dpiY);

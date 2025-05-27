@@ -45,7 +45,7 @@ void ApplySettingsDebounced(int delayMs) {
   if (!debounceTimer) {
     if (!g_already_requested_debounce_initializing) {
       g_already_requested_debounce_initializing = true;
-      ApplySettingsFromTaskbarThread();
+      ApplySettings(hTaskbarWnd);
       Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
     }
     return;

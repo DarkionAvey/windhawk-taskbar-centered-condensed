@@ -11,7 +11,7 @@ bool IsStartMenuOrbLeftAligned() {
     DWORD size = sizeof(value);
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                     LR"(Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced)",
                       0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         if (RegQueryValueExW(hKey, L"TaskbarAl", nullptr, nullptr,
                              reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {

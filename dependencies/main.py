@@ -110,24 +110,31 @@ class TaskbarIconSizeMod(URLProcessor):
         content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content, flags=re.DOTALL)
         content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")', content, flags=re.DOTALL)
 
-        content = re.sub(r'STDAPI GetDpiForMonitor',
-                         read_file(os.path.join(mod_parts_dir, "taskbar-states.cpp")) + "\n" +
-                         read_file(os.path.join(mod_parts_dir, "g_settings.cpp")) + "\n" +
-                         read_file(os.path.join(mod_parts_dir, "top-level-variables.cpp")) + "\n" +
-                         """
-std::wstring GetMonitorName(HMONITOR monitor) {
-    MONITORINFOEX monitorInfo = {};
-    monitorInfo.cbSize = sizeof(MONITORINFOEX);
-    if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
-        return std::wstring(monitorInfo.szDevice);
-    }
-    return L"default";
-}
-std::wstring GetMonitorName(HWND hwnd) {
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    return GetMonitorName(monitor);
-}        
-STDAPI GetDpiForMonitor""", content, flags=re.DOTALL | re.MULTILINE)
+        cpp_code = f"""
+        {read_file(os.path.join(mod_parts_dir, "taskbar-states.cpp"))}
+        {read_file(os.path.join(mod_parts_dir, "g_settings.cpp"))}
+        {read_file(os.path.join(mod_parts_dir, "top-level-variables.cpp"))}
+
+        std::wstring GetMonitorName(HMONITOR monitor) {{
+            MONITORINFOEX monitorInfo = {{}};
+            monitorInfo.cbSize = sizeof(MONITORINFOEX);
+            if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {{
+                return std::wstring(monitorInfo.szDevice);
+            }}
+            return L"default";
+        }}
+        std::wstring GetMonitorName(HWND hwnd) {{
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            return GetMonitorName(monitor);
+        }}        
+        STDAPI GetDpiForMonitor"""
+
+        content = re.sub(
+            r'STDAPI GetDpiForMonitor',
+            lambda _: cpp_code,
+            content,
+            flags=re.DOTALL | re.MULTILINE
+        )
 
         content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);', ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));', content, flags=re.DOTALL)
         content = re.sub(r'return g_settings_tbiconsize\.iconSize;', 'return g_settings_tbiconsize.iconSize ;', content, flags=re.DOTALL)
