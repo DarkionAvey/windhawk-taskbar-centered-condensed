@@ -32,7 +32,7 @@ void ApplySettingsFromTaskbarThreadIfRequired() {
   }
 }
 
-void SetDividerForElement(FrameworkElement const& element, float const& panelHeight, bool dividerVisible) {
+void SetDividerForElement(FrameworkElement const& element, float const& panelHeight, bool dividerVisible, bool dividerShouldBeOnLeft = g_settings.userDefinedDividerLeftAligned) {
   if (!element) return;
 
   if (panelHeight <= 0.0f) return;
@@ -46,15 +46,22 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
   if (!shapeVisual) return;
   dividerVisible = dividerVisible && !g_unloading;
   if (dividerVisible) {
-    auto borderThicknessFloat = static_cast<float>(g_settings.userDefinedTaskbarBorderThickness) * 2.0f;
-    shapeVisual.Size({borderThicknessFloat, panelHeight});
-    shapeVisual.Offset({0.0f, 0.0f, 0.0f});
     auto lineGeometry = compositor.CreateLineGeometry();
     if (!lineGeometry) return;
-    lineGeometry.Start({0.0f, 0.0f});
-    lineGeometry.End({0.0f, panelHeight});
     auto lineShape = compositor.CreateSpriteShape(lineGeometry);
     if (!lineShape) return;
+
+    float borderThicknessFloat = static_cast<float>(g_settings.userDefinedAppsDividerThickness) * 2.0f;
+    float scaledHeight = panelHeight * g_settings.userDefinedAppsDividerVerticalScale;
+    float yOffset = (panelHeight - scaledHeight) * 0.5f;
+    auto size = visual.Size();
+    float xOffset = (dividerShouldBeOnLeft) ? 0.0f : (size.x - borderThicknessFloat / 2.0f);
+    shapeVisual.Size({borderThicknessFloat, scaledHeight});
+    shapeVisual.Offset({xOffset, yOffset, 0.0f});
+
+    lineGeometry.Start({0.0f, 0.0f});
+    lineGeometry.End({0.0f, scaledHeight});
+
     winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
     auto strokeBrush = compositor.CreateColorBrush(borderColor);
     if (!strokeBrush) return;
@@ -111,6 +118,26 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
       image.Height(g_settings.userDefinedTrayIconSize);
     }
   }
+}
+void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
+  using namespace winrt::Windows::UI::Xaml::Hosting;
+  using namespace winrt::Windows::Foundation::Numerics;
+
+  element.Opacity(g_unloading ? 1 : static_cast<float>(g_settings.userDefinedTaskbarBorderOpacity / 255.0f));
+  element.Width(g_settings.userDefinedAppsDividerThickness * 0.99);
+
+  auto compositor = ElementCompositionPreview::GetElementVisual(element).Compositor();
+  auto visual = ElementCompositionPreview::GetElementVisual(element);
+
+  visual.Scale({1.0f, g_unloading ? 1.0f : g_settings.userDefinedAppsDividerVerticalScale, 1.0f});
+  visual.Offset({visual.Offset().x, g_unloading ? 1.0f : (g_settings.userDefinedTaskbarHeight - (g_settings.userDefinedAppsDividerVerticalScale * g_settings.userDefinedTaskbarHeight)) / 2.0f, 0.0f});
+
+  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  if (!hex || *hex == L'\0') hex = L"#ffffff";
+  if (*hex == L'#') ++hex;
+
+  std::wstring fillBrush = L"<SolidColorBrush Color=\"#" + std::wstring(hex) + L"\"/>";
+  SetElementPropertyFromString(element, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", fillBrush.c_str(), true);
 }
 
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount) {
@@ -187,9 +214,18 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
         ExperienceToggleButtonRootPanelElement.Margin(Thickness{0, 0, 0, 0});
       }
       continue;
+    } else if (className == L"Taskbar.OverflowToggleButton") {  // overflow button
+      if (auto OverflowToggleButtonRootPanel = FindChildByName(child, L"OverflowToggleButtonRootPanel")) {
+        if (auto RightOverflowButtonDivider = FindChildByName(OverflowToggleButtonRootPanel, L"RightOverflowButtonDivider")) {
+          StyleNativeDividerElement(RightOverflowButtonDivider);
+        }
+      }
     }
-
     if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
+      if (auto mostRecentlyUsedDivider = FindChildByName(iconPanelElement, L"MostRecentlyUsedDivider")) {
+        StyleNativeDividerElement(mostRecentlyUsedDivider);
+      }
+
       if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
         if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
           if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
@@ -216,132 +252,76 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
 }
 
 void UpdateGlobalSettings() {
-  int value;
+  auto getInt = [&](PCWSTR key) { return Wh_GetIntSetting(key); };
+  auto clamp = [](int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; };
 
-  value = Wh_GetIntSetting(L"FlatTaskbarBottomCorners");
-  if (value == 0)
-    g_settings.userDefinedFlatTaskbarBottomCorners = false;
-  else
-    g_settings.userDefinedFlatTaskbarBottomCorners = true;
+  // Booleans
+  g_settings.userDefinedFlatTaskbarBottomCorners = (getInt(L"FlatTaskbarBottomCorners") != 0);
+  g_settings.userDefinedFullWidthTaskbarBackground = (getInt(L"FullWidthTaskbarBackground") != 0) || g_unloading;
+  if (g_settings.userDefinedFullWidthTaskbarBackground) g_settings.userDefinedFlatTaskbarBottomCorners = true;
 
-  value = Wh_GetIntSetting(L"FullWidthTaskbarBackground");
-  if (value == 0 && !g_unloading)
-    g_settings.userDefinedFullWidthTaskbarBackground = false;
-  else
-    g_settings.userDefinedFullWidthTaskbarBackground = true;
+  g_settings.userDefinedIgnoreShowDesktopButton = (getInt(L"IgnoreShowDesktopButton") != 0);
+  g_settings.userDefinedTrayAreaDivider = (getInt(L"TrayAreaDivider") != 0) && !g_unloading;
+  g_settings.userDefinedStyleTrayArea = (getInt(L"StyleTrayArea") != 0);
+  g_settings.userDefinedAlignFlyoutInner = (getInt(L"AlignFlyoutInner") != 0);
+  g_settings.userDefinedCustomizeTaskbarBackground = (getInt(L"CustomizeTaskbarBackground") != 0);
 
-  if (g_settings.userDefinedFullWidthTaskbarBackground) {
-    g_settings.userDefinedFlatTaskbarBottomCorners = true;
-  }
+  g_settings.userDefinedDividerLeftAligned = (_wcsicmp(Wh_GetStringSetting(L"AppsDividerAlignment"),L"left")==0);
 
-  value = Wh_GetIntSetting(L"IgnoreShowDesktopButton");
-  g_settings.userDefinedIgnoreShowDesktopButton = value != 0;
 
-  value = Wh_GetIntSetting(L"TrayAreaDivider");
-  g_settings.userDefinedTrayAreaDivider = value != 0 && !g_unloading;
 
-  value = Wh_GetIntSetting(L"StyleTrayArea");
-  g_settings.userDefinedStyleTrayArea = value != 0;
+  // Gaps & Padding (non-negative)
+  g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : std::max(0, getInt(L"TrayTaskGap"));
+  g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : std::max(0, getInt(L"TaskbarBackgroundHorizontalPadding"));
 
-  value = Wh_GetIntSetting(L"AlignFlyoutInner");
-  g_settings.userDefinedAlignFlyoutInner = value != 0;
+  // Offset Y (negative up, zero if flat or unloading)
+  int offsetY = abs(getInt(L"TaskbarOffsetY"));
+  g_settings.userDefinedTaskbarOffsetY = (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners) ? 0 : -offsetY;
 
-  value = Wh_GetIntSetting(L"CustomizeTaskbarBackground");
-  g_settings.userDefinedCustomizeTaskbarBackground = value != 0;
+  // Height & Sizes
+  int h = clamp(abs(getInt(L"TaskbarHeight")), 44, 200);
+  g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : h;
+  g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : std::max(24, getInt(L"TaskbarIconSize"));
+  g_settings.userDefinedTrayIconSize = std::max(30, getInt(L"TrayIconSize"));
+  g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : std::max(44, getInt(L"TaskbarButtonSize"));
+  g_settings.userDefinedTrayButtonSize = std::max(45, getInt(L"TrayButtonSize"));
 
-  value = Wh_GetIntSetting(L"TrayTaskGap");
-  if (value < 0) value = 0;
-  g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : value;
+  // Corner radii
+  float tcr = float(fmax(0.0f, getInt(L"TaskbarCornerRadius")));
+  tcr = fmin(tcr, g_settings.userDefinedTaskbarHeight / 2.0f);
+  g_settings.userDefinedTaskbarCornerRadius = g_unloading ? 0.0f : tcr;
 
-  value = Wh_GetIntSetting(L"TaskbarBackgroundHorizontalPadding");
-  if (value < 0) value = 0;
-  g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : value;
+  int btnCr = clamp(abs(getInt(L"TaskButtonCornerRadius")), 0, g_settings.userDefinedTaskbarHeight / 2);
+  g_settings.userDefinedTaskButtonCornerRadius = g_unloading ? 0 : btnCr;
 
-  value = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (value < 0) value = 0;
-  g_settings.userDefinedTaskbarOffsetY = -1 * abs(value);
+  // Opacities & tints (0–100)
+  int bgOp = clamp(abs(getInt(L"TaskbarBackgroundOpacity")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundOpacity = bgOp;
 
-  if (g_settings.userDefinedFlatTaskbarBottomCorners || g_unloading) {
-    g_settings.userDefinedTaskbarOffsetY = 0;
-  }
+  g_settings.userDefinedTaskbarBackgroundTint = clamp(abs(getInt(L"TaskbarBackgroundTint")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundLuminosity = clamp(abs(getInt(L"TaskbarBackgroundLuminosity")), 0, 100);
 
-  value = Wh_GetIntSetting(L"TaskbarHeight");
-  value = abs(value);
-  if (value > 200) value = 200;
-  if (value < 44) value = 44;
-  g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : value;
+  // Border opacity: 0–255
+  int bOp = clamp(abs(getInt(L"TaskbarBorderOpacity")), 0, 100);
+  g_settings.userDefinedTaskbarBorderOpacity = uint8_t(round(bOp * 2.55f));
 
-  value = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (value <= 24) value = 24;
-  g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : value;
+  // Border thickness: 0.0–10.0 (10% of [0–100])
+  g_settings.userDefinedTaskbarBorderThickness = g_unloading ? 0.0f : (clamp(abs(getInt(L"TaskbarBorderThickness")), 0, 100) * 0.1f);
+  g_settings.userDefinedAppsDividerThickness = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerThickness")), 0, 100) * 0.1f);
+  g_settings.userDefinedAppsDividerVerticalScale = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerVerticalScale")), 0, 100) / 100.0f);
 
-  value = Wh_GetIntSetting(L"TrayIconSize");
-  if (value <= 30) value = 30;
-  g_settings.userDefinedTrayIconSize = value;
 
-  value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 44) value = 44;
-  g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : value;
-
-  value = Wh_GetIntSetting(L"TrayButtonSize");
-  if (value <= 0) value = 45;
-  g_settings.userDefinedTrayButtonSize = value;
-
-  value = Wh_GetIntSetting(L"TaskbarCornerRadius");
-  if (value <= 0) value = 0;
-  g_settings.userDefinedTaskbarCornerRadius = g_unloading ? 0.0f : static_cast<float>(abs(value));
-  if (g_settings.userDefinedTaskbarCornerRadius > g_settings.userDefinedTaskbarHeight / 2.0f) g_settings.userDefinedTaskbarCornerRadius = g_settings.userDefinedTaskbarHeight / 2.0f;
-
-  value = Wh_GetIntSetting(L"TaskButtonCornerRadius");
-  if (value <= 0) value = 0;
-  value = abs(value);
-  if (value > (int)(g_settings.userDefinedTaskbarHeight / 2)) value = g_settings.userDefinedTaskbarHeight / 2;
-  g_settings.userDefinedTaskButtonCornerRadius = g_unloading ? 0 : value;
-
-  value = Wh_GetIntSetting(L"TaskbarBackgroundOpacity");
-  value = abs(value);
-  if (value < 0)
-    value = 0;
-  else if (value > 100)
-    value = 100;
-  g_settings.userDefinedTaskbarBackgroundOpacity = value >= 0 ? value : 100;
-  value = Wh_GetIntSetting(L"TaskbarBackgroundTint");
-  value = abs(value);
-  if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBackgroundTint = value;
-
-  value = Wh_GetIntSetting(L"TaskbarBackgroundLuminosity");
-  value = abs(value);
-  if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBackgroundLuminosity = value >= 0 ? value : 30;
-  value = Wh_GetIntSetting(L"TaskbarBorderOpacity");
-  value = abs(value);
-  if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBorderOpacity = static_cast<uint8_t>(value * 2.55f);
-  if (g_settings.userDefinedTaskbarBorderOpacity > 255) g_settings.userDefinedTaskbarBorderOpacity = 255;
-
-  value = Wh_GetIntSetting(L"TaskbarBorderThickness");
-  value = abs(value);
-  if (value < 0) value = 0;
-  if (value > 100) value = 100;
-  g_settings.userDefinedTaskbarBorderThickness = g_unloading ? 0 : ((10.0 / 100.0) * value);
-
-  PCWSTR userDefinedTaskbarBorderHexColorString = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-  if (!userDefinedTaskbarBorderHexColorString || wcslen(userDefinedTaskbarBorderHexColorString) == 0) {
-    userDefinedTaskbarBorderHexColorString = L"#ffffff";
-  }
-  PCWSTR hexStr = userDefinedTaskbarBorderHexColorString;
-  if (*hexStr == L'#') {
-    hexStr++;
-  }
+  // Border color
+  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  if (!hex || *hex == L'\0') hex = L"#ffffff";
+  if (*hex == L'#') ++hex;
   unsigned int r = 255, g = 255, b = 255;
-  if (swscanf_s(hexStr, L"%02x%02x%02x", &r, &g, &b) != 3) {
-    r = g = b = 255;
-  }
+  if (swscanf_s(hex, L"%02x%02x%02x", &r, &g, &b) != 3) r = g = b = 255;
   g_settings.borderColorR = r;
   g_settings.borderColorG = g;
   g_settings.borderColorB = b;
 
+  // String list
   g_settings.userDefinedDividedAppNames = SplitAndTrim(Wh_GetStringSetting(L"DividedAppNames"));
 }
 bool HasInvalidSettings() {
@@ -784,13 +764,13 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   ProcessStackPanelChildren(stackPanel, clipHeight);
   auto trayOverflowArrowNotifyIconStack = FindChildByName(systemTrayFrameGrid, L"NotifyIconStack");
   if (trayOverflowArrowNotifyIconStack) {
-    SetDividerForElement(trayOverflowArrowNotifyIconStack, clipHeight, g_settings.userDefinedTrayAreaDivider);
+    SetDividerForElement(trayOverflowArrowNotifyIconStack, clipHeight, g_settings.userDefinedTrayAreaDivider, true);
   } else {
-    SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider);
+    SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider, true);
   }
 
   if (widgetPresent && widgetElementInnerChild) {
-    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider);
+    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
   }
 
   if (!taskbarBackground) return false;
@@ -808,11 +788,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
   auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  if(g_settings.userDefinedCustomizeTaskbarBackground){
+  if (g_settings.userDefinedCustomizeTaskbarBackground) {
     SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                               L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
-                                   L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
-                               true);
+                                 L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
+                                     L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
+                                 true);
   }
 
   // you can also try SystemAccentColor

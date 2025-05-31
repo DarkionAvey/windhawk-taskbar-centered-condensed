@@ -23,4 +23,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
+  double userDefinedAppsDividerThickness;
+  float userDefinedAppsDividerVerticalScale{0.7};
+  bool userDefinedDividerLeftAligned=false;
 } g_settings;

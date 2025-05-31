@@ -1,18 +1,3 @@
-- TrayTaskGap: 20
-  $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default is 20)
-  $type: unsigned int
-
-- TaskbarBackgroundHorizontalPadding: 6
-  $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 6)
-  $type: unsigned int
-
-- TaskbarOffsetY: 6
-  $name: Taskbar vertical offset
-  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
-  $type: unsigned int
-
 - TaskbarHeight: 78
   $name: Taskbar height
   $description: Sets the height of the taskbar (Default is 78)
@@ -27,6 +12,31 @@
   $name: Taskbar button size
   $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
   $type: unsigned int
+
+- TaskbarOffsetY: 6
+  $name: Taskbar vertical offset
+  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
+  $type: unsigned int
+
+- TrayTaskGap: 20
+  $name: Tray task gap
+  $description: Adjusts the space between the task area and the tray area (Default is 20)
+  $type: unsigned int
+
+- TaskbarBackgroundHorizontalPadding: 6
+  $name: Taskbar background horizontal padding
+  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 6)
+  $type: unsigned int
+
+- FullWidthTaskbarBackground: false
+  $name: Full-width taskbar background
+  $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
+  $type: bool
+
+- IgnoreShowDesktopButton: false
+  $name: Ignore "Show Desktop" button
+  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
+  $type: bool
 
 - TaskbarCornerRadius: 24
   $name: Taskbar corner radius
@@ -74,24 +84,30 @@
   $type: string hex color
 
 - TaskbarBorderThickness: 8
-  $name: Taskbar border thickness scale
+  $name: Taskbar border thickness scale (%)
   $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 8)
-  $type: unsigned int
+  $type: unsigned int percentage
+
+- AppsDividerThickness: 8
+  $name: Apps divider thickness scale (%)
+  $description: Adjusts the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
+  $type: unsigned int percentage
+
+- AppsDividerVerticalScale: 40
+  $name: Apps divider vertical scale (%)
+  $description: Adjusts the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
+  $type: unsigned int percentage
+
+- AppsDividerAlignment: ""
+  $name: On which side should the app dividers be shown
+  $options:
+  - left: Left side
+  - right: Right side
 
 - DividedAppNames: ""
   $name: App names for divider placement
   $description: Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive.
   $type: string regex
-
-- FullWidthTaskbarBackground: false
-  $name: Full-width taskbar background
-  $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
-  $type: bool
-
-- IgnoreShowDesktopButton: false
-  $name: Ignore "Show Desktop" button
-  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
-  $type: bool
 
 - TrayAreaDivider: true
   $name: Tray area divider

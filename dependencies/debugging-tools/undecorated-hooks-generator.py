@@ -16,8 +16,8 @@ dll_to_hook = "ControlCenter.dll"
 exe_to_hook = "ShellHost.exe"
 
 input_block = r"""
-	Line  4260: [00081960] private: static __int64 __cdecl winrt::ControlCenter::ControlCenterApplication::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)
-	Line  4261: [00081A20] private: __int64 __cdecl winrt::ControlCenter::ControlCenterApplication::OnWindowMessage(struct HWND__ *,unsigned int,unsigned __int64,__int64)
+[0079B4B8] private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateRunningIndicatorSize(void)
+
 """
 
 
