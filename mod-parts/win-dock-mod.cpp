@@ -72,7 +72,55 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
   }
   winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
 }
+void ChangeControlCenterIconSize(FrameworkElement const& systemTrayFrameGrid) {
+  if (!g_settings.userDefinedStyleTrayArea) return;
 
+  if (auto ControlCenterButton = FindChildByName(systemTrayFrameGrid, L"ControlCenterButton")) {
+    if (auto innerGrid = FindChildByClassName(ControlCenterButton, L"Windows.UI.Xaml.Controls.Grid")) {
+      if (auto ContentPresenter = FindChildByName(innerGrid, L"ContentPresenter")) {
+        if (auto innerItemPresenter = FindChildByClassName(ContentPresenter, L"Windows.UI.Xaml.Controls.ItemsPresenter")) {
+          if (auto innerStackPanel = FindChildByClassName(innerItemPresenter, L"Windows.UI.Xaml.Controls.StackPanel")) {
+            auto userDefinedTrayIconSizeStr = std::to_wstring(g_settings.userDefinedTrayIconSize);
+
+            int childCount = Media::VisualTreeHelper::GetChildrenCount(innerStackPanel);
+            for (int i = 0; i < childCount; ++i) {
+              auto child = Media::VisualTreeHelper::GetChild(innerStackPanel, i).try_as<FrameworkElement>();
+              if (!child) continue;
+              auto SystemTrayIcon = FindChildByName(child, L"SystemTrayIcon");
+              if (!SystemTrayIcon) continue;
+              auto ContainerGrid = FindChildByName(SystemTrayIcon, L"ContainerGrid");
+              if (!ContainerGrid) continue;
+              auto ContentGrid = FindChildByName(ContainerGrid, L"ContentGrid");
+              if (!ContentGrid) continue;
+              auto TextIconContent = FindChildByClassName(ContentGrid, L"SystemTray.TextIconContent");
+              if (!TextIconContent) continue;
+              auto ContainerGridInner = FindChildByName(TextIconContent, L"ContainerGrid");
+              if (!ContainerGridInner) continue;
+
+              if (auto Layer = FindChildByName(ContainerGridInner, L"Underlay")) {
+                if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
+                  SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
+                }
+              }
+
+              if (auto Layer = FindChildByName(ContainerGridInner, L"Base")) {
+                if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
+                  SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
+                }
+              }
+
+              if (auto Layer = FindChildByName(ContainerGridInner, L"AccentOverlay")) {
+                if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
+                  SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {
   if (!g_settings.userDefinedStyleTrayArea) return;
 
@@ -282,10 +330,9 @@ void UpdateGlobalSettings() {
   int h = clamp(abs(getInt(L"TaskbarHeight")), 44, 200);
   g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : h;
   g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : std::max(24, getInt(L"TaskbarIconSize"));
-  g_settings.userDefinedTrayIconSize = std::max(30, getInt(L"TrayIconSize"));
+  g_settings.userDefinedTrayIconSize = std::max(15, getInt(L"TrayIconSize"));
   g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : std::max(44, getInt(L"TaskbarButtonSize"));
-  g_settings.userDefinedTrayButtonSize = std::max(45, getInt(L"TrayButtonSize"));
-
+  g_settings.userDefinedTrayButtonSize = std::max(20, getInt(L"TrayButtonSize"));
   // Corner radii
   float tcr = float(fmax(0.0f, getInt(L"TaskbarCornerRadius")));
   tcr = fmin(tcr, g_settings.userDefinedTaskbarHeight / 2.0f);
@@ -402,8 +449,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.lastApplyStyleTime = now;
 
   if (!xamlRootContent) return false;
-  bool invalidateLayoutRequested = g_invalidateDimensions;
-  g_invalidateDimensions = false;
+
 
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
   if (!taskFrame) {
@@ -607,7 +653,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
   state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
   // 5 pixels tolerance
-  if (!invalidateLayoutRequested && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
+  if (!g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
     Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
@@ -639,7 +685,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
   }
-  if (invalidateLayoutRequested) {
+  if (g_invalidateDimensions) {
+    g_invalidateDimensions=false;
     if (g_settings.userDefinedTaskbarHeight <= 0) {
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
@@ -762,6 +809,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   ProcessStackPanelChildren(stackPanel, clipHeight);
+  ChangeControlCenterIconSize(systemTrayFrameGrid);
   auto trayOverflowArrowNotifyIconStack = FindChildByName(systemTrayFrameGrid, L"NotifyIconStack");
   if (trayOverflowArrowNotifyIconStack) {
     SetDividerForElement(trayOverflowArrowNotifyIconStack, clipHeight, g_settings.userDefinedTrayAreaDivider, true);

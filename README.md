@@ -62,7 +62,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
 | `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 78) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 48) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 44) | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default is 74) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
 | `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default is 20) | Non-negative integer |
@@ -85,8 +85,8 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
 | `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on) | Boolean (true/false) |
 | `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
-| `TrayIconSize` | Tray icon size | Defines the width and height of tray icons (Default is 30) | Non-negative integer |
-| `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons (Default is 45) | Non-negative integer |
+| `TrayIconSize` | Tray icon size | Defines the width and height of tray icons. Minimum is 15. (Default is 15) | Non-negative integer |
+| `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons. Minimum is 20. (Default is 30) | Non-negative integer |
 | `MoveFlyoutStartMenu` | Move Start Menu with Taskbar | Dynamically repositions the Start menu to align with taskbar size and location (Default is on). | Boolean (true/false) |
 | `MoveFlyoutControlCenter` | Move Control Center with Taskbar | Dynamically repositions the Control Center to align with taskbar size and location (Default is on). | Boolean (true/false) |
 | `MoveFlyoutNotificationCenter` | Move Notification Center with Taskbar | Dynamically repositions the Notification Center to align with taskbar size and location (Default is on). | Boolean (true/false) |

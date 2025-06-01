@@ -3,9 +3,9 @@
   $description: Sets the height of the taskbar (Default is 78)
   $type: unsigned int
 
-- TaskbarIconSize: 48
+- TaskbarIconSize: 44
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 48)
+  $description: Defines the width and height of taskbar icons (Default is 44)
   $type: unsigned int
 
 - TaskbarButtonSize: 74
@@ -119,14 +119,14 @@
   $description: If enabled, the options for tray icon size will take effect (Default is off)
   $type: bool
 
-- TrayIconSize: 30
+- TrayIconSize: 15
   $name: Tray icon size
-  $description: Defines the width and height of tray icons (Default is 30)
+  $description: Defines the width and height of tray icons. Minimum is 15. (Default is 15)
   $type: unsigned int
 
-- TrayButtonSize: 45
+- TrayButtonSize: 30
   $name: Tray button size
-  $description: Sets the size of tray buttons, which surround the icons (Default is 45)
+  $description: Sets the size of tray buttons, which surround the icons. Minimum is 20. (Default is 30)
   $type: unsigned int
 
 - MoveFlyoutStartMenu: true
