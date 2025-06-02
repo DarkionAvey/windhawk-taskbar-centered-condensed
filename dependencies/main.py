@@ -246,7 +246,7 @@ class StartButtonPosition(URLProcessor):
 
     } else if (target == Target::ShellExperienceHost) {
         int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
-        if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
+        if (y != 0) {
           return original();
         }
         if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {

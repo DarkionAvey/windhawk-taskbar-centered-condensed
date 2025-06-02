@@ -403,25 +403,19 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) 
   }
   return ret;
 }
-// namespace ImmersiveIcons {  struct IconData2; }
-// using ImmersiveIcons_CreateIconBitmap_WithArgs_t = long(WINAPI*)(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8);
-// ImmersiveIcons_CreateIconBitmap_WithArgs_t ImmersiveIcons_CreateIconBitmap_WithArgs_Original;
-// long WINAPI ImmersiveIcons_CreateIconBitmap_WithArgs_Hook(void* pThis, tagSIZE param1, tagSIZE param2, tagSIZE param3, unsigned long param4, bool param5, ImmersiveIcons::IconData2 const & param6, bool param7, HBITMAP__ * * param8) {
-//     Wh_Log(L"Method called: ImmersiveIcons_CreateIconBitmap | param1: %ldx%ld, param2: %ldx%ld, param3: %ldx%ld", param1.cx, param1.cy, param2.cx, param2.cy, param3.cx, param3.cy);
-// tagSIZE newParam1 = { param2.cx*5, param2.cy *5 };
-//     tagSIZE newParam2 = { param1.cx*5, param1.cy*5 };
-//     return ImmersiveIcons_CreateIconBitmap_WithArgs_Original(
-//         pThis,
-//         newParam1,
-//         newParam2,
-//         param3,
-//         param4,
-//         param5,
-//         param6,
-//         param7,
-//         param8
-//     );
-// }
+#include <windowsx.h>
+using CTaskListWnd_ComputeJumpViewPosition_t = HRESULT(WINAPI*)(void* pThis, void* taskBtnGroup, int param2, winrt::Windows::Foundation::Point* point, HorizontalAlignment* horizontalAlignment, VerticalAlignment* verticalAlignment);
+CTaskListWnd_ComputeJumpViewPosition_t CTaskListWnd_ComputeJumpViewPosition_Original;
+HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(void* pThis, void* taskBtnGroup, int param2, winrt::Windows::Foundation::Point* point, HorizontalAlignment* horizontalAlignment, VerticalAlignment* verticalAlignment) {
+  HRESULT ret = CTaskListWnd_ComputeJumpViewPosition_Original(pThis, taskBtnGroup, param2, point, horizontalAlignment, verticalAlignment);
+  DWORD messagePos = GetMessagePos();
+  POINT pt{
+      GET_X_LPARAM(messagePos),
+      GET_Y_LPARAM(messagePos),
+  };
+  point->X = pt.x;
+  return ret;
+}
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -501,9 +495,11 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &ITaskbarSettings_get_Alignment_Original,
         ITaskbarSettings_get_Alignment_Hook,
     },
-    //     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
-    //                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
-    //                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
+    {
+        {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+        &CTaskListWnd_ComputeJumpViewPosition_Original,
+        CTaskListWnd_ComputeJumpViewPosition_Hook,
+    },
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -719,7 +715,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
       }
     } else if (target == Target::ShellExperienceHost) {
         int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
-        if (lastRecordedTrayRightMostEdgeForMonitor < 1 || (x + (cx / 2.0)) < ((taskbarState.lastLeftMostEdgeTray * dpiScale))) {
+        if (y != 0) {
           return original();
         }
         if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {

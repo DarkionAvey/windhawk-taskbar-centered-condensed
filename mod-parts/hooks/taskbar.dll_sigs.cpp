@@ -80,7 +80,8 @@
         &ITaskbarSettings_get_Alignment_Original,
         ITaskbarSettings_get_Alignment_Hook,
     },
-
-    //     { {LR"(long __cdecl ImmersiveIcons::CreateIconBitmap(struct tagSIZE,struct tagSIZE,struct tagSIZE,unsigned long,bool,struct ImmersiveIcons::IconData2 const &,bool,struct HBITMAP__ * *))"},
-    //                                         &ImmersiveIcons_CreateIconBitmap_WithArgs_Original,
-    //                                         ImmersiveIcons_CreateIconBitmap_WithArgs_Hook } ,
+    {
+        {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+        &CTaskListWnd_ComputeJumpViewPosition_Original,
+        CTaskListWnd_ComputeJumpViewPosition_Hook,
+    },
