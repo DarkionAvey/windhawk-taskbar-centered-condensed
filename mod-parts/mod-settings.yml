@@ -1,11 +1,11 @@
-- TaskbarHeight: 78
+- TaskbarHeight: 74
   $name: Taskbar height
-  $description: Sets the height of the taskbar (Default is 78)
+  $description: Sets the height of the taskbar (Default is 74)
   $type: unsigned int
 
-- TaskbarIconSize: 44
+- TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 44)
+  $description: Defines the width and height of taskbar icons (Default is 42)
   $type: unsigned int
 
 - TaskbarButtonSize: 74
@@ -18,14 +18,14 @@
   $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
   $type: unsigned int
 
-- TrayTaskGap: 20
+- TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default is 20)
+  $description: Adjusts the space between the task area and the tray area (Default is 10)
   $type: unsigned int
 
-- TaskbarBackgroundHorizontalPadding: 6
+- TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 6)
+  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 2)
   $type: unsigned int
 
 - FullWidthTaskbarBackground: false
@@ -38,9 +38,9 @@
   $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
   $type: bool
 
-- TaskbarCornerRadius: 24
+- TaskbarCornerRadius: 22
   $name: Taskbar corner radius
-  $description: Controls how rounded the taskbar corners appear (Default is 24)
+  $description: Controls how rounded the taskbar corners appear (Default is 22)
   $type: unsigned int
 
 - TaskButtonCornerRadius: 16

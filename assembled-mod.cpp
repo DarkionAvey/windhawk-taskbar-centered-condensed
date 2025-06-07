@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.190
+// @version         1.4.191
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -58,15 +58,15 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 # Options
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
-| `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 78) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 44) | Non-negative integer |
+| `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 74) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 42) | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default is 74) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
-| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default is 20) | Non-negative integer |
-| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default is 6) | Non-negative integer |
+| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default is 10) | Non-negative integer |
+| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default is 2) | Non-negative integer |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default is off) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default is off) | Boolean (true/false) |
-| `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 24) | Non-negative integer |
+| `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 22) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default is 16) | Non-negative integer |
 | `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off) | Boolean (true/false) |
 | `CustomizeTaskbarBackground` | Stylize the taskbar background | If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on) | Boolean (true/false) |
@@ -92,33 +92,33 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- TaskbarHeight: 78
+- TaskbarHeight: 74
   $name: Taskbar height
-  $description: Sets the height of the taskbar (Default is 78)
-- TaskbarIconSize: 44
+  $description: Sets the height of the taskbar (Default is 74)
+- TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 44)
+  $description: Defines the width and height of taskbar icons (Default is 42)
 - TaskbarButtonSize: 74
   $name: Taskbar button size
   $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
   $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
-- TrayTaskGap: 20
+- TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default is 20)
-- TaskbarBackgroundHorizontalPadding: 6
+  $description: Adjusts the space between the task area and the tray area (Default is 10)
+- TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 6)
+  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 2)
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
   $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
 - IgnoreShowDesktopButton: false
   $name: Ignore "Show Desktop" button
   $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
-- TaskbarCornerRadius: 24
+- TaskbarCornerRadius: 22
   $name: Taskbar corner radius
-  $description: Controls how rounded the taskbar corners appear (Default is 24)
+  $description: Controls how rounded the taskbar corners appear (Default is 22)
 - TaskButtonCornerRadius: 16
   $name: Task button corner radius
   $description: Controls how rounded the corners of individual task buttons are (Default is 16)
@@ -3347,8 +3347,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisualBorderControl);
         if (!g_settings.userDefinedFullWidthTaskbarBackground) {
           float offsetXRect = (rootWidth - targetWidth) / 2;
-          float yOffsetAdjustment=(g_settings.userDefinedTaskbarHeight-g_settings.userDefinedTaskbarButtonSize)/4.0f;
-          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY))+yOffsetAdjustment : 0.0f;
+          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
           // size animation
           auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
           sizeAnimationRect.InsertKeyFrame(0.0f, {(std::abs(state.lastTargetWidth - rootWidth) <= 5 ? targetWidthRect : state.lastTargetWidth), clipHeight});

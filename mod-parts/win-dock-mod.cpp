@@ -902,8 +902,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
 
         if (!g_settings.userDefinedFullWidthTaskbarBackground) {
           float offsetXRect = (rootWidth - targetWidth) / 2;
-          float yOffsetAdjustment=(g_settings.userDefinedTaskbarHeight-g_settings.userDefinedTaskbarButtonSize)/4.0f;
-          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY))+yOffsetAdjustment : 0.0f;
+          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
           // size animation
 
           auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
