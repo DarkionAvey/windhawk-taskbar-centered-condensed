@@ -103,7 +103,7 @@ ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
   HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
   if (SUCCEEDED(ret)) {
-    *alignment = 1;
+    *alignment = 0;
   }
   return ret;
 }

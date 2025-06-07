@@ -12,11 +12,17 @@ import re
 # 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
 #
 # """
-dll_to_hook = "ControlCenter.dll"
-exe_to_hook = "ShellHost.exe"
+dll_to_hook = "Taskbar.View.dll"
+exe_to_hook = "explorer.exe"
 
 input_block = r"""
-[0079B4B8] private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateRunningIndicatorSize(void)
+	Line 11331: [001208A4] public: bool __cdecl TaskbarHost::IsOverflowFlyoutShowing(void)const 
+	Line 11675: [00126498] public: bool __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel::IsOverflowFlyoutFocused(void)
+	Line 11676: [001264B4] public: bool __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel::IsOverflowFlyoutShowing(void)
+	Line 12730: [001397D0] public: virtual bool __cdecl CTaskListWndMulti::IsOverflowFlyoutFocused(void)
+	Line 12731: [00139800] public: virtual int __cdecl CTaskListWndMulti::IsOverflowFlyoutVisible(void)
+	Line 13742: [00158290] public: virtual bool __cdecl CTaskListWnd::IsOverflowFlyoutFocused(void)
+	Line 13743: [00158360] public: virtual int __cdecl CTaskListWnd::IsOverflowFlyoutVisible(void)
 
 """
 
