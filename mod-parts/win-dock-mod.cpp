@@ -199,8 +199,7 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
         Wh_FreeStringSetting(originalHex);
     }
 }
-
-double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount) {
+double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount, TaskbarState& state) {
   if (!element) return 0.0;
   const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
@@ -214,7 +213,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
       Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentative);
       continue;
     }
-    auto transform = child.TransformToVisual(nullptr);
+    auto transform = child.TransformToVisual(element);
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
     if (rect.X < 0 || rect.Y < 0) {
@@ -239,9 +238,10 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
       if (innerElementChild) {
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       }
-    }
-    // todo: check this
-    if (className == L"Taskbar.TaskListButton") {
+    } else if( className == L"Taskbar.ExperienceToggleButton" ){
+state.lastStartButtonXActual=rect.X-rect.Width;
+    } else if (className == L"Taskbar.TaskListButton") {
+
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListLabeledButtonPanel");
       if (innerElementChild) {
         auto iconElementChild = FindChildByName(innerElementChild, L"Icon");
@@ -588,9 +588,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"root width is too small");
     return false;
   }
-
+  // todo: short circuit early if position didnt change
+  float lastStartButtonXActualForState=state.lastStartButtonXActual;
   int childrenCountTaskbar = 0;
-  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar);
+  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
 
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
     Wh_Log(L"Error: childrenWidthTaskbarDbl <= 0");
@@ -627,7 +628,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
 
   int childrenCountTray = 0;
-  double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray);
+  double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray, state);
 
   if (!g_unloading && trayFrameWidthDbl <= 0) {
     Wh_Log(L"Error: trayFrameWidthDbl <= 0");
@@ -680,7 +681,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
 
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
-  state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
+
   // 5 pixels tolerance
   if (!g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
     Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
@@ -738,14 +739,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     taskbarFrameRepeater.MaxWidth(rootWidth);
   }
 
-  auto taskbarFrameRepeaterVisualCompositor = taskbarFrameRepeaterVisual.Compositor();
-  if (taskbarFrameRepeaterVisualCompositor) {
+  if (auto taskbarFrameRepeaterVisualCompositor = taskbarFrameRepeaterVisual.Compositor()) {
     if (!g_unloading) {
-      auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisualCompositor.CreateVector3KeyFrameAnimation();
-      auto animationControllerTaskbarFrameRepeaterVisual = taskbarFrameRepeaterVisual.TryGetAnimationController(L"Offset");
-
-      taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
-      taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
+      targetTaskFrameOffsetX = state.lastStartButtonXCalculated - state.lastStartButtonXActual + g_settings.userDefinedTaskbarBackgroundHorizontalPadding;
+      taskbarFrameRepeaterVisual.Offset({targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
     } else {
       taskbarFrameRepeaterVisual.Offset({0.0f, 0.0f, 0.0f});
     }

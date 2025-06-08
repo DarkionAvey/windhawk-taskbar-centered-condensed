@@ -65,6 +65,7 @@ typedef enum MONITOR_DPI_TYPE {
   float initOffsetX{-1};
   bool wasOverflowing{false};
   float lastStartButtonXCalculated=0.0f;
+  float lastStartButtonXActual=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
   float lastLeftMostEdgeTray{0};

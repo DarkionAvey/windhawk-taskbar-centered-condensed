@@ -685,7 +685,7 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
      Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
            taskbarState.lastLeftMostEdgeTray,
-          lastStartButtonXCalculated,
+          taskbarState.lastStartButtonXCalculated,
           taskbarState.lastRootWidth,
           cx,
           x,
