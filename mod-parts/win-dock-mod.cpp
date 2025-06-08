@@ -9,10 +9,9 @@ void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void*
   }
 }
 
-bool g_invalidateDimensions = true;
 std::atomic<int64_t> g_update_flag_set_time_ms = 0;
-int64_t NowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-
+int64_t NowMs() {
+return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 void ResetFlagAfterDelay() {
   std::this_thread::sleep_for(std::chrono::milliseconds(1400));
   int64_t now = NowMs();
@@ -218,7 +217,7 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount)
     auto transform = child.TransformToVisual(nullptr);
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
-    if (rect.Y < 0) {
+    if (rect.X < 0 || rect.Y < 0) {
       continue;
     }
     auto className = winrt::get_class_name(child);
@@ -597,8 +596,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: childrenWidthTaskbarDbl <= 0");
     return false;
   }
+  signed int rightMostEdgeTaskbar = static_cast<signed int>((rootWidth / 2.0) + (childrenWidthTaskbarDbl / 2.0));
   unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl);
-  signed int rightMostEdgeTaskbar = childrenWidthTaskbar+10;
 
   if (!g_unloading && childrenCountTaskbar < 1) {
     Wh_Log(L"Error: childrenCountTaskbar < 1");
@@ -707,7 +706,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: targetWidth<1");
     return false;
   }
-  state.lastStartButtonX = (rootWidth - targetWidth) / 2.0f;
+  state.lastStartButtonXCalculated = (rootWidth - targetWidth) / 2.0f;
 
   auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY < 0 ? (userDefinedTaskbarOffsetY * 2) : 0));
 

@@ -1,3 +1,4 @@
+import random
 import re
 
 # This file generates a Windhawk mod to monitor method calls.
@@ -5,31 +6,53 @@ import re
 # and it will generate the mod. Useful for tracking method execution
 # and identifying potential hooks.
 # input_block = r"""
-# Line 168: 	Line 13333: [00149450] public: virtual int __cdecl CTaskListThumbnailWnd::GetMargins(struct tagRECT *)const
-# 	Line 173: 	Line 13338: [001497F0] public: virtual int __cdecl CTaskListThumbnailWnd::GetThumbBarRectFromIndex(int,struct tagRECT *)const
-# 	Line 177: 	Line 13342: [00149930] public: virtual int __cdecl CTaskListThumbnailWnd::GetWindowLocation(struct tagRECT *)const
-# 		Line  46: 	Line  2187: [0003F848] private: float __cdecl CTaskListThumbnailWnd::_CalcThumbnailScale(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,struct tagRECT const *,int,int,unsigned char,int *,int *,struct tagSIZE *)const
-# 	Line  51: 	Line  2193: [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
+#  	 [00149450] public: virtual int __cdecl CTaskListThumbnailWnd::GetMargins(struct tagRECT *)const
+# 	 	 [001497F0] public: virtual int __cdecl CTaskListThumbnailWnd::GetThumbBarRectFromIndex(int,struct tagRECT *)const
+# 	 	 [00149930] public: virtual int __cdecl CTaskListThumbnailWnd::GetWindowLocation(struct tagRECT *)const
+# 		 	 [0003F848] private: float __cdecl CTaskListThumbnailWnd::_CalcThumbnailScale(class CDPA<struct ITaskThumbnail,class CTContainer_PolicyUnOwned<struct ITaskThumbnail> > const *,struct tagRECT const *,int,int,unsigned char,int *,int *,struct tagSIZE *)const
+# 	 	 [000403A0] public: virtual int __cdecl CTaskListThumbnailWnd::TryGetThumbShareRegionRectFromIndex(int,struct tagRECT *)const
 #
 # """
 dll_to_hook = "Taskbar.View.dll"
 exe_to_hook = "explorer.exe"
 
 input_block = r"""
-	Line 11331: [001208A4] public: bool __cdecl TaskbarHost::IsOverflowFlyoutShowing(void)const 
-	Line 11675: [00126498] public: bool __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel::IsOverflowFlyoutFocused(void)
-	Line 11676: [001264B4] public: bool __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskbarModel::IsOverflowFlyoutShowing(void)
-	Line 12730: [001397D0] public: virtual bool __cdecl CTaskListWndMulti::IsOverflowFlyoutFocused(void)
-	Line 12731: [00139800] public: virtual int __cdecl CTaskListWndMulti::IsOverflowFlyoutVisible(void)
-	Line 13742: [00158290] public: virtual bool __cdecl CTaskListWnd::IsOverflowFlyoutFocused(void)
-	Line 13743: [00158360] public: virtual int __cdecl CTaskListWnd::IsOverflowFlyoutVisible(void)
+	Line   7363: [00046974] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::StartActivity(unsigned __int64)
+	Line   7367: [00046D70] protected: virtual void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::StopActivity(void)
+	Line   7368: [0004705C] public: __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::~ViewCoordinator_ShouldTaskbarBeExpanded(void)
+	Line  15135: [001A29CC] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShouldTaskbarBeExpanded_HasOpenPopups<unsigned __int64 &>(unsigned __int64 &)
+	Line  16616: [001D75A4] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShouldTaskbarBeExpanded_TaskbarExpandable<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  21454: [00262D5C] static  wil::details::lambda_call<`winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded'::`2'::<lambda_1> >::~lambda_call<`winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded'::`2'::<lambda_1> >()
+	Line  28279: [00303234] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IsEdgeGestureActive<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  28280: [003032AC] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IsTaskbarForeground<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  36779: [0032D510] protected: virtual bool __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::WasAlreadyReportedToTelemetry(long)
+	Line  60884: [007F3B08] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ExtendedUIVisible<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60885: [007F3B80] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IgnoreForeground<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60886: [007F3BF8] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IsDragging<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60888: [007F3CC8] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IsPointerOverTaskbarFrame<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60889: [007F3D40] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::IsShellViewDismissedViaTaskbarTap<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60890: [007F3DB8] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::OverflowFlyoutVisible<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60891: [007F3E30] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShellViewVisible<__int64,unsigned __int64 &>(__int64 &&,unsigned __int64 &)
+	Line  60892: [007F3EA8] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShellViewVisibleCurrentState<__int64,unsigned __int64 &>(__int64 &&,unsigned __int64 &)
+	Line  60893: [007F3F20] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShellViewVisibleIgnored<__int64,unsigned __int64 &>(__int64 &&,unsigned __int64 &)
+	Line  60894: [007F3F98] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::ShellViewVisibleIgnoredBecauseOfException<__int64,__int64,unsigned __int64 &>(__int64 &&,__int64 &&,unsigned __int64 &)
+	Line  60897: [007F419C] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::TaskbarHasFocus<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60898: [007F4214] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::TaskbarShouldStayExpandedDocked<bool,unsigned __int64 &>(bool &&,unsigned __int64 &)
+	Line  60944: [007F57E4] public: void __cdecl TaskbarTelemetry::ViewCoordinator_ShouldTaskbarBeExpanded::InitializeShellViewCoordinators(void)
+	Line  60963: [007F669C] public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool)
+
+
+
+
+
+
 
 """
 
 
-# Line  59797: [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
+#  [007D7F74] public: static void __cdecl TaskbarTelemetry::StartItemPressedScaleAnimation(bool const &)
 
-def remove_duplicate_lines(block):
+def _duplicate_lines(block):
     lines = block.strip().splitlines()
     seen = set()
     unique_lines = []
@@ -42,16 +65,16 @@ def remove_duplicate_lines(block):
     return "\n".join(unique_lines)
 
 
-def remove_static(string: str):
+def _static(string: str):
     return string.replace("static ", "").replace("void* pThis, ", "").replace("pThis, ", "")
 
 
 def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     input_block = re.sub(string=input_block, pattern=r"\s+Line\s+\d+\:\s", repl="\n", flags=re.MULTILINE | re.DOTALL)
-    input_block = remove_duplicate_lines(input_block)
+    input_block = _duplicate_lines(input_block)
     pattern = re.compile(
         r'\[\w+\]\s+'
-        r'(?P<access>public:|private:|protected:|remove:)?\s+'
+        r'(?P<access>public:|private:|protected:|:)?\s+'
         r'(?P<virtual>virtual\s+)?'
         r'(?P<return_type>[\w\s\*\d\_\:]+?)\s+'
         r'__cdecl\s+'
@@ -61,7 +84,6 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
     )
     hook_prefix = "HookFunction"
     hook_defs = []
-    hook_array_entries = []
     hook_methods = []
     hook_names = []
 
@@ -70,6 +92,13 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
         if not line:
             continue
 
+        brackets = re.search(r'<.*>', line)
+        extracted_brackets = ""
+        line_original = line
+        if brackets:
+            extracted = brackets.group(0)
+            line = line.replace(extracted, '').strip()
+            extracted_brackets = extracted  #  outer < and >
         m = pattern.match(line)
         if not m:
             print(f"\033[91mUnable to parse line: {line}\033[0m")
@@ -103,9 +132,10 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
 
         base_name = f"{class_name}_{method_name}"
         base_name = base_name.replace("::", "__")
-        hook_base = base_name + suffix
+        rand_hex = ''.join(random.choices('0123456789', k=6))
+        hook_base = base_name + "_" + rand_hex + "_" + suffix
 
-        ret_type_for_using = ret_type if not is_static else remove_static(ret_type)
+        ret_type_for_using = ret_type if not is_static else _static(ret_type)
 
         typedef_line = f"using {hook_base}_t = {ret_type_for_using}(WINAPI*)({', '.join(param_list)});"
         original_decl = f"{hook_base}_t {hook_base}_Original;"
@@ -114,7 +144,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
         log_name = base_name
 
         if "static" in ret_type:
-            params_str = remove_static(params_str)
+            params_str = _static(params_str)
 
         if ret_type == "void":
             hook_func = (
@@ -131,18 +161,10 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
             }}"""
             )
 
-        hook_entry = (
-            f'    {{ {{LR"({line[line.find(access):].strip()}{virtual_keyword})"}},\n'
-            f'      &{hook_base}_Original,\n'
-            f'      {hook_base}_Hook,\n'
-            f'    }}'
-        )
-
         hook_defs.append(typedef_line)
         hook_defs.append(original_decl)
         hook_defs.append(hook_func)
         hook_defs.append("")
-        hook_array_entries.append(hook_entry)
 
         method_name_str = hook_base
         hook_names.append(method_name_str)
@@ -154,7 +176,7 @@ def generate_hook_code(input_block, output_filename="generated_hooks.cpp"):
             f"        Wh_Log(L\"Failed to load {dll_to_hook} for {method_name_str}\");\n"
             f"        return false;\n"
             f"    }}\n\n"
-            f"    WindhawkUtils::SYMBOL_HOOK hook[] = {{ {{ {{LR\"({line[line.find(access):].strip()})\"}},\n"
+            f"    WindhawkUtils::SYMBOL_HOOK hook[] = {{ {{ {{LR\"({line_original[line_original.find(access):].strip()})\"}},\n"
             f"                                         &{hook_base}_Original,\n"
             f"                                         {hook_base}_Hook }} }};\n\n"
             f"    return WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook));\n"
@@ -283,7 +305,7 @@ This mod prints the names of functions being called.
     init_function.append("void Wh_ModSettingsChanged() {}")
     output_lines.extend(init_function)
 
-    output_lines = [x.replace("remove: ", "").replace("Remove::", "").replace("Remove_", "") for x in output_lines]
+    # output_lines = [x.replace(": ", "").replace("::", "").replace("_", "") for x in output_lines]
 
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("\n".join(output_lines))

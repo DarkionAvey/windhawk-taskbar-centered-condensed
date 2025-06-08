@@ -85,3 +85,4 @@
         &CTaskListWnd_ComputeJumpViewPosition_Original,
         CTaskListWnd_ComputeJumpViewPosition_Hook,
     },
+    {{LR"(public: void __cdecl TrayUI::_OnDPIChanged(void))"}, &TrayUI__OnDPIChanged_WithoutArgs_Original, TrayUI__OnDPIChanged_WithoutArgs_Hook},

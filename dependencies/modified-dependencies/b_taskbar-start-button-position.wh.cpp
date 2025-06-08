@@ -14,7 +14,6 @@
 bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);
 bool InitializeDebounce();
 DispatcherTimer debounceTimer{nullptr};
-float g_lastStartButtonX=0.0f;
 #include <windhawk_utils.h>
 #include <atomic>
 #include <functional>
@@ -398,8 +397,9 @@ using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alig
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
   HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+  Wh_Log(L"Method called: ITaskbarSettings_get_Alignment_Hook alignment: %d", *alignment);
   if (SUCCEEDED(ret)) {
-    *alignment = 0;
+    *alignment = 1;
   }
   return ret;
 }
@@ -416,6 +416,12 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(void* pThis, void* task
   point->X = pt.x;
   return ret;
 }
+using TrayUI__OnDPIChanged_WithoutArgs_t = void(WINAPI*)(void* pThis);
+TrayUI__OnDPIChanged_WithoutArgs_t TrayUI__OnDPIChanged_WithoutArgs_Original;
+void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
+               TrayUI__OnDPIChanged_WithoutArgs_Original(pThis);
+               g_invalidateDimensions = true;
+            }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -500,6 +506,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         &CTaskListWnd_ComputeJumpViewPosition_Original,
         CTaskListWnd_ComputeJumpViewPosition_Hook,
     },
+    {{LR"(public: void __cdecl TrayUI::_OnDPIChanged(void))"}, &TrayUI__OnDPIChanged_WithoutArgs_Original, TrayUI__OnDPIChanged_WithoutArgs_Hook},
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -673,27 +680,29 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
     int cx = targetRect.right - targetRect.left;
     int cy = targetRect.bottom - targetRect.top;
     float dpiScale = monitorDpiX / 96.0f;
-    float absStartX = taskbarState.lastStartButtonX * dpiScale;
+    float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
-    Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-       taskbarState.lastLeftMostEdgeTray,
-      taskbarState.lastStartButtonX,
-      taskbarState.lastRootWidth,
-      cx,
-      x,
-      target,
-      taskbarState.lastTargetWidth,
-      absStartX,
-      absRootWidth,
-      absTargetWidth);
+     Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+           taskbarState.lastLeftMostEdgeTray,
+          lastStartButtonXCalculated,
+          taskbarState.lastRootWidth,
+          cx,
+          x,
+          cy,
+          y,
+          target,
+          taskbarState.lastTargetWidth,
+          absStartX,
+          absRootWidth,
+          absTargetWidth);
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
         x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
-        x = std::max(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
@@ -725,16 +734,19 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
           x = static_cast<int>(absRootWidth - cx);
         }
     }
-    Wh_Log(L"Recalc: g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-      taskbarState.lastStartButtonX,
-      taskbarState.lastRootWidth,
-      cx,
-      x,
-      target,
-      taskbarState.lastTargetWidth,
-      absStartX,
-      absRootWidth,
-      absTargetWidth);
+     Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+               taskbarState.lastLeftMostEdgeTray,
+              taskbarState.lastStartButtonXCalculated,
+              taskbarState.lastRootWidth,
+              cx,
+              x,
+              cy,
+              y,
+              target,
+              taskbarState.lastTargetWidth,
+              absStartX,
+              absRootWidth,
+              absTargetWidth);
 SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }

@@ -102,9 +102,12 @@ using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alig
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
   HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+  Wh_Log(L"Method called: ITaskbarSettings_get_Alignment_Hook alignment: %d", *alignment);
+
   if (SUCCEEDED(ret)) {
-    *alignment = 0;
+    *alignment = 1;
   }
+
   return ret;
 }
 #include <windowsx.h>
@@ -120,3 +123,10 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(void* pThis, void* task
   point->X = pt.x;
   return ret;
 }
+
+using TrayUI__OnDPIChanged_WithoutArgs_t = void(WINAPI*)(void* pThis);
+TrayUI__OnDPIChanged_WithoutArgs_t TrayUI__OnDPIChanged_WithoutArgs_Original;
+void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
+               TrayUI__OnDPIChanged_WithoutArgs_Original(pThis);
+               g_invalidateDimensions = true;
+            }

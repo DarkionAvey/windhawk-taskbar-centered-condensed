@@ -179,7 +179,6 @@ class StartButtonPosition(URLProcessor):
         content = re.sub(r"} g_settings_startbuttonposition;", ";bool MoveFlyoutNotificationCenter=true;} g_settings_startbuttonposition;", content, flags=re.DOTALL)
 
         content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook", "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
-        content = re.sub(r" cx = cxNew;", " cx = g_lastStartButtonX;", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"std::wstring processFileName = GetProcessFileName\(processId\);",
                          "TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);\nstd::wstring processFileName = GetProcessFileName(processId);\nWh_Log(L\"process: %s, windowClassName: %s\",processFileName.c_str(),windowClassName.c_str());", content,
                          flags=re.MULTILINE | re.DOTALL)
@@ -200,21 +199,23 @@ class StartButtonPosition(URLProcessor):
 
         content = re.sub(r"if \(target == Target::StartMenu\).*?\}\s+SetWindowPos", """
     float dpiScale = monitorDpiX / 96.0f;
-    float absStartX = taskbarState.lastStartButtonX * dpiScale;
+    float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
     float absRootWidth = taskbarState.lastRootWidth * dpiScale;
     float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
     
-    Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-       taskbarState.lastLeftMostEdgeTray,
-      taskbarState.lastStartButtonX,
-      taskbarState.lastRootWidth,
-      cx,
-      x,
-      target,
-      taskbarState.lastTargetWidth,
-      absStartX,
-      absRootWidth,
-      absTargetWidth);
+     Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+           taskbarState.lastLeftMostEdgeTray,
+          taskbarState.lastStartButtonXCalculated,
+          taskbarState.lastRootWidth,
+          cx,
+          x,
+          cy, 
+          y,
+          target,
+          taskbarState.lastTargetWidth,
+          absStartX,
+          absRootWidth,
+          absTargetWidth);
       
     if (target == Target::StartMenu) {
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
@@ -222,7 +223,7 @@ class StartButtonPosition(URLProcessor):
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
         x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
-        x = std::max(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
+        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
       } else {
         if (g_startMenuOriginalWidth) {
           cx = g_startMenuOriginalWidth;
@@ -257,17 +258,19 @@ class StartButtonPosition(URLProcessor):
         }
     }
     
-    Wh_Log(L"Recalc: g_lastStartButtonX: %f g_lastRootWidth %f cx: %d, x:%d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-      taskbarState.lastStartButtonX,
-      taskbarState.lastRootWidth, 
-      cx, 
-      x, 
-      target,
-      taskbarState.lastTargetWidth, 
-      absStartX, 
-      absRootWidth, 
-      absTargetWidth);
-
+     Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
+               taskbarState.lastLeftMostEdgeTray,
+              taskbarState.lastStartButtonXCalculated,
+              taskbarState.lastRootWidth,
+              cx,
+              x,
+              cy,
+              y,
+              target,
+              taskbarState.lastTargetWidth,
+              absStartX,
+              absRootWidth,
+              absTargetWidth);
 SetWindowPos""", content, flags=re.MULTILINE | re.DOTALL)
 
         content = re.sub(r"HWND GetTaskbarWnd\(\).*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
@@ -330,7 +333,7 @@ g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L
 """, content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"Wh_GetIntSetting\(L\"startMenuWidth\"\);", "660;", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\nfloat g_lastStartButtonX=0.0f;\n" + content
+        content = "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n\n" + content
         return content
 
 

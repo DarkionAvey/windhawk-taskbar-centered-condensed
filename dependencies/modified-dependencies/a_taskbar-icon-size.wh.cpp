@@ -64,7 +64,7 @@ typedef enum MONITOR_DPI_TYPE {
   float lastTargetOffsetY{0};
   float initOffsetX{-1};
   bool wasOverflowing{false};
-  float lastStartButtonX=0.0f;
+  float lastStartButtonXCalculated=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
   float lastLeftMostEdgeTray{0};
@@ -103,6 +103,7 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+bool g_invalidateDimensions =true;
 int g_lastRecordedStartMenuWidth=670;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);

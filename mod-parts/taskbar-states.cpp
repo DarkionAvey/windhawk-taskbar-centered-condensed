@@ -12,7 +12,7 @@ struct TaskbarState {
   float lastTargetOffsetY{0};
   float initOffsetX{-1};
   bool wasOverflowing{false};
-  float lastStartButtonX=0.0f;
+  float lastStartButtonXCalculated=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
   float lastLeftMostEdgeTray{0};
