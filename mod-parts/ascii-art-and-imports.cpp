@@ -55,6 +55,6 @@
 #include <thread>
 #include <windows.h>
 #include <psapi.h>
-
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 using namespace winrt::Windows::UI::Xaml;
 

@@ -74,7 +74,6 @@ class URLProcessor(ABC):
         content = self.download()
         content = content.strip()
         content = re.sub(r"//\s+==WindhawkMod==.*?WindhawkModSettings==\s+(?=#include)", "", content, flags=re.DOTALL)
-
         content = re.sub("g_settings", "g_settings_" + self.name.lower(), content, flags=re.DOTALL)
         content = re.sub(r'Wh_Log\(L\">\"\);', r'', content, flags=re.DOTALL)
         content = re.sub(r"LoadSettings\(\)", r"LoadSettings" + self.name + "()", content, flags=re.DOTALL)
@@ -86,9 +85,9 @@ class URLProcessor(ABC):
         content = re.sub(r"Wh_ModUninit\(\)", r"Wh_ModUninit" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"Wh_ModSettingsChanged\(\)", r"Wh_ModSettingsChanged" + self.name + "()", content, flags=re.DOTALL)
         content = re.sub(r"g_taskbarViewDllLoaded", r"g_taskbarViewDllLoaded" + self.name, content, flags=re.DOTALL)
+        content = self.format_content(content)
         content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL | re.MULTILINE)
         content = re.sub("\n+", "\n", content, flags=re.DOTALL | re.MULTILINE)
-        content = self.format_content(content)
         content = generate_slash_block(self.name) + content
 
         content = re.sub(r'[ \t]*\n', '\n', content)  # remove whitespace-only lines
@@ -339,124 +338,18 @@ g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L
 
 ######################################################################
 
-class StartMenuStylerMod(URLProcessor):
+class TaskbarStylerMod(URLProcessor):
     def __init__(self):
-        url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/windows-11-start-menu-styler.wh.cpp"
-        super().__init__(url, "TaskbarStyler", "c")
+        url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/windows-11-taskbar-styler.wh.cpp"
+        super().__init__(url, "BlurBrush", "c")
 
     def format_content(self, content):
-        content = re.sub(r"^const\sTheme\sg_.*?\}\}\;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"RunFromWindowThread\(", "RunFromWindowThread" + self.name + "(", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"// clang-format off", "", content, flags=re.DOTALL)
-        content = re.sub(r"// clang-format on", "", content, flags=re.DOTALL)
-        content = re.sub(r"bool TestElementMatcher.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ApplyCustomizationsForVisualStateGroup.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void SetOrClearValue.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring EscapeJsTemplateString.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring EscapeXmlAttribute.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring_view TrimStringView.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::vector<std::wstring_view> SplitStringView.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"Style GetStyleFromXamlSetters.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"Style GetStyleFromXamlSettersWithFallbackType.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"const PropertyOverrides& GetResolvedPropertyOverrides.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"const PropertyValues& GetResolvedPropertyValues.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void RestoreCustomizationsForVisualStateGroup.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"bool ApplyWebViewCustomizations.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ClearWebViewCustomizations.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ApplyCustomizations.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void CleanupCustomizations.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"ElementMatcher ElementMatcherFromString.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"StyleRule StyleRuleFromString.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring AdjustTypeName.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void AddElementCustomizationRules.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"bool ProcessSingleTargetStylesFromSettings.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ProcessWebStylesFromSettings.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ProcessAllStylesFromSettings.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"bool ProcessSingleResourceVariableFromSettings.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"void ProcessResourceVariablesFromSettings.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::unordered_map<VisualStateGroup, PropertyOverrides>\sFindElementPropertyOverrides.*?^}$", "", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"struct StyleRule {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ElementMatcher {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ElementCustomizationRules {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ElementPropertyCustomizationState {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ElementCustomizationStateForVisualStateGroup {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ElementCustomizationState {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct WebViewCustomizationState {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct ThemeTargetStyles {.*?^};$", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"struct Theme {.*?^};$", """
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-    return module;
-}
-""", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"for \(const auto\& \[handle\, elementCustomizationState\] \:.*?g_webViewsCustomizationState.clear\(\);", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"ProcessAllStylesFromSettings\(\);", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"ProcessResourceVariablesFromSettings\(\);", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using string_setting_unique_ptr.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyKeyValue.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyValuesUnresolved.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyValues.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyValuesMaybeUnresolved.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyOverridesUnresolved.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"using PropertyOverrides.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::vector<ElementCustomizationRules> g_elementsCustomizationRules.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"bool g_elementPropertyModifying.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::unordered_map<InstanceHandle, WebViewCustomizationState>.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring g_webContentJs.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::wstring g_webContentCss.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"std::unordered_map<InstanceHandle, ElementCustomizationState>.*?;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"switch \(mutationType\).*?}", "", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"switch \(mutationType\).*?}", "", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"Wh_Log\(L\"=.*?;", "", content, flags=re.DOTALL)
-
-        remove_imports_pattern = r'#include <(?:{})>\n?'.format('|'.join(map(re.escape, [
-            "unordered_map", "unordered_set", "variant", "vector",
-            "list", "optional", "sstream", "string"
-        ])))
-        content = re.sub(remove_imports_pattern, '', content)
-
-        content = re.sub(r"if \(mutationType == Add\).*?}\s+return S_OK;", """
-if (auto existing = weakSizingFrameRef.get()) {
-float g_lastStartButtonX_saved=static_cast<float>( Wh_GetIntValue(L"g_lastStartButtonX",0));
-  winrt::Windows::UI::Xaml::Controls::Canvas::SetLeft(existing, g_lastStartButtonX_saved);
-  return S_OK;
-}
-
-const auto inspectable = FromHandle(element.Handle);
-auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-if (frameworkElement) {
-  // Wh_Log(L"Element type: %s name: %s", element.Type, frameworkElement.Name().c_str());
-
-  if (wcscmp(element.Type, L"StartDocked.StartSizingFrame") == 0) {
-    Wh_Log(L"weakSizingFrameRef updated");
-    weakSizingFrameRef = frameworkElement;
-  }
-
-  if (wcscmp(element.Type, L"Cortana.UI.Views.TaskbarSearchPage") == 0) {
-    Wh_Log(L"cortanaFrameRef updated");
-    cortanaFrameRef = frameworkElement;
-  }
-   return S_OK;
-        }
-return S_OK;
-
-""", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"^HRESULT VisualTreeWatcher::OnVisualTreeChange", """
-winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> weakSizingFrameRef;
-winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> cortanaFrameRef;
-HRESULT VisualTreeWatcher::OnVisualTreeChange""", content, flags=re.MULTILINE | re.DOTALL)
-
+        content = content.split("#include <initguid.h>")[1]
+        content = "#include <initguid.h>\n" + content
+        content = content.split("void SetOrClearValue")[0]
+        content = content.strip()
+        if not (content.startswith("#include") and content.endswith("////////////////////////////////////////////////////////////////////////////////")):
+            raise ValueError("Content must start w/ include and end with '/+'")
         return content
 
 
@@ -471,7 +364,7 @@ def process_all_mods():
     processors = [
         TaskbarIconSizeMod(),
         StartButtonPosition(),
-        # StartMenuStylerMod()
+        # TaskbarStylerMod()
     ]
 
     for processor in processors:
@@ -479,5 +372,6 @@ def process_all_mods():
 
 
 if __name__ == "__main__":
-    mod_parts_dir = "../mod-parts"
+    mod_parts_dir = r"C:\Users\bbwi\Documents\GitHub\windhawk-taskbar-centered-condensed\mod-parts"
+    hooks_dir = os.path.join(mod_parts_dir, "hooks")
     process_all_mods()

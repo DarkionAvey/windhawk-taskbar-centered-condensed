@@ -1,36 +1,36 @@
 - TaskbarHeight: 74
   $name: Taskbar height
-  $description: Sets the height of the taskbar (Default is 74)
+  $description: Set the height of the taskbar (Default is 74)
   $type: unsigned int
 
 - TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 42)
+  $description: Set the width and height of taskbar icons (Default is 42)
   $type: unsigned int
 
 - TaskbarButtonSize: 74
   $name: Taskbar button size
-  $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
+  $description: Set the size (width and height) of taskbar buttons (Default is 74)
   $type: unsigned int
 
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
-  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
+  $description: Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
   $type: unsigned int
 
 - TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default is 10)
+  $description: Adjust the space between the task area and the tray area (Default is 10)
   $type: unsigned int
 
 - TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 2)
+  $description: Set the horizontal padding on both sides of the taskbar background (Default is 2)
   $type: unsigned int
 
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
-  $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
+  $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior (Default is off)
   $type: bool
 
 - IgnoreShowDesktopButton: false
@@ -50,101 +50,101 @@
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off)
+  $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option (Default is off)
   $type: bool
 
 - CustomizeTaskbarBackground: true
   $name: Stylize the taskbar background
-  $description: If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
+  $description: When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
-  $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
+  $description: Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
   $type: unsigned int
 
 - TaskbarBackgroundTint: 0
   $name: Background tint
-  $description: Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0)
+  $description: Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0)
   $type: unsigned int
 
 - TaskbarBackgroundLuminosity: 30
   $name: Background luminosity
-  $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30)
+  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30)
   $type: unsigned int
 
 - TaskbarBorderOpacity: 20
   $name: Border opacity
-  $description: Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20)
+  $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20)
   $type: unsigned int
 
 - TaskbarBorderColorHex: "#ffffff"
   $name: Border color (HEX)
-  $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`)
+  $description: Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`)
   $type: string hex color
 
 - TaskbarBorderThickness: 8
   $name: Taskbar border thickness scale (%)
-  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 8)
+  $description: Set the scale of the taskbar border. Range 0-100 (Default is 8)
   $type: unsigned int percentage
 
 - AppsDividerThickness: 8
   $name: Apps divider thickness scale (%)
-  $description: Adjusts the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
+  $description: Set the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
   $type: unsigned int percentage
 
 - AppsDividerVerticalScale: 40
   $name: Apps divider vertical scale (%)
-  $description: Adjusts the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
+  $description: Set the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
   $type: unsigned int percentage
 
 - AppsDividerAlignment: ""
-  $name: On which side should the app dividers be shown
+  $name: Choose the side on which the app dividers should appear
   $options:
   - left: Left side
   - right: Right side
 
 - DividedAppNames: ""
   $name: App names for divider placement
-  $description: Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive.
+  $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
   $type: string regex
 
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on)
+  $description: When enabled, the tray area will be separated by a divider (Default is on)
   $type: bool
 
 - StyleTrayArea: false
   $name: Modify the tray area appearance
-  $description: If enabled, the options for tray icon size will take effect (Default is off)
+  $description: When enabled, the options for tray icon size will take effect (Default is off)
   $type: bool
 
 - TrayIconSize: 15
   $name: Tray icon size
-  $description: Defines the width and height of tray icons. Minimum is 15. (Default is 15)
+  $description: Set the width and height of tray icons. Minimum is 15. (Default is 15)
   $type: unsigned int
 
 - TrayButtonSize: 30
   $name: Tray button size
-  $description: Sets the size of tray buttons, which surround the icons. Minimum is 20. (Default is 30)
+  $description: Set the size (width and height) of tray buttons. Minimum is 20. (Default is 30)
   $type: unsigned int
 
 - MoveFlyoutStartMenu: true
   $name: Move Start Menu with Taskbar
-  $description: Dynamically repositions the Start menu to align with taskbar size and location (Default is on).
+  $description: When enabled, the Start and Search menus are moved to align with taskbar size and location (Default is on).
   $type: bool
 
 - MoveFlyoutControlCenter: true
   $name: Move Control Center with Taskbar
-  $description: Dynamically repositions the Control Center to align with taskbar size and location (Default is on).
+  $description: When enabled, the Control Center is moved to align with taskbar size and location (Default is on).
   $type: bool
 
 - MoveFlyoutNotificationCenter: true
   $name: Move Notification Center with Taskbar
-  $description: Dynamically repositions the Notification Center to align with taskbar size and location (Default is on).
+  $description: When enabled, the Notification Center is moved to align with taskbar size and location (Default is on).
   $type: bool
 
 - AlignFlyoutInner: true
   $name: Align flyout windows to the inside of the taskbar
-  $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
+  $description: When enabled, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
   $type: bool

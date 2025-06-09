@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.211
+// @version         1.4.218
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -58,61 +58,61 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 # Options
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
-| `TaskbarHeight` | Taskbar height | Sets the height of the taskbar (Default is 74) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Defines the width and height of taskbar icons (Default is 42) | Non-negative integer |
-| `TaskbarButtonSize` | Taskbar button size | Sets the size of taskbar buttons, which surround the icons (Default is 74) | Non-negative integer |
-| `TaskbarOffsetY` | Taskbar vertical offset | Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
-| `TrayTaskGap` | Tray task gap | Adjusts the space between the task area and the tray area (Default is 10) | Non-negative integer |
-| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Sets the horizontal padding on both sides of the taskbar background (Default is 2) | Non-negative integer |
-| `FullWidthTaskbarBackground` | Full-width taskbar background | If enabled, the taskbar background spans the entire width of the screen (Default is off) | Boolean (true/false) |
+| `TaskbarHeight` | Taskbar height | Set the height of the taskbar (Default is 74) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons (Default is 42) | Non-negative integer |
+| `TaskbarButtonSize` | Taskbar button size | Set the size (width and height) of taskbar buttons (Default is 74) | Non-negative integer |
+| `TaskbarOffsetY` | Taskbar vertical offset | Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
+| `TrayTaskGap` | Tray task gap | Adjust the space between the task area and the tray area (Default is 10) | Non-negative integer |
+| `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Set the horizontal padding on both sides of the taskbar background (Default is 2) | Non-negative integer |
+| `FullWidthTaskbarBackground` | Full-width taskbar background | When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior (Default is off) | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations (Default is off) | Boolean (true/false) |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear (Default is 22) | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are (Default is 16) | Non-negative integer |
-| `FlatTaskbarBottomCorners` | Flat bottom corners | If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off) | Boolean (true/false) |
-| `CustomizeTaskbarBackground` | Stylize the taskbar background | If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on) | Boolean (true/false) |
-| `TaskbarBackgroundOpacity` | Background opacity | Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100) | Non-negative integer |
-| `TaskbarBackgroundTint` | Background tint | Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0) | Non-negative integer |
-| `TaskbarBackgroundLuminosity` | Background luminosity | Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
-| `TaskbarBorderOpacity` | Border opacity | Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20) | Non-negative integer |
-| `TaskbarBorderColorHex` | Border color (HEX) | Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
-| `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Adjusts the scale of the taskbar border. Range 0-100 (Default is 8) | unsigned int percentage |
-| `AppsDividerThickness` | Apps divider thickness scale (%) | Adjusts the thickness scale of the taskbar dividers. Range 0-100 (Default is 8) | unsigned int percentage |
-| `AppsDividerVerticalScale` | Apps divider vertical scale (%) | Adjusts the vertical scale of the taskbar dividers. Range 0-100 (Default is 40) | unsigned int percentage |
-| `AppsDividerAlignment` | On which side should the app dividers be shown |  |  |
-| `DividedAppNames` | App names for divider placement | Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive. | string regex |
-| `TrayAreaDivider` | Tray area divider | If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on) | Boolean (true/false) |
-| `StyleTrayArea` | Modify the tray area appearance | If enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
-| `TrayIconSize` | Tray icon size | Defines the width and height of tray icons. Minimum is 15. (Default is 15) | Non-negative integer |
-| `TrayButtonSize` | Tray button size | Sets the size of tray buttons, which surround the icons. Minimum is 20. (Default is 30) | Non-negative integer |
-| `MoveFlyoutStartMenu` | Move Start Menu with Taskbar | Dynamically repositions the Start menu to align with taskbar size and location (Default is on). | Boolean (true/false) |
-| `MoveFlyoutControlCenter` | Move Control Center with Taskbar | Dynamically repositions the Control Center to align with taskbar size and location (Default is on). | Boolean (true/false) |
-| `MoveFlyoutNotificationCenter` | Move Notification Center with Taskbar | Dynamically repositions the Notification Center to align with taskbar size and location (Default is on). | Boolean (true/false) |
-| `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). | Boolean (true/false) |
+| `FlatTaskbarBottomCorners` | Flat bottom corners | When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option (Default is off) | Boolean (true/false) |
+| `CustomizeTaskbarBackground` | Stylize the taskbar background | When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on) | Boolean (true/false) |
+| `TaskbarBackgroundOpacity` | Background opacity | Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100) | Non-negative integer |
+| `TaskbarBackgroundTint` | Background tint | Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0) | Non-negative integer |
+| `TaskbarBackgroundLuminosity` | Background luminosity | Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
+| `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20) | Non-negative integer |
+| `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
+| `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Set the scale of the taskbar border. Range 0-100 (Default is 8) | unsigned int percentage |
+| `AppsDividerThickness` | Apps divider thickness scale (%) | Set the thickness scale of the taskbar dividers. Range 0-100 (Default is 8) | unsigned int percentage |
+| `AppsDividerVerticalScale` | Apps divider vertical scale (%) | Set the vertical scale of the taskbar dividers. Range 0-100 (Default is 40) | unsigned int percentage |
+| `AppsDividerAlignment` | Choose the side on which the app dividers should appear |  |  |
+| `DividedAppNames` | App names for divider placement | Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex. | string regex |
+| `TrayAreaDivider` | Tray area divider | When enabled, the tray area will be separated by a divider (Default is on) | Boolean (true/false) |
+| `StyleTrayArea` | Modify the tray area appearance | When enabled, the options for tray icon size will take effect (Default is off) | Boolean (true/false) |
+| `TrayIconSize` | Tray icon size | Set the width and height of tray icons. Minimum is 15. (Default is 15) | Non-negative integer |
+| `TrayButtonSize` | Tray button size | Set the size (width and height) of tray buttons. Minimum is 20. (Default is 30) | Non-negative integer |
+| `MoveFlyoutStartMenu` | Move Start Menu with Taskbar | When enabled, the Start and Search menus are moved to align with taskbar size and location (Default is on). | Boolean (true/false) |
+| `MoveFlyoutControlCenter` | Move Control Center with Taskbar | When enabled, the Control Center is moved to align with taskbar size and location (Default is on). | Boolean (true/false) |
+| `MoveFlyoutNotificationCenter` | Move Notification Center with Taskbar | When enabled, the Notification Center is moved to align with taskbar size and location (Default is on). | Boolean (true/false) |
+| `AlignFlyoutInner` | Align flyout windows to the inside of the taskbar | When enabled, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on). | Boolean (true/false) |
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - TaskbarHeight: 74
   $name: Taskbar height
-  $description: Sets the height of the taskbar (Default is 74)
+  $description: Set the height of the taskbar (Default is 74)
 - TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Defines the width and height of taskbar icons (Default is 42)
+  $description: Set the width and height of taskbar icons (Default is 42)
 - TaskbarButtonSize: 74
   $name: Taskbar button size
-  $description: Sets the size of taskbar buttons, which surround the icons (Default is 74)
+  $description: Set the size (width and height) of taskbar buttons (Default is 74)
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
-  $description: Moves the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
+  $description: Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
 - TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjusts the space between the task area and the tray area (Default is 10)
+  $description: Adjust the space between the task area and the tray area (Default is 10)
 - TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
-  $description: Sets the horizontal padding on both sides of the taskbar background (Default is 2)
+  $description: Set the horizontal padding on both sides of the taskbar background (Default is 2)
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
-  $description: If enabled, the taskbar background spans the entire width of the screen (Default is off)
+  $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior (Default is off)
 - IgnoreShowDesktopButton: false
   $name: Ignore "Show Desktop" button
   $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
@@ -124,66 +124,66 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
   $description: Controls how rounded the corners of individual task buttons are (Default is 16)
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: If enabled, the bottom corners of the taskbar will be squared instead of rounded, and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with full-width taskbar background (Default is off)
+  $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option (Default is off)
 - CustomizeTaskbarBackground: true
   $name: Stylize the taskbar background
-  $description: If enabled, the taskbar background will be changed to acrylic blur. Disable this if you are running other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
+  $description: When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
-  $description: Adjusts the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
+  $description: Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
 - TaskbarBackgroundTint: 0
   $name: Background tint
-  $description: Modifies the taskbar tint level, where higher values increase grayscale effect. Range 0-100 (Default is 0)
+  $description: Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0)
 - TaskbarBackgroundLuminosity: 30
   $name: Background luminosity
-  $description: Adjusts luminosity of the taskbar background. Higher values make it more opaque, lower values make it more glass-like. Range 0-100 (Default is 30)
+  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30)
 - TaskbarBorderOpacity: 20
   $name: Border opacity
-  $description: Controls the opacity of the taskbar border, as well as the dividers. Range 0-100 (Default is 20)
+  $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20)
 - TaskbarBorderColorHex: "#ffffff"
   $name: Border color (HEX)
-  $description: Adjusts the color of the taskbar border, as well as the dividers. Hex color as `#RRGGBB` (Default is `#ffffff`)
+  $description: Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`)
 - TaskbarBorderThickness: 8
   $name: Taskbar border thickness scale (%)
-  $description: Adjusts the scale of the taskbar border. Range 0-100 (Default is 8)
+  $description: Set the scale of the taskbar border. Range 0-100 (Default is 8)
 - AppsDividerThickness: 8
   $name: Apps divider thickness scale (%)
-  $description: Adjusts the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
+  $description: Set the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
 - AppsDividerVerticalScale: 40
   $name: Apps divider vertical scale (%)
-  $description: Adjusts the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
+  $description: Set the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
 - AppsDividerAlignment: ""
-  $name: On which side should the app dividers be shown
+  $name: Choose the side on which the app dividers should appear
   $options:
   - left: Left side
   - right: Right side
 - DividedAppNames: ""
   $name: App names for divider placement
-  $description: Specify portions of app names (supports regex) where you want a divider on their left side. Separate entries with `;` (e.g., Steam;Notepad\+\+;Settings). Case-insensitive.
+  $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: If enabled, the tray area will be separated by a divider with the same color as the taskbar. Will also apply to widget element if available (Default is on)
+  $description: When enabled, the tray area will be separated by a divider (Default is on)
 - StyleTrayArea: false
   $name: Modify the tray area appearance
-  $description: If enabled, the options for tray icon size will take effect (Default is off)
+  $description: When enabled, the options for tray icon size will take effect (Default is off)
 - TrayIconSize: 15
   $name: Tray icon size
-  $description: Defines the width and height of tray icons. Minimum is 15. (Default is 15)
+  $description: Set the width and height of tray icons. Minimum is 15. (Default is 15)
 - TrayButtonSize: 30
   $name: Tray button size
-  $description: Sets the size of tray buttons, which surround the icons. Minimum is 20. (Default is 30)
+  $description: Set the size (width and height) of tray buttons. Minimum is 20. (Default is 30)
 - MoveFlyoutStartMenu: true
   $name: Move Start Menu with Taskbar
-  $description: Dynamically repositions the Start menu to align with taskbar size and location (Default is on).
+  $description: When enabled, the Start and Search menus are moved to align with taskbar size and location (Default is on).
 - MoveFlyoutControlCenter: true
   $name: Move Control Center with Taskbar
-  $description: Dynamically repositions the Control Center to align with taskbar size and location (Default is on).
+  $description: When enabled, the Control Center is moved to align with taskbar size and location (Default is on).
 - MoveFlyoutNotificationCenter: true
   $name: Move Notification Center with Taskbar
-  $description: Dynamically repositions the Notification Center to align with taskbar size and location (Default is on).
+  $description: When enabled, the Notification Center is moved to align with taskbar size and location (Default is on).
 - AlignFlyoutInner: true
   $name: Align flyout windows to the inside of the taskbar
-  $description: When on, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
+  $description: When enabled, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
 */
 // ==/WindhawkModSettings==
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2724,6 +2724,7 @@ void Wh_ModSettingsChangedStartButtonPosition() {
 #include <thread>
 #include <windows.h>
 #include <psapi.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 using namespace winrt::Windows::UI::Xaml;
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
   Wh_Log(L".");
@@ -2974,8 +2975,7 @@ void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void*
 }
 std::atomic<int64_t> g_update_flag_set_time_ms = 0;
 int64_t NowMs() {
-  Wh_Log(L".");
-return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+  Wh_Log(L"."); return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 void ResetFlagAfterDelay() {
   Wh_Log(L".");
   std::this_thread::sleep_for(std::chrono::milliseconds(1400));
@@ -3126,33 +3126,33 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
 }
 void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
   Wh_Log(L".");
-    if (!element) return;
+  if (!element) return;
   using namespace winrt::Windows::UI::Xaml::Hosting;
   using namespace winrt::Windows::Foundation::Numerics;
-    element.Opacity(g_unloading ? 1.0f : std::min(1.0f, static_cast<float>(g_settings.userDefinedTaskbarBorderOpacity / 255.0f)));
-    element.Width(std::max(0.0, g_settings.userDefinedAppsDividerThickness * 0.99));
-    if (auto visual = ElementCompositionPreview::GetElementVisual(element)) {
+  element.Opacity(g_unloading ? 1.0f : std::min(1.0f, static_cast<float>(g_settings.userDefinedTaskbarBorderOpacity / 255.0f)));
+  element.Width(std::max(0.0, g_settings.userDefinedAppsDividerThickness * 0.99));
+  if (auto visual = ElementCompositionPreview::GetElementVisual(element)) {
   Wh_Log(L".");
-        if (auto compositor = visual.Compositor()) {
+    if (auto compositor = visual.Compositor()) {
   Wh_Log(L".");
-            visual.CenterPoint({0.0f, static_cast<float>(element.ActualHeight()) / 2.0f, 0.0f});
-  visual.Scale({1.0f, g_unloading ? 1.0f : g_settings.userDefinedAppsDividerVerticalScale, 1.0f});
-        }
+      visual.CenterPoint({0.0f, static_cast<float>(element.ActualHeight()) / 2.0f, 0.0f});
+      visual.Scale({1.0f, g_unloading ? 1.0f : g_settings.userDefinedAppsDividerVerticalScale, 1.0f});
     }
+  }
   PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-    PCWSTR originalHex = hex;
-    if (!hex || *hex == L'\0') {
+  PCWSTR originalHex = hex;
+  if (!hex || *hex == L'\0') {
   Wh_Log(L".");
-        hex = L"#ffffff";
-        originalHex = nullptr;
-    }
+    hex = L"#ffffff";
+    originalHex = nullptr;
+  }
   if (*hex == L'#') ++hex;
   std::wstring fillBrush = L"<SolidColorBrush Color=\"#" + std::wstring(hex) + L"\"/>";
   SetElementPropertyFromString(element, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", fillBrush.c_str(), true);
-    if (originalHex) {
+  if (originalHex) {
   Wh_Log(L".");
-        Wh_FreeStringSetting(originalHex);
-    }
+    Wh_FreeStringSetting(originalHex);
+  }
 }
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount, TaskbarState& state) {
   Wh_Log(L".");
@@ -3199,8 +3199,9 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
   Wh_Log(L".");
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       }
-    } else if( className == L"Taskbar.ExperienceToggleButton" ){
-state.lastStartButtonXActual=rect.X-rect.Width;
+    } else if (className == L"Taskbar.ExperienceToggleButton") {
+  Wh_Log(L".");
+      state.lastStartButtonXActual = rect.X - rect.Width;
     } else if (className == L"Taskbar.TaskListButton") {
   Wh_Log(L".");
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListLabeledButtonPanel");
@@ -3243,11 +3244,12 @@ state.lastStartButtonXActual=rect.X-rect.Width;
   Wh_Log(L".");
         if (auto RightOverflowButtonDivider = FindChildByName(OverflowToggleButtonRootPanel, L"RightOverflowButtonDivider")) {
   Wh_Log(L".");
-        if(g_settings.userDefinedTrayAreaDivider){
+          if (g_settings.userDefinedTrayAreaDivider) {
+  Wh_Log(L".");
             RightOverflowButtonDivider.Opacity(0);
-        }else{
-          StyleNativeDividerElement(RightOverflowButtonDivider);
-        }
+          } else {
+            StyleNativeDividerElement(RightOverflowButtonDivider);
+          }
         }
       }
     }
@@ -3303,7 +3305,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedAlignFlyoutInner = (getInt(L"AlignFlyoutInner") != 0);
   g_settings.userDefinedCustomizeTaskbarBackground = (getInt(L"CustomizeTaskbarBackground") != 0);
   PCWSTR appsDividerAlignment = Wh_GetStringSetting(L"AppsDividerAlignment");
-  g_settings.userDefinedDividerLeftAligned = (_wcsicmp(appsDividerAlignment,L"left")==0);
+  g_settings.userDefinedDividerLeftAligned = (_wcsicmp(appsDividerAlignment, L"left") == 0);
   Wh_FreeStringSetting(appsDividerAlignment);
   // Gaps & Padding (non-negative)
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : std::max(0, getInt(L"TrayTaskGap"));
@@ -3338,27 +3340,27 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedAppsDividerVerticalScale = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerVerticalScale")), 0, 100) / 100.0f);
   // Border color
   PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-PCWSTR originalHex = hex;
-if (!hex || *hex == L'\0') {
+  PCWSTR originalHex = hex;
+  if (!hex || *hex == L'\0') {
   Wh_Log(L".");
     hex = L"#ffffff";
     originalHex = nullptr;
-}
+  }
   if (*hex == L'#') ++hex;
   unsigned int r = 255, g = 255, b = 255;
-if (swscanf_s(hex, L"%02x%02x%02x", &r, &g, &b) != 3) {
+  if (swscanf_s(hex, L"%02x%02x%02x", &r, &g, &b) != 3) {
   Wh_Log(L".");
     r = g = b = 255;
-}
+  }
   g_settings.borderColorR = r;
   g_settings.borderColorG = g;
   g_settings.borderColorB = b;
-if (originalHex) {
+  if (originalHex) {
   Wh_Log(L".");
     Wh_FreeStringSetting(originalHex);
-}
+  }
   // String list
-  PCWSTR dividerAppNames=Wh_GetStringSetting(L"DividedAppNames");
+  PCWSTR dividerAppNames = Wh_GetStringSetting(L"DividedAppNames");
   g_settings.userDefinedDividedAppNames = SplitAndTrim(dividerAppNames);
   Wh_FreeStringSetting(dividerAppNames);
 }
@@ -3529,7 +3531,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   // todo: short circuit early if position didnt change
-  float lastStartButtonXActualForState=state.lastStartButtonXActual;
+  float lastStartButtonXActualForState = state.lastStartButtonXActual;
   int childrenCountTaskbar = 0;
   const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
@@ -3579,8 +3581,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   float showDesktopButtonWidth = static_cast<float>(g_settings.userDefinedIgnoreShowDesktopButton ? showDesktopButton.ActualWidth() : 0);
-  int trayGapPlusExtras = g_settings.userDefinedTrayTaskGap + widgetElementVisibleWidth + (widgetPresent ? -6+g_settings.userDefinedTrayTaskGap : 0);
-  const unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthDbl - showDesktopButtonWidth + trayGapPlusExtras);
+  int trayGapPlusExtras = g_settings.userDefinedTrayTaskGap + widgetElementVisibleWidth + (widgetPresent ? -6 + g_settings.userDefinedTrayTaskGap : 0);
+  const unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthDbl + trayGapPlusExtras);
   if (!g_unloading && childrenCountTray == 0) {
   Wh_Log(L".");
     Wh_Log(L"Error: childrenCountTray == 0");
@@ -3597,7 +3599,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: centeredTray <= 1");
     return false;
   }
-  float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras;
+  float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras + showDesktopButtonWidth;
   // tray animations
   auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
   if (!systemTrayFrameGridVisual) {
@@ -3651,7 +3653,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
   if (g_invalidateDimensions) {
   Wh_Log(L".");
-    g_invalidateDimensions=false;
+    g_invalidateDimensions = false;
     if (g_settings.userDefinedTaskbarHeight <= 0) {
   Wh_Log(L".");
       Wh_Log(L"Invalid size detected! Panel Height");
@@ -3675,8 +3677,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   Wh_Log(L".");
     if (!g_unloading) {
   Wh_Log(L".");
-      targetTaskFrameOffsetX = state.lastStartButtonXCalculated - state.lastStartButtonXActual + g_settings.userDefinedTaskbarBackgroundHorizontalPadding;
-      taskbarFrameRepeaterVisual.Offset({targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
+      auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisualCompositor.CreateVector3KeyFrameAnimation();
+      auto animationControllerTaskbarFrameRepeaterVisual = taskbarFrameRepeaterVisual.TryGetAnimationController(L"Offset");
+      taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
+      taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
     } else {
       taskbarFrameRepeaterVisual.Offset({0.0f, 0.0f, 0.0f});
     }
@@ -3718,7 +3722,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         auto compositorWidget = widgetVisual.Compositor();
         if (compositorWidget) {
   Wh_Log(L".");
-          float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar -8) +g_settings.userDefinedTrayTaskGap;
+          float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar - 8) + g_settings.userDefinedTrayTaskGap;
           auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
           widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
           if (movingInwards) {
@@ -3780,10 +3784,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   } else {
     SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider, true);
   }
-//  if (widgetPresent && widgetElementInnerChild) {
+  //  if (widgetPresent && widgetElementInnerChild) {
   Wh_Log(L".");
-//    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
-//  }
+  //    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
+  //  }
   if (!taskbarBackground) return false;
   auto taskbarStroke = FindChildByName(backgroundFillParent, L"BackgroundStroke");
   if (taskbarStroke) {
@@ -3800,10 +3804,16 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
   if (g_settings.userDefinedCustomizeTaskbarBackground) {
   Wh_Log(L".");
-    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill",
-                                 L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity +
-                                     L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>",
-                                 true);
+    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>", true);
+//    For custom brush
+//    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
+//    float blurAmount = float(g_settings.userDefinedTaskbarBackgroundLuminosity);
+//    winrt::Windows::Foundation::Numerics::float4 tint = {0,0,0,0};
+//    auto blurBrush = winrt::make<XamlBlurBrush>(compositor, blurAmount, tint);
+//    auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
+//    if (rectangle){
+//    rectangle.Fill(blurBrush);
+//    }
   }
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
