@@ -272,10 +272,10 @@ class StartButtonPosition(URLProcessor):
               absTargetWidth);
 SetWindowPos""", content, flags=re.MULTILINE | re.DOTALL)
 
-        content = re.sub(r"HWND GetTaskbarWnd\(\).*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"FrameworkElement EnumChildElements\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"FrameworkElement FindChildByName\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"FrameworkElement FindChildByClassName\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"HWND FindCurrentProcessTaskbarWnd\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"AugmentedEntryPointButton_UpdateButtonPadding_t[\s\w\d]*?AugmentedEntryPointButton_UpdateButtonPadding_Original;", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"AugmentedEntryPointButton_UpdateButtonPadding_Hook", "AugmentedEntryPointButton_UpdateButtonPadding_Hook_" + self.name, content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"HookTaskbarViewDllSymbols", "HookTaskbarViewDllSymbols" + self.name, content, flags=re.MULTILINE | re.DOTALL)
@@ -285,7 +285,6 @@ SetWindowPos""", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"bool ApplyStyle\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"element\.Dispatcher\(\)\.TryRunAsync\(\s+winrt::Windows::UI::Core::CoreDispatcherPriority::High,\s+\[element\]\(\) {", "element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { \\n", content,
                          flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"HWND hTaskbarWnd = GetTaskbarWnd.*?}", "", content, flags=re.MULTILINE | re.DOTALL)
         content = re.sub(r"if \(!xamlRoot\) \{", "if (!xamlRoot) {g_already_requested_debounce_initializing=false;\n", content, flags=re.DOTALL | re.MULTILINE)
 
         content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
@@ -318,8 +317,8 @@ std::wstring monitorName = GetMonitorName(hWnd);
         content = re.sub(r"void Wh_ModUninitStartButtonPosition\(\) {", "void Wh_ModUninitStartButtonPosition() {if(true)return;", content, flags=re.MULTILINE | re.DOTALL)
 
         # hooks
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir, "taskbar.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_sigs.cpp"))}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir, 'taskbar.dll_sigs.cpp'))}", content, flags=re.MULTILINE | re.DOTALL)
+        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{", fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir, 'Taskbar.View.dll_sigs.cpp'))}", content, flags=re.MULTILINE | re.DOTALL)
 
         content = re.sub(r"bool HookTaskbarDllSymbolsStartButtonPosition\(\) \{", fr"""{read_file(os.path.join(hooks_dir, "taskbar.dll_methods.cpp"))}
 bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILINE | re.DOTALL)

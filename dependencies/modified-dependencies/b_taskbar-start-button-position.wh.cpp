@@ -17,6 +17,7 @@ DispatcherTimer debounceTimer{nullptr};
 #include <windhawk_utils.h>
 #include <atomic>
 #include <functional>
+#include <string>
 #include <dwmapi.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -43,6 +44,7 @@ void* CTaskBand_ITaskListWndSite_vftable;
 void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+void* TaskbarHost_FrameHeight_Original;
 using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
                                                            void** result);
 CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
@@ -52,10 +54,24 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
         return nullptr;
     }
-    constexpr size_t kTaskbarElementIUnknownOffset = 0x40;
+    size_t taskbarElementIUnknownOffset = 0x48;
+#if defined(_M_X64)
+    {
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+#else
+#error "Unsupported architecture"
+#endif
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      kTaskbarElementIUnknownOffset);
+                      taskbarElementIUnknownOffset);
     FrameworkElement taskbarElement = nullptr;
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(taskbarElement));
@@ -423,7 +439,8 @@ void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
                g_invalidateDimensions = true;
             }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -518,6 +535,10 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
         },
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
@@ -750,6 +771,40 @@ Wh_Log(L"process: %s, windowClassName: %s",processFileName.c_str(),windowClassNa
 SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
+void RestoreMenuPositions() {
+    if (g_startMenuWnd && g_startMenuOriginalWidth) {
+        RECT rect;
+        if (GetWindowRect(g_startMenuWnd, &rect)) {
+            int x = rect.left;
+            int y = rect.top;
+            int cx = rect.right - rect.left;
+            int cy = rect.bottom - rect.top;
+            if (g_startMenuOriginalWidth != cx) {
+                cx = g_startMenuOriginalWidth;
+                SetWindowPos(g_startMenuWnd, nullptr, x, y, cx, cy,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        g_startMenuWnd = nullptr;
+        g_startMenuOriginalWidth = 0;
+    }
+    if (g_searchMenuWnd && g_searchMenuOriginalX) {
+        RECT rect;
+        if (GetWindowRect(g_searchMenuWnd, &rect)) {
+            int x = rect.left;
+            int y = rect.top;
+            int cx = rect.right - rect.left;
+            int cy = rect.bottom - rect.top;
+            if (g_searchMenuOriginalX != x) {
+                x = g_searchMenuOriginalX;
+                SetWindowPos(g_searchMenuWnd, nullptr, x, y, cx, cy,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        g_searchMenuWnd = nullptr;
+        g_searchMenuOriginalX = 0;
+    }
+}
 void LoadSettingsStartButtonPosition() {
     g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");
 g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
@@ -775,7 +830,8 @@ BOOL Wh_ModInitStartButtonPosition() {
                                            LoadLibraryExW_Hook_StartButtonPosition,
                                            &LoadLibraryExW_Original);
     }
-    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    HMODULE dwmapiModule =
+        LoadLibraryEx(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (dwmapiModule) {
         auto pDwmSetWindowAttribute =
             (decltype(&DwmSetWindowAttribute))GetProcAddress(
@@ -799,40 +855,22 @@ void Wh_ModAfterInitStartButtonPosition() {
             }
         }
     }
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        ApplySettingsStartButtonPosition(hTaskbarWnd);
+    }
 }
 void Wh_ModBeforeUninitStartButtonPosition() {
     g_unloading = true;
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        ApplySettingsStartButtonPosition(hTaskbarWnd);
+    }
 }
 void Wh_ModUninitStartButtonPosition() {if(true)return;
-    if (g_startMenuWnd && g_startMenuOriginalWidth) {
-        RECT rect;
-        if (GetWindowRect(g_startMenuWnd, &rect)) {
-            int x = rect.left;
-            int y = rect.top;
-            int cx = rect.right - rect.left;
-            int cy = rect.bottom - rect.top;
-            if (g_startMenuOriginalWidth != cx) {
-                cx = g_startMenuOriginalWidth;
-                SetWindowPos(g_startMenuWnd, nullptr, x, y, cx, cy,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-        }
-    }
-    if (g_searchMenuWnd && g_searchMenuOriginalX) {
-        RECT rect;
-        if (GetWindowRect(g_searchMenuWnd, &rect)) {
-            int x = rect.left;
-            int y = rect.top;
-            int cx = rect.right - rect.left;
-            int cy = rect.bottom - rect.top;
-            if (g_searchMenuOriginalX != x) {
-                x = g_searchMenuOriginalX;
-                SetWindowPos(g_searchMenuWnd, nullptr, x, y, cx, cy,
-                             SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-        }
-    }
+    RestoreMenuPositions();
 }
 void Wh_ModSettingsChangedStartButtonPosition() {
+    RestoreMenuPositions();
     LoadSettingsStartButtonPosition();
 }
