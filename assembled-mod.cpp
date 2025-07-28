@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.222
+// @version         1.4.223
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -4201,8 +4201,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"root width is too small");
     return false;
   }
-  // todo: short circuit early if position didnt change
-  float lastStartButtonXActualForState = state.lastStartButtonXActual;
   int childrenCountTaskbar = 0;
   const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
