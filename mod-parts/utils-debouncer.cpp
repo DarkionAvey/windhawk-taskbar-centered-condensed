@@ -10,7 +10,7 @@ bool InitializeDebounce() {
   debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
     g_scheduled_low_priority_update = false;
     debounceTimer.Stop();
-    if (auto debounceHwnd = GetTaskbarWnd()) {
+    if (auto debounceHwnd = FindCurrentProcessTaskbarWnd()) {
       Wh_Log(L"Debounce triggered");
       ApplySettings(debounceHwnd);
     }
@@ -21,7 +21,7 @@ bool InitializeDebounce() {
 void CleanupDebounce() {
   g_already_requested_debounce_initializing = false;
   if (debounceTimer) {
-    if (auto debounceHwnd = GetTaskbarWnd()) {
+    if (auto debounceHwnd = FindCurrentProcessTaskbarWnd()) {
       RunFromWindowThread(
           debounceHwnd,
           [](void* pParam) {
@@ -36,7 +36,7 @@ void CleanupDebounce() {
 }
 
 void ApplySettingsDebounced(int delayMs) {
-  HWND hTaskbarWnd = GetTaskbarWnd();
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
   if (!hTaskbarWnd) {
     Wh_Log(L"ApplySettingsDebounced aborted: could not find hTaskbarWnd");
     return;

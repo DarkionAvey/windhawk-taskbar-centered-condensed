@@ -579,8 +579,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"root width is too small");
     return false;
   }
-  // todo: short circuit early if position didnt change
-  float lastStartButtonXActualForState = state.lastStartButtonXActual;
   int childrenCountTaskbar = 0;
   const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
 
@@ -1118,7 +1116,7 @@ void Wh_ModBeforeUninit() {
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
   RefreshSettings();
-  HWND hTaskbarWnd = GetTaskbarWnd();
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
   if (hTaskbarWnd) {
     ApplySettings(hTaskbarWnd);
   }
