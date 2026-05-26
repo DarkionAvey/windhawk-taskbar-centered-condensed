@@ -452,6 +452,88 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorG, L"borderColorG");
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
 }
+// Restrict the taskbar HWND's clickable region to match the visually condensed
+// taskbar. Without this, even though the visible taskbar is centered/short, the
+// underlying Shell_TrayWnd is still full screen width, so clicks (including the
+// right-click "Task Manager / Taskbar settings" menu) hit the empty areas to
+// either side. SetWindowRgn(NULL) restores the full-width clickable area.
+//
+// Coordinates passed in are DIPs (XAML units); we scale to physical pixels
+// using the target monitor's DPI. Only the X axis is clipped; the full window
+// height stays clickable so the auto-hide reveal zone and taskbar shadow are
+// not affected.
+struct UpdateTaskbarRegionContext {
+  const std::wstring* monitorName;
+  float visibleXDip;
+  float visibleWidthDip;
+  float cornerRadiusDip;
+  bool clear;
+};
+
+void UpdateTaskbarWindowRegion(std::wstring const& monitorName,
+                               float visibleXDip,
+                               float visibleWidthDip,
+                               float cornerRadiusDip,
+                               bool clear) {
+  UpdateTaskbarRegionContext ctx{&monitorName, visibleXDip, visibleWidthDip, cornerRadiusDip, clear};
+  EnumWindows(
+      [](HWND hWnd, LPARAM lParam) -> BOOL {
+        auto* ctx = reinterpret_cast<UpdateTaskbarRegionContext*>(lParam);
+        DWORD pid = 0;
+        if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId()) {
+          return TRUE;
+        }
+        WCHAR cls[32] = {};
+        if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (_wcsicmp(cls, L"Shell_TrayWnd") != 0 &&
+            _wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0) {
+          return TRUE;
+        }
+        HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+        if (GetMonitorName(mon) != *ctx->monitorName) {
+          return TRUE;
+        }
+
+        if (ctx->clear) {
+          SetWindowRgn(hWnd, nullptr, TRUE);
+          return FALSE;
+        }
+
+        UINT dpiX = 96, dpiY = 96;
+        GetDpiForMonitor(mon, MDT_DEFAULT, &dpiX, &dpiY);
+        float scale = dpiX / 96.0f;
+
+        RECT wnd{};
+        if (!GetWindowRect(hWnd, &wnd)) return FALSE;
+        int wndW = wnd.right - wnd.left;
+        int wndH = wnd.bottom - wnd.top;
+        if (wndW <= 0 || wndH <= 0) return FALSE;
+
+        int x1 = static_cast<int>(ctx->visibleXDip * scale);
+        int x2 = static_cast<int>((ctx->visibleXDip + ctx->visibleWidthDip) * scale);
+        if (x1 < 0) x1 = 0;
+        if (x2 > wndW) x2 = wndW;
+        if (x2 - x1 < 10) {
+          // Visible region too small to be useful; fall back to full window so
+          // we don't accidentally make the whole taskbar unclickable.
+          SetWindowRgn(hWnd, nullptr, TRUE);
+          return FALSE;
+        }
+        int cr = static_cast<int>(ctx->cornerRadiusDip * scale);
+        if (cr < 0) cr = 0;
+        if (cr * 2 > x2 - x1) cr = (x2 - x1) / 2;
+        if (cr * 2 > wndH) cr = wndH / 2;
+
+        HRGN hRgn = (cr > 0)
+                        ? CreateRoundRectRgn(x1, 0, x2 + 1, wndH + 1, cr * 2, cr * 2)
+                        : CreateRectRgn(x1, 0, x2, wndH);
+        // SetWindowRgn takes ownership of hRgn; do not DeleteObject after.
+        SetWindowRgn(hWnd, hRgn, TRUE);
+        return FALSE;
+      },
+      reinterpret_cast<LPARAM>(&ctx));
+}
+
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
   if (!xamlRootContent) {
     Wh_Log(L"xamlRootContent is null");
@@ -948,6 +1030,27 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.wasOverflowing = isOverflowing;
   state.lastTargetWidth = targetWidthRect;
   state.lastTargetWidth = targetWidth;
+
+  // Resize the taskbar window's clickable region to match the visible taskbar.
+  // When the mod is unloading or running in full-width mode we clear the region
+  // (NULL) so the full-width clickable area is restored.
+  {
+    bool clearRegion = g_unloading || g_settings.userDefinedFullWidthTaskbarBackground;
+    float regionX = clearRegion ? 0.0f : static_cast<float>((rootWidth - targetWidth) / 2.0);
+    float regionW = clearRegion ? static_cast<float>(rootWidth) : targetWidth;
+    float regionCorner = clearRegion ? 0.0f : g_settings.userDefinedTaskbarCornerRadius;
+    if (state.lastRegionClear != clearRegion ||
+        std::abs(state.lastRegionX - regionX) > 0.5f ||
+        std::abs(state.lastRegionW - regionW) > 0.5f ||
+        std::abs(state.lastRegionCorner - regionCorner) > 0.5f) {
+      state.lastRegionClear = clearRegion;
+      state.lastRegionX = regionX;
+      state.lastRegionW = regionW;
+      state.lastRegionCorner = regionCorner;
+      UpdateTaskbarWindowRegion(monitorName, regionX, regionW, regionCorner, clearRegion);
+    }
+  }
+
   return true;
 }
 
