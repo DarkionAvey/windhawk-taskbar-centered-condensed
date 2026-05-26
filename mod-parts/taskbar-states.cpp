@@ -18,5 +18,12 @@ struct TaskbarState {
   float lastTargetTaskFrameOffsetX=0.0f;
   float lastLeftMostEdgeTray{0};
   int lastRightMostEdgeTray{0};
+  // Cached SetWindowRgn inputs (in DIPs) so we only call SetWindowRgn when the
+  // visible bounds actually change. lastRegionClear=true means the window is
+  // currently set to no region (i.e. full-width clickable).
+  float lastRegionX{-1.0f};
+  float lastRegionW{-1.0f};
+  float lastRegionCorner{-1.0f};
+  bool lastRegionClear{true};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
