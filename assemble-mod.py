@@ -1,6 +1,7 @@
 import glob
 import os
 import re
+from pathlib import Path
 
 TYPE_MAP = {
     "signed int": "Integer (whole number)",
@@ -95,8 +96,20 @@ def get_next_patch_version(version_file_path):
     return patch_file + 1
 
 
+def get_compiler_options_string(base_dir: Path):
+    txt_dir = Path(base_dir / "dependencies" / "modified-dependencies" / "compiler-options-dump")
+    options = dict.fromkeys(
+        option
+        for txt in txt_dir.rglob("*.txt")
+        for option in txt.read_text(encoding="utf-8").split()
+    )
+    compiler_options = " ".join(options)
+    print(txt_dir)
+    return compiler_options
+
+
 def main(major_minor="1.4"):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     version_file_path = os.path.join(base_dir, 'mod-parts', 'mod-build-version.txt')
 
     if os.path.exists(version_file_path):
@@ -133,8 +146,10 @@ def main(major_minor="1.4"):
         f.write(new_readme_contents)
 
     new_readme_for_header = new_readme_contents  # Use the updated README
+    header_contents = header_contents.replace('{compiler_options}', get_compiler_options_string(base_dir))
     header_contents = header_contents.replace('{read_me_contents}', new_readme_for_header.strip())
-    header_contents = header_contents.replace('{mod_settings}', re.sub(r'^\s*\$type:.*$', '', mod_settings_contents, flags=re.MULTILINE).strip())
+    header_contents = header_contents.replace('{mod_settings}', re.sub(r'^\s*\$type:.*$', '', mod_settings_contents,
+                                                                       flags=re.MULTILINE).strip())
     header_contents = header_contents.replace('{version_code}', version)
 
     merged_contents = header_contents + "\n\n"
@@ -170,7 +185,4 @@ def main(major_minor="1.4"):
 
 
 if __name__ == '__main__':
-    from dependencies import main as dependency_maker
-
-    dependency_maker.process_all_mods()
     main()
