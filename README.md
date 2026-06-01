@@ -1,8 +1,8 @@
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 
-# WinDock Windhawk Mod
+# TAI (Taskbar as (an) island) for Windows 11
 
-Transform your Windows 11 taskbar into a smooth, MacOS-style dock — without losing any of the original functionality!
+Transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
 
 ---
 
@@ -37,6 +37,7 @@ modify the source files in the `mod-parts` directory.
 
 1. Proper unloading
 2. Fix overflowing
+3. ~~Rebrand because someone claimed the name WinDock~~
 
 ---
 
