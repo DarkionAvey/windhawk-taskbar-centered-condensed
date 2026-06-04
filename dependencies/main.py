@@ -1,126 +1,548 @@
-from abc import ABC, abstractmethod
 import os
+import re
+from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Callable, Match, Pattern, Union
 
 import requests
-import re
-
-from art import *
+from art import text2art
 
 mod_parts_dir = "mod-parts"
 hooks_dir = os.path.join(mod_parts_dir, "hooks")
 
-
-def read_file(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        contents = f.read()
-    return contents
+RegexReplacement = Union[str, Callable[[Match[str]], str]]
+DEFAULT_RE_FLAGS = re.DOTALL | re.MULTILINE
 
 
-def generate_slash_block(name):
-    name = text2art(name, font="starwars")
-    padding_length = max(len(line) for line in name.splitlines()) + 12
-    name = '\n'.join(['////  ' + line + '  ////' for line in name.splitlines()])
-
-    line_of_slashes = "/" * padding_length
-    total_padding = padding_length - len(name) - 2
-    left_padding = total_padding // 2
-    right_padding = total_padding - left_padding
-    content = f"""
-{line_of_slashes}
-{line_of_slashes}
-{line_of_slashes}
-{'/' * left_padding}{name}{'/' * right_padding}
-{line_of_slashes}
-{line_of_slashes}
-{line_of_slashes}
-"""
-    return content
+class PatchError(ValueError):
+    """Raised when an expected source patch could not be applied."""
 
 
-######################################################################
+class CppPatcher:
+    """
+    Small C++-oriented patching helper.
+
+    The important rule is: patch methods fail by default when they do not change
+    the source. This is intentional, because upstream Windhawk mods can change
+    and silent no-op patches are dangerous.
+    """
+
+    def __init__(self, content: str, *, source_name: str = "<source>"):
+        self.content = content
+        self.source_name = source_name
+
+    def text(self) -> str:
+        return self.content
+
+    # ------------------------------------------------------------------
+    # Generic patch primitives
+    # ------------------------------------------------------------------
+
+    def replace_regex(
+            self,
+            pattern: str,
+            replacement: RegexReplacement,
+            *,
+            count: int = 0,
+            flags: int = DEFAULT_RE_FLAGS,
+            label: str | None = None,
+            required: bool = True,
+    ) -> "CppPatcher":
+        new_content, n = re.subn(pattern, replacement, self.content, count=count, flags=flags)
+        return self._commit(new_content, n, label or f"replace regex: {pattern!r}", required)
+
+    def remove_regex(
+            self,
+            pattern: str,
+            *,
+            count: int = 0,
+            flags: int = DEFAULT_RE_FLAGS,
+            label: str | None = None,
+            required: bool = True,
+    ) -> "CppPatcher":
+        return self.replace_regex(pattern, "", count=count, flags=flags, label=label or f"remove regex: {pattern!r}",
+                                  required=required)
+
+    def replace_literal(
+            self,
+            old: str,
+            new: str,
+            *,
+            count: int = -1,
+            label: str | None = None,
+            required: bool = True,
+    ) -> "CppPatcher":
+        if count == 0:
+            raise ValueError("Use count=-1 for unlimited literal replacements. count=0 is ambiguous for str.replace().")
+
+        n = self.content.count(old) if count < 0 else min(self.content.count(old), count)
+        if n == 0 and required:
+            self._raise_no_change(label or f"replace literal: {old!r}")
+
+        self.content = self.content.replace(old, new, count if count >= 0 else -1)
+        return self
+
+    def remove_literal(
+            self,
+            old: str,
+            *,
+            count: int = -1,
+            label: str | None = None,
+            required: bool = True,
+    ) -> "CppPatcher":
+        return self.replace_literal(old, "", count=count, label=label or f"remove literal: {old!r}", required=required)
+
+    def rename_identifier(self, old: str, new: str, *, label: str | None = None) -> "CppPatcher":
+        """Rename a C/C++ identifier using identifier boundaries."""
+        return self.replace_regex(
+            rf"(?<![A-Za-z0-9_]){re.escape(old)}(?![A-Za-z0-9_])",
+            new,
+            label=label or f"rename identifier: {old} -> {new}",
+        )
+
+    def insert_before_regex(self, pattern: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
+        return self.replace_regex(pattern, lambda m: insertion + m.group(0), count=1,
+                                  label=label or f"insert before: {pattern!r}")
+
+    def insert_after_regex(self, pattern: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
+        return self.replace_regex(pattern, lambda m: m.group(0) + insertion, count=1,
+                                  label=label or f"insert after: {pattern!r}")
+
+    def insert_before_literal(self, marker: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
+        return self.replace_literal(marker, insertion + marker, count=1, label=label or f"insert before: {marker!r}")
+
+    def insert_after_literal(self, marker: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
+        return self.replace_literal(marker, marker + insertion, count=1, label=label or f"insert after: {marker!r}")
+
+    def prepend(self, insertion: str) -> "CppPatcher":
+        self.content = insertion + self.content
+        return self
+
+    # ------------------------------------------------------------------
+    # C++ block/function helpers
+    # ------------------------------------------------------------------
+
+    def remove_function(self, signature: str, *, regex: bool = False, label: str | None = None) -> "CppPatcher":
+        """
+        Remove exactly one C++ function definition by signature.
+
+        By default, the signature is treated as literal C++ text, not as a
+        regular expression. Whitespace is flexible, so both one-line signatures
+        and copy-pasted formatted signatures work. Regex-special C++ characters
+        such as `(`, `)`, `*`, `<`, `>`, and `::` do not need escaping.
+
+        Examples:
+            patch.remove_function("FrameworkElement EnumChildElements(")
+            patch.remove_function(
+                "FrameworkElement EnumChildElements(\n"
+                "    FrameworkElement element,\n"
+                "    std::function<bool(FrameworkElement)> enumCallback)"
+            )
+
+        If the signature matches multiple function definitions, patching fails
+        and asks for a more specific signature.
+        """
+        start, end = self._find_single_cpp_block_after_signature(signature, regex=regex, label=label)
+        return self._replace_span(start, end, "", label or f"remove function: {signature}")
+
+    def replace_function(
+            self,
+            signature: str,
+            replacement: str,
+            *,
+            regex: bool = False,
+            label: str | None = None,
+    ) -> "CppPatcher":
+        """Replace exactly one full C++ function definition by signature."""
+        start, end = self._find_single_cpp_block_after_signature(signature, regex=regex, label=label)
+        return self._replace_span(
+            start,
+            end,
+            self._trim_block_replacement(replacement, trailing_newline=True),
+            label or f"replace function: {signature}",
+        )
+
+    def replace_function_body(
+            self,
+            signature: str,
+            new_body: str,
+            *,
+            regex: bool = False,
+            label: str | None = None,
+    ) -> "CppPatcher":
+        """Keep the original signature and replace only the function body."""
+        start, end = self._find_single_cpp_block_after_signature(signature, regex=regex, label=label)
+        open_brace = self.content.find("{", start, end)
+        if open_brace == -1:
+            self._raise_no_change(label or f"replace function body: {signature}")
+        replacement = "{\n" + self._trim_block_replacement(new_body, trailing_newline=False) + "\n}"
+        return self._replace_span(open_brace, end, replacement, label or f"replace function body: {signature}")
+
+    def disable_function_at_start(
+            self,
+            signature: str,
+            statement: str,
+            *,
+            regex: bool = False,
+            label: str | None = None,
+    ) -> "CppPatcher":
+        """Insert a statement immediately after a function's opening brace."""
+        start, end = self._find_single_cpp_block_after_signature(signature, regex=regex, label=label)
+        open_brace = self.content.find("{", start, end)
+        if open_brace == -1:
+            self._raise_no_change(label or f"disable function: {signature}")
+        return self._replace_span(open_brace, open_brace + 1, "{" + statement.strip(),
+                                  label or f"disable function: {signature}")
+
+    def remove_typedef_enum(self, enum_name: str) -> "CppPatcher":
+        pattern = rf"typedef\s+enum\s+{re.escape(enum_name)}\s*\{{.*?\}}\s*{re.escape(enum_name)}\s*;"
+        return self.remove_regex(pattern, label=f"remove typedef enum: {enum_name}")
+
+    # ------------------------------------------------------------------
+    # Source trimming / cleanup
+    # ------------------------------------------------------------------
+
+    def keep_from_literal(self, marker: str) -> "CppPatcher":
+        idx = self.content.find(marker)
+        if idx == -1:
+            self._raise_no_change(f"keep from literal: {marker!r}")
+        if idx == 0:
+            self._raise_no_change(f"keep from literal made no change: {marker!r}")
+        self.content = self.content[idx:]
+        return self
+
+    def keep_until_literal(self, marker: str) -> "CppPatcher":
+        idx = self.content.find(marker)
+        if idx == -1:
+            self._raise_no_change(f"keep until literal: {marker!r}")
+        if idx == len(self.content):
+            self._raise_no_change(f"keep until literal made no change: {marker!r}")
+        self.content = self.content[:idx]
+        return self
+
+    def assert_startswith(self, prefix: str, *, label: str | None = None) -> "CppPatcher":
+        if not self.content.startswith(prefix):
+            raise PatchError(f"Assertion failed in {self.source_name}: {label or f'must start with {prefix!r}'}")
+        return self
+
+    def assert_endswith(self, suffix: str, *, label: str | None = None) -> "CppPatcher":
+        if not self.content.endswith(suffix):
+            raise PatchError(f"Assertion failed in {self.source_name}: {label or f'must end with {suffix!r}'}")
+        return self
+
+    def strip(self) -> "CppPatcher":
+        old = self.content
+        self.content = self.content.strip()
+        if self.content == old:
+            self._raise_no_change("strip source")
+        return self
+
+    def strip_optional(self) -> "CppPatcher":
+        self.content = self.content.strip()
+        return self
+
+    def remove_line_comments(self) -> "CppPatcher":
+        return self.remove_regex(r"^\s+//\s.*?$", label="remove indented line comments")
+
+    def collapse_blank_lines(self, *, required: bool = False) -> "CppPatcher":
+        return self.replace_regex(r"\n+", "\n", label="collapse blank lines", required=required)
+
+    def remove_whitespace_only_lines(self, *, required: bool = False) -> "CppPatcher":
+        return self.replace_regex(r"[ \t]*\n", "\n", label="remove whitespace-only lines", required=required)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _commit(self, new_content: str, n_changes: int, label: str, required: bool) -> "CppPatcher":
+        if n_changes == 0 and required:
+            self._raise_no_change(label)
+        self.content = new_content
+        return self
+
+    def _replace_span(self, start: int, end: int, replacement: str, label: str) -> "CppPatcher":
+        if start < 0 or end <= start:
+            self._raise_no_change(label)
+        before = self.content
+        self.content = before[:start] + replacement + before[end:]
+        if self.content == before:
+            self._raise_no_change(label)
+        return self
+
+    def _raise_no_change(self, label: str) -> None:
+        raise PatchError(
+            f"Patch did not change {self.source_name}: {label}\n\n"
+            "Manually assess the changed upstream source code."
+        )
+
+    def _find_single_cpp_block_after_signature(self, signature: str, *, regex: bool, label: str | None) -> tuple[
+        int, int]:
+        matches = self._find_cpp_blocks_after_signature(signature, regex=regex, label=label)
+
+        if len(matches) > 1:
+            raise PatchError(
+                f"Patch matched multiple function definitions in {self.source_name}: "
+                f"{label or signature}\n\n"
+                "Provide a more specific full method signature so only one block is changed."
+            )
+
+        return matches[0]
+
+    def _find_cpp_blocks_after_signature(self, signature: str, *, regex: bool, label: str | None) -> list[
+        tuple[int, int]]:
+        signature_pattern = signature if regex else self._cpp_signature_to_flexible_regex(signature)
+
+        saw_signature = False
+        blocks: list[tuple[int, int]] = []
+
+        for match in re.finditer(signature_pattern, self.content, DEFAULT_RE_FLAGS):
+            saw_signature = True
+            open_brace = self.content.find("{", match.end())
+            if open_brace == -1:
+                continue
+
+            # Skip forward declarations and function-pointer declarations that
+            # happen to contain the same signature text.
+            semicolon = self.content.find(";", match.end(), open_brace)
+            if semicolon != -1:
+                continue
+
+            close_brace = self._find_matching_brace(open_brace)
+            end = close_brace + 1
+
+            # Remove one following newline for cleaner deletes/replacements.
+            if end < len(self.content) and self.content[end] == "\r":
+                end += 1
+            if end < len(self.content) and self.content[end] == "\n":
+                end += 1
+
+            blocks.append((match.start(), end))
+
+        if blocks:
+            return blocks
+
+        if saw_signature:
+            self._raise_no_change(label or f"found signature but not a function definition: {signature}")
+        self._raise_no_change(label or f"find function signature: {signature}")
+
+    def _cpp_signature_to_flexible_regex(self, signature: str) -> str:
+        """Build a literal C++ signature regex with flexible whitespace.
+
+        This intentionally does not expose regex syntax to callers. It lets a
+        patch use a copied signature such as:
+
+            Foo Bar(
+                Baz baz,
+                std::function<bool(Baz)> callback)
+
+        and still match the same signature when upstream formats it on one line.
+        """
+        signature = signature.strip()
+        signature = re.sub(r"[;{]\s*$", "", signature).strip()
+
+        if not signature:
+            raise ValueError("Function signature cannot be empty.")
+
+        token_pattern = r"::|->|\.\*|[A-Za-z_]\w*|\d+|[^\s]"
+        tokens = re.findall(token_pattern, signature)
+        if not tokens:
+            raise ValueError(f"Could not tokenize C++ signature: {signature!r}")
+
+        return r"\s*".join(re.escape(token) for token in tokens)
+
+    def _trim_block_replacement(self, text: str, *, trailing_newline: bool) -> str:
+        text = text.strip()
+        if trailing_newline and text:
+            return text + "\n"
+        return text
+
+    def _find_matching_brace(self, open_brace: int) -> int:
+        if self.content[open_brace] != "{":
+            raise ValueError("open_brace must point to '{'")
+
+        depth = 0
+        i = open_brace
+        n = len(self.content)
+        state = "code"
+        raw_end = ""
+
+        while i < n:
+            ch = self.content[i]
+            nxt = self.content[i + 1] if i + 1 < n else ""
+
+            if state == "code":
+                if ch == "/" and nxt == "/":
+                    state = "line_comment"
+                    i += 2
+                    continue
+                if ch == "/" and nxt == "*":
+                    state = "block_comment"
+                    i += 2
+                    continue
+                if ch == 'R' and nxt == '"':
+                    raw_end = self._read_raw_string_end(i)
+                    if raw_end:
+                        state = "raw_string"
+                        i += 2
+                        continue
+                if ch == '"':
+                    state = "string"
+                    i += 1
+                    continue
+                if ch == "'":
+                    state = "char"
+                    i += 1
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return i
+
+            elif state == "line_comment":
+                if ch == "\n":
+                    state = "code"
+
+            elif state == "block_comment":
+                if ch == "*" and nxt == "/":
+                    state = "code"
+                    i += 2
+                    continue
+
+            elif state == "string":
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == '"':
+                    state = "code"
+
+            elif state == "char":
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == "'":
+                    state = "code"
+
+            elif state == "raw_string":
+                if raw_end and self.content.startswith(raw_end, i):
+                    i += len(raw_end)
+                    state = "code"
+                    raw_end = ""
+                    continue
+
+            i += 1
+
+        raise PatchError(f"Could not find matching closing brace in {self.source_name}")
+
+    def _read_raw_string_end(self, start: int) -> str:
+        # C++ raw string: R"delimiter(... )delimiter"
+        open_paren = self.content.find("(", start + 2, start + 40)
+        if open_paren == -1:
+            return ""
+        delimiter = self.content[start + 2:open_paren]
+        if " " in delimiter or "\t" in delimiter or "\n" in delimiter:
+            return ""
+        return ")" + delimiter + '"'
+
+
+def read_file(path: str | os.PathLike[str]) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+def generate_slash_block(name: str) -> str:
+    art = text2art(name, font="starwars").rstrip("\n")
+    art_lines = [f"////  {line}  ////" for line in art.splitlines()]
+    width = max(len(line) for line in art_lines) + 8
+    line = "/" * width
+    return "\n".join([line, line, line, *art_lines, line, line, line]) + "\n"
 
 
 class URLProcessor(ABC):
-    def __init__(self, url, name, injection_order):
+    def __init__(self, url: str, name: str, injection_order: str):
         self.url = url
         self.name = name
         self.injection_order = injection_order
 
         if os.path.exists("main.py"):
-            self.output_folder: Path = Path("modified-dependencies")
+            self.output_folder = Path("modified-dependencies")
         else:
-            self.output_folder: Path = Path(os.path.join("dependencies", "modified-dependencies"))
+            self.output_folder = Path("dependencies") / "modified-dependencies"
 
-        os.makedirs(self.output_folder, exist_ok=True)
+        self.output_folder.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def format_content(self, content):
+    def format_content(self, content: str) -> str:
         pass
 
-    def download(self):
-        response = requests.get(self.url)
-        if response.status_code == 200:
-            return response.text
-        else:
-            raise Exception(f"Failed to download {self.url}")
+    def download(self) -> str:
+        response = requests.get(self.url, timeout=30)
+        response.raise_for_status()
+        return response.text
 
-    def save(self, content, filename):
-        filename = self.injection_order + "_" + filename
-        filepath = os.path.join(self.output_folder, filename)
-        with open(filepath, "w", encoding="utf-8") as file:
-            file.write(content)
+    def save(self, content: str, filename: str) -> None:
+        filename = f"{self.injection_order}_{filename}"
+        filepath = self.output_folder / filename
+        filepath.write_text(content, encoding="utf-8")
         print(f"Saved: {filepath}")
 
-    def process(self):
+    def process(self) -> None:
         filename = self.url.split("/")[-1] or "output.mod"
-
         content = self.download()
 
         if match := re.search(r"^\s*//\s*@compilerOptions\s+(.*)$", content, re.MULTILINE):
-            (self.output_folder / "compiler-options-dump" / filename.replace(".cpp",".txt")).write_text(match.group(1).strip(),
-                                                                                 encoding="utf-8")
+            compiler_dump_dir = self.output_folder / "compiler-options-dump"
+            compiler_dump_dir.mkdir(parents=True, exist_ok=True)
+            (compiler_dump_dir / filename.replace(".cpp", ".txt")).write_text(match.group(1).strip(), encoding="utf-8")
 
-        content = content.strip()
-        content = re.sub(r"//\s+==WindhawkMod==.*?WindhawkModSettings==\s+(?=#include)", "", content, flags=re.DOTALL)
-        content = re.sub("g_settings", "g_settings_" + self.name.lower(), content, flags=re.DOTALL)
-        content = re.sub(r'Wh_Log\(L\">\"\);', r'', content, flags=re.DOTALL)
-        content = re.sub(r"LoadSettings\(\)", r"LoadSettings" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"ApplySettings\(", r"ApplySettings" + self.name + "(", content, flags=re.DOTALL)
-        content = re.sub(r"HookTaskbarDllSymbols\(\)", r"HookTaskbarDllSymbols" + self.name + "()", content,
-                         flags=re.DOTALL)
-        content = re.sub(r"Wh_ModInit\(\)", r"Wh_ModInit" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"Wh_ModAfterInit\(\)", r"Wh_ModAfterInit" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"Wh_ModBeforeUninit\(\)", r"Wh_ModBeforeUninit" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"Wh_ModUninit\(\)", r"Wh_ModUninit" + self.name + "()", content, flags=re.DOTALL)
-        content = re.sub(r"Wh_ModSettingsChanged\(\)", r"Wh_ModSettingsChanged" + self.name + "()", content,
-                         flags=re.DOTALL)
-        content = re.sub(r"g_taskbarViewDllLoaded", r"g_taskbarViewDllLoaded" + self.name, content, flags=re.DOTALL)
+        patch = CppPatcher(content, source_name=filename)
+        content = (
+            patch.strip()
+            .remove_regex(r"//\s+==WindhawkMod==.*?WindhawkModSettings==\s+(?=#include)",
+                          label="remove Windhawk metadata block")
+            .replace_literal("g_settings", f"g_settings_{self.name.lower()}", label="namespace g_settings")
+            .remove_literal('Wh_Log(L">");', label="remove placeholder Wh_Log")
+            .replace_literal("LoadSettings", f"LoadSettings{self.name}", label="namespace LoadSettings")
+            .replace_literal("ApplySettings(", f"ApplySettings{self.name}(", label="namespace ApplySettings")
+            .replace_literal("HookTaskbarDllSymbols", f"HookTaskbarDllSymbols{self.name}",
+                             label="namespace HookTaskbarDllSymbols")
+            .replace_literal("Wh_ModInit", f"Wh_ModInit{self.name}", label="namespace Wh_ModInit")
+            .replace_literal("Wh_ModAfterInit", f"Wh_ModAfterInit{self.name}", label="namespace Wh_ModAfterInit")
+            .replace_literal("Wh_ModBeforeUninit", f"Wh_ModBeforeUninit{self.name}",
+                             label="namespace Wh_ModBeforeUninit")
+            .replace_literal("Wh_ModUninit", f"Wh_ModUninit{self.name}", label="namespace Wh_ModUninit")
+            .replace_literal("Wh_ModSettingsChanged", f"Wh_ModSettingsChanged{self.name}",
+                             label="namespace Wh_ModSettingsChanged")
+            .replace_literal("g_taskbarViewDllLoaded", f"g_taskbarViewDllLoaded{self.name}",
+                             label="namespace g_taskbarViewDllLoaded")
+            .text()
+        )
+
         content = self.format_content(content)
-        content = re.sub(r"^\s+//\s.*?$", "\n", content, flags=re.DOTALL | re.MULTILINE)
-        content = re.sub("\n+", "\n", content, flags=re.DOTALL | re.MULTILINE)
-        content = generate_slash_block(self.name) + content
 
-        content = re.sub(r'[ \t]*\n', '\n', content)  # remove whitespace-only lines
-        content = re.sub(r'\n+', '\n', content).strip()
+        patch = CppPatcher(content, source_name=filename)
+        content = (
+            patch.remove_line_comments()
+            .collapse_blank_lines(required=True)
+            .prepend(generate_slash_block(self.name))
+            .remove_whitespace_only_lines(required=False)
+            .collapse_blank_lines(required=False)
+            .strip_optional()
+            .text()
+        )
 
         self.save(content, filename)
 
-
-######################################################################
 
 class TaskbarIconSizeMod(URLProcessor):
     def __init__(self):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/taskbar-icon-size.wh.cpp"
         super().__init__(url, "TBIconSize", "a")
 
-    def format_content(self, content):
-        content = re.sub(r'Wh_GetIntSetting\(L\"IconSize\"\)', 'Wh_GetIntSetting(L"TaskbarIconSize")', content,
-                         flags=re.DOTALL)
-        content = re.sub(r'Wh_GetIntSetting\(L\"TaskbarButtonWidth\"\)', 'Wh_GetIntSetting(L"TaskbarButtonSize")',
-                         content, flags=re.DOTALL)
+    def format_content(self, content: str) -> str:
+        patch = CppPatcher(content, source_name=self.name)
 
-        cpp_code = f"""
+        injected_dpi_prefix = f"""
         {read_file(os.path.join(mod_parts_dir, "taskbar-states.cpp"))}
         {read_file(os.path.join(mod_parts_dir, "g_settings.cpp"))}
         {read_file(os.path.join(mod_parts_dir, "top-level-variables.cpp"))}
@@ -136,23 +558,29 @@ class TaskbarIconSizeMod(URLProcessor):
         std::wstring GetMonitorName(HWND hwnd) {{
             HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             return GetMonitorName(monitor);
-        }}        
+        }}
         STDAPI GetDpiForMonitor"""
 
-        content = re.sub(
-            r'STDAPI GetDpiForMonitor',
-            lambda _: cpp_code,
-            content,
-            flags=re.DOTALL | re.MULTILINE
-        )
-
-        content = re.sub(r' = Wh_GetIntSetting\(L\"TaskbarHeight\"\);',
-                         ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));',
-                         content, flags=re.DOTALL)
-        content = re.sub(r'return g_settings_tbiconsize\.iconSize;', 'return g_settings_tbiconsize.iconSize ;', content,
-                         flags=re.DOTALL)
-
-        content = re.sub(r"void LoadSettingsTBIconSize\(\) \{.*?}", r"""
+        return (
+            patch.replace_literal('Wh_GetIntSetting(L"IconSize")', 'Wh_GetIntSetting(L"TaskbarIconSize")')
+            .replace_literal('Wh_GetIntSetting(L"TaskbarButtonWidth")', 'Wh_GetIntSetting(L"TaskbarButtonSize")')
+            .replace_literal("STDAPI GetDpiForMonitor", injected_dpi_prefix, count=1,
+                             label="insert shared taskbar helpers before GetDpiForMonitor")
+            .replace_literal(
+                ' = Wh_GetIntSetting(L"TaskbarHeight");',
+                ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));',
+                count=1,
+                label="expand taskbar height setting",
+            )
+            .replace_literal(
+                "return g_settings_tbiconsize.iconSize;",
+                "return g_settings_tbiconsize.iconSize ;",
+                count=1,
+                label="force icon-size return patch",
+            )
+            .replace_function(
+                "void LoadSettingsTBIconSize()",
+                r'''
 void LoadSettingsTBIconSize() {
   g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
   if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
@@ -172,12 +600,11 @@ void LoadSettingsTBIconSize() {
   if (value <= 0) value = 74;
   g_settings_tbiconsize.taskbarButtonWidth = value;
 }
-    """, content, flags=re.DOTALL)
-
-        return content
-
-
-######################################################################
+                ''',
+                label="replace LoadSettingsTBIconSize",
+            )
+            .text()
+        )
 
 
 class StartButtonPosition(URLProcessor):
@@ -185,224 +612,285 @@ class StartButtonPosition(URLProcessor):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/taskbar-start-button-position.wh.cpp"
         super().__init__(url, "StartButtonPosition", "b")
 
-    def format_content(self, content):
-        content = re.sub(r"std::atomic<bool> g_taskbarViewDllLoaded;", "", content, flags=re.DOTALL)
-        content = re.sub(r"std::atomic<bool> g_unloading;", "", content, flags=re.DOTALL)
-        content = re.sub(r"typedef enum MONITOR_DPI_TYPE {.*?} MONITOR_DPI_TYPE;", "", content, flags=re.DOTALL)
-        content = re.sub(r"} g_settings_startbuttonposition;",
-                         ";bool MoveFlyoutNotificationCenter=true;} g_settings_startbuttonposition;", content,
-                         flags=re.DOTALL)
+    def format_content(self, content: str) -> str:
+        patch = CppPatcher(content, source_name=self.name)
 
-        content = re.sub(r"HRESULT WINAPI IUIElement_Arrange_Hook",
-                         "HRESULT WINAPI IUIElement_Arrange_Hook_" + self.name, content, flags=re.DOTALL)
-        content = re.sub(r"std::wstring processFileName = GetProcessFileName\(processId\);",
-                         "TCHAR className[256];GetClassName(hwnd, className, 256);std::wstring windowClassName(className);\nstd::wstring processFileName = GetProcessFileName(processId);\nWh_Log(L\"process: %s, windowClassName: %s\",processFileName.c_str(),windowClassName.c_str());",
-                         content,
-                         flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"SearchHost,", "SearchHost,ShellExperienceHost,", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"target = Target::SearchHost;\s+}", """target = Target::SearchHost;
+        self._remove_unused_upstream_code(patch)
+        self._rename_and_disable_upstream_hooks(patch)
+        self._patch_start_menu_logic(patch)
+        self._insert_custom_hooks(patch)
+        self._patch_dwm_targeting(patch)
+        self._patch_reload_and_settings(patch)
+
+        return patch.prepend(
+            "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\n"
+            "bool InitializeDebounce();\n"
+            "DispatcherTimer debounceTimer{nullptr};\n\n"
+        ).text()
+
+    def _remove_unused_upstream_code(self, patch: CppPatcher) -> None:
+        patch.remove_function("FrameworkElement EnumChildElements(")
+        patch.remove_function("FrameworkElement FindChildByName(")
+        patch.remove_function("FrameworkElement FindChildByClassName(")
+        patch.remove_function("HWND FindCurrentProcessTaskbarWnd(")
+        patch.remove_function("HMODULE GetTaskbarViewModuleHandle(")
+        patch.remove_literal("LoadLibraryExW_t LoadLibraryExW_Original;")
+        patch.remove_regex(
+            r"ExperienceToggleButton_UpdateButtonPadding_t[\s\w\d]*?ExperienceToggleButton_UpdateButtonPadding_Original;",
+            label="remove ExperienceToggleButton original pointer",
+        )
+        patch.remove_function("void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(")
+        patch.remove_regex(
+            r"AugmentedEntryPointButton_UpdateButtonPadding_t[\s\w\d]*?AugmentedEntryPointButton_UpdateButtonPadding_Original;",
+            label="remove AugmentedEntryPointButton original pointer",
+        )
+        patch.remove_literal("std::atomic<bool> g_unloading;")
+        patch.remove_literal("void ApplyStyle();")
+        patch.remove_typedef_enum("MONITOR_DPI_TYPE")
+
+    def _rename_and_disable_upstream_hooks(self, patch: CppPatcher) -> None:
+        patch.replace_literal(
+            "BOOL Wh_ModSettingsChangedStartButtonPosition(BOOL* bReload)",
+            "BOOL Wh_ModSettingsChangedStartButtonPosition()",
+            count=1,
+        )
+        patch.replace_literal(
+            "AugmentedEntryPointButton_UpdateButtonPadding_Hook",
+            f"AugmentedEntryPointButton_UpdateButtonPadding_Hook_{self.name}",
+        )
+        patch.replace_literal("HookTaskbarViewDllSymbols", f"HookTaskbarViewDllSymbols{self.name}")
+        patch.replace_literal("LoadLibraryExW_Hook", f"LoadLibraryExW_Hook_{self.name}")
+        patch.replace_literal(
+            "} g_settings_startbuttonposition;",
+            "    bool MoveFlyoutNotificationCenter=true;\n} g_settings_startbuttonposition;",
+            count=1,
+            label="add MoveFlyoutNotificationCenter setting",
+        )
+        patch.replace_literal("UIElement_Arrange_Hook", f"IUIElement_Arrange_Hook_{self.name}")
+
+    def _patch_start_menu_logic(self, patch: CppPatcher) -> None:
+        patch.replace_literal(
+            "std::wstring processFileName = GetProcessFileName(processId);",
+            "TCHAR className[256];\n"
+            "    GetClassName(hwnd, className, 256);\n"
+            "    std::wstring windowClassName(className);\n"
+            "    std::wstring processFileName = GetProcessFileName(processId);\n"
+            "    Wh_Log(L\"process: %s, windowClassName: %s\",processFileName.c_str(),windowClassName.c_str());",
+            count=1,
+            label="log process and window class",
+        )
+
+        # This is where the original mod moves the start button. Keep the function,
+        # but disable that original behavior.
+        patch.disable_function_at_start(
+            "bool ApplyStyle(XamlRoot xamlRoot)",
+            "if(true)return false;",
+            label="disable upstream ApplyStyle(XamlRoot)",
+        )
+
+        patch.replace_literal(
+            '''if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
+        ApplyStyleRedesignedStartMenu(content);
+    }''',
+            '''if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
+        ApplyStyleClassicStartMenu(content, monitor);
+    } 
+    ''',
+            count=1,
+            label="route redesigned start menu to classic position handler",
+        )
+
+        patch.replace_literal(
+            r"auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };",
+            "auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };\nif(true)return original();",
+            count=1,
+            label="disable upstream arrange hook body",
+        )
+
+        patch.replace_function(
+            "void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor)",
+            '''
+void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor){
+         if(true){ 
+         ApplyStyle(content,GetMonitorName(monitor));
+         return;
+         }
+         }
+            ''',
+            label="replace ApplyStyleClassicStartMenu",
+        )
+
+        patch.replace_literal(
+            "frameRoot.HorizontalAlignment(HorizontalAlignment::Left);",
+            "frameRoot.HorizontalAlignment(HorizontalAlignment::Center);",
+            count=1,
+            label="center classic start menu frame root",
+        )
+
+    def _insert_custom_hooks(self, patch: CppPatcher) -> None:
+        patch.insert_after_literal(
+            "WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {",
+            read_file(os.path.join(hooks_dir, "taskbar.dll_sigs.cpp")),
+            label="insert taskbar.dll signatures",
+        )
+        patch.insert_after_literal(
+            "WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {",
+            read_file(os.path.join(hooks_dir, "Taskbar.View.dll_sigs.cpp")),
+            label="insert Taskbar.View.dll signatures",
+        )
+        patch.insert_before_literal(
+            "bool HookTaskbarDllSymbolsStartButtonPosition() {",
+            read_file(os.path.join(hooks_dir, "taskbar.dll_methods.cpp")) + "\n",
+            label="insert taskbar.dll hook methods",
+        )
+        patch.insert_before_literal(
+            "bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {",
+            read_file(os.path.join(hooks_dir, "Taskbar.View.dll_methods.cpp")) + "\n",
+            label="insert Taskbar.View.dll hook methods",
+        )
+
+    def _patch_dwm_targeting(self, patch: CppPatcher) -> None:
+        patch.insert_after_literal(
+            "enum class DwmTarget {",
+            "\n        ShellExperienceHost,",
+            label="add ShellExperienceHost DwmTarget",
+        )
+        patch.replace_regex(
+            r"target = DwmTarget::SearchHost;\s+}",
+            '''target = DwmTarget::SearchHost;
     }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
-        target = Target::ShellExperienceHost;
-    } """, content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"GetMonitorInfo\(monitor, &monitorInfo\);", """GetMonitorInfo(monitor, &monitorInfo);
+        target = DwmTarget::ShellExperienceHost;
+    } ''',
+            count=1,
+            label="target ShellExperienceHost",
+        )
+        patch.replace_literal(
+            "GetMonitorInfo(monitor, &monitorInfo);",
+            '''GetMonitorInfo(monitor, &monitorInfo);
     auto monitorName = GetMonitorName(monitor);
     auto iterationTbStates = g_taskbarStates.find(monitorName);
     if (iterationTbStates == g_taskbarStates.end()) {
       return original();
     }
     TaskbarState& taskbarState = iterationTbStates->second;
-""", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"if \(target == Target::StartMenu\).*?\}\s+SetWindowPos", """
-    float dpiScale = monitorDpiX / 96.0f;
-    float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
-    float absRootWidth = taskbarState.lastRootWidth * dpiScale;
-    float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
-    
-     Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-           taskbarState.lastLeftMostEdgeTray,
-          taskbarState.lastStartButtonXCalculated,
-          taskbarState.lastRootWidth,
-          cx,
-          x,
-          cy, 
-          y,
-          target,
-          taskbarState.lastTargetWidth,
-          absStartX,
-          absRootWidth,
-          absTargetWidth);
-      
-    if (target == Target::StartMenu) {
-    g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
-      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-        g_startMenuWnd = hwnd;
-        g_startMenuOriginalWidth = cx;
-        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
-        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
-      } else {
-        if (g_startMenuOriginalWidth) {
-          cx = g_startMenuOriginalWidth;
-        }
-        g_startMenuWnd = nullptr;
-        g_startMenuOriginalWidth = 0;
-        x = 0;  
-      }
-    
-    } else if (target == Target::SearchHost) {
-      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-        g_searchMenuWnd = hwnd;
-        g_searchMenuOriginalX = x;
-        x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
-        x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-      } else {
-       x = g_unloading && IsStartMenuOrbLeftAligned() ? g_searchMenuOriginalX : (absRootWidth-cx)/2;
-       g_searchMenuWnd = nullptr;
-       g_searchMenuOriginalX = 0;
-      }
-
-    } else if (target == Target::ShellExperienceHost) {
-        int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
-        if (y != 0) {
-          return original();
-        }
-        if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-          x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
-          x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-        } else {
-          x = static_cast<int>(absRootWidth - cx);
-        }
+''',
+            count=1,
+            label="load taskbar state for monitor",
+        )
+        patch.replace_literal(
+            '''    if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
+        target = DwmTarget::SearchHost;
+    }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
+        target = DwmTarget::ShellExperienceHost;
+    }  else {
+        return original();
+    }''',
+            '''    if (_wcsicmp(processFileName.c_str(), L"StartMenuExperienceHost.exe") == 0) {
+        target = DwmTarget::StartMenu;
+    } else if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
+        target = DwmTarget::SearchHost;
+    }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
+        target = DwmTarget::ShellExperienceHost;
+    }  else {
+        return original();
     }
-    
-     Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-               taskbarState.lastLeftMostEdgeTray,
-              taskbarState.lastStartButtonXCalculated,
-              taskbarState.lastRootWidth,
-              cx,
-              x,
-              cy,
-              y,
-              target,
-              taskbarState.lastTargetWidth,
-              absStartX,
-              absRootWidth,
-              absTargetWidth);
-SetWindowPos""", content, flags=re.MULTILINE | re.DOTALL)
+    ''',
+            count=1,
+            label="add StartMenuExperienceHost target branch",
+        )
+        patch.insert_after_literal(
+            "enum class DwmTarget {",
+            "\n        StartMenu,",
+            label="add StartMenu DwmTarget",
+        )
+        patch.replace_literal("HWND g_searchMenuWnd;", "HWND g_searchMenuWnd, g_startMenuWnd;", count=1)
+        patch.replace_literal("int g_searchMenuOriginalX;", "int g_searchMenuOriginalX, g_startMenuOriginalWidth;",
+                              count=1)
+        patch.replace_regex(
+            r"if \(target == DwmTarget::SearchHost\).*?\}\s+SetWindowPos",
+            read_file(os.path.join(mod_parts_dir, "start-menu-position-code.cpp")) + "SetWindowPos",
+            count=1,
+            label="replace SetWindowPos target branch",
+        )
+        patch.remove_literal("margin.Right = 0;")
+        patch.remove_literal("margin.Right = -width;")
 
-        content = re.sub(r"FrameworkElement EnumChildElements\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"FrameworkElement FindChildByName\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"FrameworkElement FindChildByClassName\(.*?(?:^}$)", "", content,
-                         flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"HWND FindCurrentProcessTaskbarWnd\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(
-            r"AugmentedEntryPointButton_UpdateButtonPadding_t[\s\w\d]*?AugmentedEntryPointButton_UpdateButtonPadding_Original;",
-            "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"AugmentedEntryPointButton_UpdateButtonPadding_Hook",
-                         "AugmentedEntryPointButton_UpdateButtonPadding_Hook_" + self.name, content,
-                         flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"HookTaskbarViewDllSymbols", "HookTaskbarViewDllSymbols" + self.name, content,
-                         flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"HMODULE GetTaskbarViewModuleHandle\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"LoadLibraryExW_t LoadLibraryExW_Original;", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"LoadLibraryExW_Hook", "LoadLibraryExW_Hook_" + self.name, content,
-                         flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"bool ApplyStyle\(.*?(?:^}$)", "", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(
-            r"element\.Dispatcher\(\)\.TryRunAsync\(\s+winrt::Windows::UI::Core::CoreDispatcherPriority::High,\s+\[element\]\(\) {",
-            "element.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,[element]() { \\n",
-            content,
-            flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"if \(!xamlRoot\) \{", "if (!xamlRoot) {g_already_requested_debounce_initializing=false;\n",
-                         content, flags=re.DOTALL | re.MULTILINE)
-
-        content = re.sub(r"margin\.Right = 0;", "", content, flags=re.DOTALL | re.MULTILINE)
-        content = re.sub(r"margin\.Right = -width;", "", content, flags=re.DOTALL)
-        content = re.sub(r"return IUIElement_Arrange_Original\(pThis, &newRect\);", "return original();", content,
-                         flags=re.DOTALL)
-        content = re.sub(r"if \(!ApplyStyle\(xamlRoot\)\) \{.*?}",
-                         r"""
-const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-if (!xamlRootContent) {
-g_already_requested_debounce_initializing=false;
-return TRUE;
-}
-if (!debounceTimer) {
-     xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
-     InitializeDebounce(); 
-  });
+    def _patch_reload_and_settings(self, patch: CppPatcher) -> None:
+        patch.replace_literal(
+            "if (!xamlRoot) {",
+            "if (!xamlRoot) {g_already_requested_debounce_initializing=false;\n",
+            count=1,
+            label="reset debounce flag when xamlRoot is missing",
+        )
+        patch.replace_regex(
+            r"if \(!ApplyStyle\(xamlRoot\)\) \{.*?\}",
+            r'''
+  const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+  if (!xamlRootContent) {
+  g_already_requested_debounce_initializing=false;
   return TRUE;
-}
-if (xamlRootContent && xamlRootContent.Dispatcher()) {
-std::wstring monitorName = GetMonitorName(hWnd);
-  xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
-    if (!ApplyStyle(xamlRootContent,monitorName)) {
-      Wh_Log(L"ApplyStyles failed");
-    }
-  });
-  return TRUE;
-}
-""",
-                         content, flags=re.DOTALL | re.MULTILINE)
-        content = re.sub(r"void Wh_ModUninitStartButtonPosition\(\) {",
-                         "void Wh_ModUninitStartButtonPosition() {if(true)return;", content,
-                         flags=re.MULTILINE | re.DOTALL)
+  }
+  if (!debounceTimer) {
+       xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
+       InitializeDebounce();
+    });
+    return TRUE;
+  }
+  if (xamlRootContent && xamlRootContent.Dispatcher()) {
+  std::wstring monitorName = GetMonitorName(hWnd);
+    xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
+      if (!ApplyStyle(xamlRootContent,monitorName)) {
+        Wh_Log(L"ApplyStyles failed");
+      }
+    });
+    return TRUE;
+  }
+  ''',
+            count=1,
+            label="replace ApplyStyle reload block",
+        )
+        patch.disable_function_at_start(
+            "void Wh_ModUninitStartButtonPosition()",
+            "if(true)return;",
+            label="disable Wh_ModUninitStartButtonPosition",
+        )
+        patch.replace_literal(
+            'Wh_GetIntSetting(L"startMenuOnTheLeft");',
+            '''Wh_GetIntSetting(L"MoveFlyoutStartMenu");'''
+            '''g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");''',
+            count=1,
+            label="load custom flyout settings",
+        )
 
-        # hooks
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks\[\] = \{",
-                         fr"WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{read_file(os.path.join(hooks_dir, 'taskbar.dll_sigs.cpp'))}",
-                         content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"WindhawkUtils::SYMBOL_HOOK symbolHooks\[\] = \{",
-                         fr"WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{read_file(os.path.join(hooks_dir, 'Taskbar.View.dll_sigs.cpp'))}",
-                         content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"bool HookTaskbarDllSymbolsStartButtonPosition\(\) \{",
-                         fr"""{read_file(os.path.join(hooks_dir, "taskbar.dll_methods.cpp"))}
-bool HookTaskbarDllSymbolsStartButtonPosition() {{""", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"bool HookTaskbarViewDllSymbolsStartButtonPosition\(HMODULE module\) \{",
-                         fr"""{read_file(os.path.join(hooks_dir, "Taskbar.View.dll_methods.cpp"))}
-bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {{""", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = re.sub(r"Wh_GetIntSetting\(L\"startMenuOnTheLeft\"\);", """Wh_GetIntSetting(L\"MoveFlyoutStartMenu\");
-g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
-""", content, flags=re.MULTILINE | re.DOTALL)
-        content = re.sub(r"Wh_GetIntSetting\(L\"startMenuWidth\"\);", "660;", content, flags=re.MULTILINE | re.DOTALL)
-
-        content = "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\nbool InitializeDebounce();\nDispatcherTimer debounceTimer{nullptr};\n\n" + content
-        return content
-
-
-######################################################################
 
 class TaskbarStylerMod(URLProcessor):
     def __init__(self):
         url = "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/main/mods/windows-11-taskbar-styler.wh.cpp"
         super().__init__(url, "BlurBrush", "c")
 
-    def format_content(self, content):
-        content = content.split("#include <initguid.h>")[1]
-        content = "#include <initguid.h>\n" + content
-        content = content.split("void SetOrClearValue")[0]
-        content = content.strip()
-        if not (content.startswith("#include") and content.endswith(
-                "////////////////////////////////////////////////////////////////////////////////")):
-            raise ValueError("Content must start w/ include and end with '/+'")
-        return content
+    def format_content(self, content: str) -> str:
+        patch = CppPatcher(content, source_name=self.name)
+        return (
+            patch.keep_from_literal("#include <initguid.h>")
+            .keep_until_literal("void SetOrClearValue")
+            .strip_optional()
+            .assert_startswith("#include", label="Taskbar styler should start with includes")
+            .assert_endswith("////////////////////////////////////////////////////////////////////////////////",
+                             label="Taskbar styler should end at separator")
+            .text()
+        )
 
 
-######################################################################
-
-def generate_mod_art():
+def generate_mod_art() -> None:
     print(generate_slash_block("WinDock"))
 
 
-def process_all_mods():
+def process_all_mods() -> None:
     generate_mod_art()
     processors = [
         TaskbarIconSizeMod(),
         StartButtonPosition(),
-        # TaskbarStylerMod()
+        # TaskbarStylerMod(),
     ]
 
     for processor in processors:
