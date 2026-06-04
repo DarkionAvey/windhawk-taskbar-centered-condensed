@@ -1,6 +1,6 @@
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////  .___________..______    __    ______   ______   .__   __.      _______. __   ________   _______   ////
 ////  |           ||   _  \  |  |  /      | /  __  \  |  \ |  |     /       ||  | |       /  |   ____|  ////
 ////  `---|  |----`|  |_)  | |  | |  ,----'|  |  |  | |   \|  |    |   (----`|  | `---/  /   |  |__     ////
@@ -8,9 +8,9 @@
 ////      |  |     |  |_)  | |  | |  `----.|  `--'  | |  |\   | .----)   |   |  |   /  /----.|  |____   ////
 ////      |__|     |______/  |__|  \______| \______/  |__| \__| |_______/    |__|  /________||_______|  ////
 ////                                                                                                    ////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -22,6 +22,8 @@
 #include <limits>
 #include <optional>
 #include <regex>
+#include <string>
+#include <string_view>
 using namespace winrt::Windows::UI::Xaml;
 struct {
     int taskbarHeight;
@@ -30,6 +32,7 @@ struct {
     int iconSizeSmall;
     int taskbarButtonWidthSmall;
 } g_settings_tbiconsize;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_taskbarViewDllLoadedTBIconSize;
 std::atomic<bool> g_searchUxUiDllLoaded;
 std::atomic<bool> g_applyingSettings;
@@ -246,6 +249,16 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
         return winrt::get_class_name(child) == className;
     });
 }
+bool IsVerticalTaskbar() {
+    APPBARDATA appBarData = {
+        .cbSize = sizeof(APPBARDATA),
+    };
+    if (!SHAppBarMessage(ABM_GETTASKBARPOS, &appBarData)) {
+        Wh_Log(L"SHAppBarMessage(ABM_GETTASKBARPOS) failed");
+        return false;
+    }
+    return appBarData.uEdge == ABE_LEFT || appBarData.uEdge == ABE_RIGHT;
+}
 void OverrideResourceDirectoryLookup(
     PCSTR sourceFunctionName,
     const winrt::Windows::Foundation::IInspectable* key,
@@ -364,7 +377,7 @@ using TrayUI_GetMinSize_t = void(WINAPI*)(void* pThis,
 TrayUI_GetMinSize_t TrayUI_GetMinSize_Original;
 void WINAPI TrayUI_GetMinSize_Hook(void* pThis, HMONITOR monitor, SIZE* size) {
     TrayUI_GetMinSize_Original(pThis, monitor, size);
-    if (g_taskbarHeight) {
+    if (!IsVerticalTaskbar() && g_taskbarHeight) {
         UINT dpiX = 0;
         UINT dpiY = 0;
         GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY);
@@ -533,7 +546,7 @@ TaskbarConfiguration_GetIconHeightInViewPixels_double_Hook(double baseHeight) {
         g_hasDynamicIconScaling = false;
     }
     if (!g_unloading) {
-        return g_settings_tbiconsize.iconSize ;
+        return g_settings_tbiconsize.iconSize;
     }
     return TaskbarConfiguration_GetIconHeightInViewPixels_double_Original(
         baseHeight);
@@ -559,7 +572,11 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
 using TaskListButton_IconHeight_t = void(WINAPI*)(void* pThis, double height);
 TaskListButton_IconHeight_t TaskListButton_IconHeight_Original;
 size_t GetIconHeightOffset() {
-    static size_t iconHeightOffset = []() {
+    static size_t iconHeightOffset = []() -> size_t {
+        if (!TaskListButton_IconHeight_Original) {
+            Wh_Log(L"Error: TaskListButton_IconHeight_Original is null");
+            return 0;
+        }
         size_t offset =
 #if defined(_M_X64)
             OffsetFromAssemblyRegex(
@@ -590,7 +607,8 @@ SystemTrayController_GetFrameSize_t SystemTrayController_GetFrameSize_Original;
 double WINAPI SystemTrayController_GetFrameSize_Hook(void* pThis,
                                                      int enumTaskbarSize) {
     Wh_Log(L"> %d", enumTaskbarSize);
-    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
+    if (!IsVerticalTaskbar() && g_taskbarHeight &&
+        (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
     return SystemTrayController_GetFrameSize_Original(pThis, enumTaskbarSize);
@@ -603,7 +621,8 @@ double WINAPI
 SystemTraySecondaryController_GetFrameSize_Hook(void* pThis,
                                                 int enumTaskbarSize) {
     Wh_Log(L"> %d", enumTaskbarSize);
-    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
+    if (!IsVerticalTaskbar() && g_taskbarHeight &&
+        (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
     return SystemTraySecondaryController_GetFrameSize_Original(pThis,
@@ -619,7 +638,8 @@ double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int enumTaskbarSize) {
         g_originalTaskbarHeight =
             TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
     }
-    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
+    if (!IsVerticalTaskbar() && g_taskbarHeight &&
+        (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
     return TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
@@ -631,6 +651,12 @@ TaskbarConfiguration_UpdateFrameSize_t
     TaskbarConfiguration_UpdateFrameSize_SymbolAddress;
 LONG GetFrameSizeOffset() {
     static LONG frameSizeOffset = []() -> LONG {
+        if (!TaskbarConfiguration_UpdateFrameSize_SymbolAddress) {
+            Wh_Log(
+                L"Error: TaskbarConfiguration_UpdateFrameSize_SymbolAddress is "
+                L"null");
+            return 0;
+        }
         const DWORD* start =
             (const DWORD*)TaskbarConfiguration_UpdateFrameSize_SymbolAddress;
         const DWORD* end = start + 0x80;
@@ -682,7 +708,7 @@ void WINAPI Event_operator_call_Hook(void* pThis) {
             g_originalTaskbarHeight =
                 *g_TaskbarConfiguration_UpdateFrameSize_frameSize;
         }
-        if (g_taskbarHeight) {
+        if (!IsVerticalTaskbar() && g_taskbarHeight) {
             *g_TaskbarConfiguration_UpdateFrameSize_frameSize = g_taskbarHeight;
         }
     }
@@ -694,13 +720,21 @@ SystemTrayController_UpdateFrameSize_t
     SystemTrayController_UpdateFrameSize_SymbolAddress;
 LONG GetLastHeightOffset() {
     static LONG lastHeightOffset = []() -> LONG {
+        if (!SystemTrayController_UpdateFrameSize_SymbolAddress) {
+            Wh_Log(
+                L"Error: SystemTrayController_UpdateFrameSize_SymbolAddress is "
+                L"null");
+            return 0;
+        }
 #if defined(_M_X64)
         const BYTE* start =
             (const BYTE*)SystemTrayController_UpdateFrameSize_SymbolAddress;
-        const BYTE* end = start + 0x200;
+        const BYTE* end = start + 0x400;
         for (const BYTE* p = start; p != end; p++) {
-            if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E && p[3] == 0xB3 &&
-                p[8] == 0x7A && p[10] == 0x75) {
+            if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E &&
+                (p[3] & 0xC0) == 0x80 && p[8] == 0x7A &&
+                (p[10] == 0x74 || p[10] == 0x75 ||
+                 (p[10] == 0x0F && (p[11] == 0x84 || p[11] == 0x85)))) {
                 LONG offset = *(LONG*)(p + 4);
                 Wh_Log(L"lastHeightOffset=0x%X", offset);
                 return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
@@ -709,7 +743,7 @@ LONG GetLastHeightOffset() {
 #elif defined(_M_ARM64)
         const DWORD* start =
             (const DWORD*)SystemTrayController_UpdateFrameSize_SymbolAddress;
-        const DWORD* end = start + 0x80;
+        const DWORD* end = start + 0x100;
         std::regex regex1(R"(ldr\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])");
         std::regex regex2(R"(fcmp\s+d\d+, d\d+)");
         std::regex regex3(R"(b\.eq\s+0x[0-9a-f]+)");
@@ -760,6 +794,10 @@ void SystemTrayController_UpdateFrameSize_InitOffsets() {
 SystemTrayController_UpdateFrameSize_t
     SystemTrayController_UpdateFrameSize_Original;
 void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
+    if (IsVerticalTaskbar()) {
+        SystemTrayController_UpdateFrameSize_Original(pThis);
+        return;
+    }
     LONG lastHeightOffset = GetLastHeightOffset();
     if (lastHeightOffset) {
         *(double*)((BYTE*)pThis + lastHeightOffset) = 0;
@@ -776,6 +814,10 @@ TaskbarFrame_MaxHeight_double_t TaskbarFrame_MaxHeight_double_Original;
 using TaskbarFrame_Height_double_t = void(WINAPI*)(void* pThis, double value);
 TaskbarFrame_Height_double_t TaskbarFrame_Height_double_Original;
 void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
+    if (IsVerticalTaskbar()) {
+        TaskbarFrame_Height_double_Original(pThis, value);
+        return;
+    }
     if (TaskbarFrame_MaxHeight_double_Original) {
         TaskbarFrame_MaxHeight_double_Original(
             pThis, std::numeric_limits<double>::infinity());
@@ -785,6 +827,12 @@ void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
 void* TaskbarController_OnGroupingModeChanged_Original;
 LONG GetTaskbarFrameOffset() {
     static LONG taskbarFrameOffset = []() -> LONG {
+        if (!TaskbarController_OnGroupingModeChanged_Original) {
+            Wh_Log(
+                L"Error: TaskbarController_OnGroupingModeChanged_Original is "
+                L"null");
+            return 0;
+        }
 #if defined(_M_X64)
         const BYTE* p =
             (const BYTE*)TaskbarController_OnGroupingModeChanged_Original;
@@ -832,6 +880,10 @@ using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
 TaskbarController_UpdateFrameHeight_t
     TaskbarController_UpdateFrameHeight_Original;
 void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
+    if (IsVerticalTaskbar()) {
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
     LONG taskbarFrameOffset = GetTaskbarFrameOffset();
     if (!taskbarFrameOffset) {
         Wh_Log(L"Error: taskbarFrameOffset is invalid");
@@ -879,7 +931,7 @@ void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
 using SystemTrayFrame_Height_t = void(WINAPI*)(void* pThis, double value);
 SystemTrayFrame_Height_t SystemTrayFrame_Height_Original;
 void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
-    if (g_inSystemTrayController_UpdateFrameSize) {
+    if (!IsVerticalTaskbar() && g_inSystemTrayController_UpdateFrameSize) {
         value = std::numeric_limits<double>::quiet_NaN();
     }
     SystemTrayFrame_Height_Original(pThis, value);
@@ -973,62 +1025,92 @@ LONG GetMediumTaskbarButtonExtentOffset() {
         const BYTE* start =
             (const BYTE*)TaskListButton_UpdateIconColumnDefinition_Original;
         const BYTE* end = start + 0x200;
+        LONG offsetCandidate = 0;
+        LONG offset = 0;
         for (const BYTE* p = start; p != end; p++) {
             if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
-                (p[3] & 0x81) == 0x81) {
-                LONG offset = *(LONG*)(p + 4);
-                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
+                (p[3] & 0xC0) == 0x80) {
+                offsetCandidate = *(LONG*)(p + 4);
             }
             if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F && p[3] == 0x10 &&
-                (p[4] & 0x81) == 0x81) {
-                LONG offset = *(LONG*)(p + 5);
-                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
+                (p[4] & 0xC0) == 0x80) {
+                offsetCandidate = *(LONG*)(p + 5);
+            }
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
+                (p[3] & 0xC0) == 0x80) {
+                offset = offsetCandidate;
+                break;
+            }
+            if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F && p[3] == 0x5C &&
+                (p[4] & 0xC0) == 0x80) {
+                offset = offsetCandidate;
+                break;
             }
         }
+        Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
+        return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
 #elif defined(_M_ARM64)
         const DWORD* start =
             (const DWORD*)TaskListButton_UpdateIconColumnDefinition_Original;
         const DWORD* end = start + 0x80;
-        std::regex regex1(R"(fsub\s+d\d+, (d\d+), d\d+)");
-        const DWORD* cmdWithReg1 = nullptr;
-        std::string reg1;
+        std::regex regexLdr(R"(ldr\s+(d\d+), \[(x\d+), #0x([0-9a-f]+)\])");
+        std::regex regexLdrOther(R"(ldr\s+(d\d+),.*)");
+        std::regex regexFsub(R"(fsub\s+d\d+, (d\d+), (d\d+))");
+        struct {
+            std::string reg;
+            std::string regSrc;
+            LONG offset;
+        } ldrs[32];
+        size_t ldrCount = 0;
         for (const DWORD* p = start; p != end; p++) {
-            WH_DISASM_RESULT result1;
-            if (!Wh_Disasm((void*)p, &result1)) {
+            WH_DISASM_RESULT result;
+            if (!Wh_Disasm((void*)p, &result)) {
                 break;
             }
-            std::string_view s1 = result1.text;
-            if (s1 == "ret") {
+            std::string_view s = result.text;
+            if (s == "ret") {
                 break;
             }
-            std::match_results<std::string_view::const_iterator> match1;
-            if (std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
-                cmdWithReg1 = p;
-                reg1 = match1[1];
+            if (ldrCount == ARRAYSIZE(ldrs)) {
+                Wh_Log(L"Too many ldr instructions");
                 break;
             }
-        }
-        if (cmdWithReg1) {
-            std::regex regex2(R"(ldr\s+(d\d+), \[x\d+, #0x([0-9a-f]+)\])");
-            for (const DWORD* p = start; p != cmdWithReg1; p++) {
-                WH_DISASM_RESULT result1;
-                if (!Wh_Disasm((void*)p, &result1)) {
-                    break;
+            std::match_results<std::string_view::const_iterator> matchLdr;
+            if (std::regex_match(s.begin(), s.end(), matchLdr, regexLdr)) {
+                std::string reg = matchLdr[1];
+                std::string regSrc = matchLdr[2];
+                LONG offset = std::stoull(matchLdr[3], nullptr, 16);
+                ldrs[ldrCount++] = {std::move(reg), std::move(regSrc), offset};
+                continue;
+            }
+            std::match_results<std::string_view::const_iterator> matchLdrOther;
+            if (std::regex_match(s.begin(), s.end(), matchLdrOther,
+                                 regexLdrOther)) {
+                std::string reg = matchLdrOther[1];
+                ldrs[ldrCount++] = {std::move(reg), std::string(), 0};
+                continue;
+            }
+            std::match_results<std::string_view::const_iterator> matchFsub;
+            if (std::regex_match(s.begin(), s.end(), matchFsub, regexFsub)) {
+                std::string regA = matchFsub[1];
+                std::string regB = matchFsub[2];
+                std::remove_reference_t<decltype(ldrs[0])>* ldrA = nullptr;
+                std::remove_reference_t<decltype(ldrs[0])>* ldrB = nullptr;
+                for (size_t i = 0; i < ldrCount; i++) {
+                    const auto& [ldrReg, ldrRegSrc, ldrOffset] =
+                        ldrs[ldrCount - 1 - i];
+                    if (!ldrA && ldrReg == regA) {
+                        ldrA = &ldrs[ldrCount - 1 - i];
+                    }
+                    if (!ldrB && ldrReg == regB) {
+                        ldrB = &ldrs[ldrCount - 1 - i];
+                    }
                 }
-                std::string_view s1 = result1.text;
-                if (s1 == "ret") {
-                    break;
+                if (ldrA && ldrB && ldrA->regSrc == ldrB->regSrc) {
+                    LONG offset = ldrA->offset;
+                    Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
+                    return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
                 }
-                std::match_results<std::string_view::const_iterator> match1;
-                if (!std::regex_match(s1.begin(), s1.end(), match1, regex2) ||
-                    match1[1] != reg1) {
-                    continue;
-                }
-                LONG offset = std::stoull(match1[2], nullptr, 16);
-                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
             }
         }
 #else
@@ -1269,12 +1351,12 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         bool widePanel = panelGrid.Width() > panelGrid.Height();
         if (widePanel) {
             auto margin = Thickness{3, 3, 3, 3};
-            if (!g_unloading && marginValue < 3) {
+            if (!g_unloading && marginValue <= 3) {
                 labelsTopBorderExtraMargin = 3 - marginValue;
                 margin.Left = marginValue;
                 margin.Top = marginValue;
-                margin.Right = marginValue;
-                margin.Bottom = marginValue;
+                margin.Right = 0;
+                margin.Bottom = 0;
             }
             Wh_Log(L"Setting Margin=%f,%f,%f,%f for panel", margin.Left,
                    margin.Top, margin.Right, margin.Bottom);
@@ -1287,14 +1369,13 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
             if (!g_unloading) {
                 margin.Left = marginValue;
                 margin.Top = marginValue;
-                margin.Right = marginValue;
-                margin.Bottom = marginValue;
+                margin.Right = 0;
+                margin.Bottom = 0;
                 if (g_taskbarHeight < 48) {
                     margin.Top -= static_cast<double>(48 - g_taskbarHeight) / 2;
                     if (margin.Top < 0) {
                         margin.Top = 0;
                     }
-                    margin.Bottom = marginValue * 2 - margin.Top;
                 }
             }
             Wh_Log(L"Setting Margin=%f,%f,%f,%f for panel", margin.Left,
@@ -1348,7 +1429,8 @@ using SHAppBarMessage_t = decltype(&SHAppBarMessage);
 SHAppBarMessage_t SHAppBarMessage_Original;
 auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
     auto ret = SHAppBarMessage_Original(dwMessage, pData);
-    if (dwMessage == ABM_QUERYPOS && ret && g_taskbarHeight) {
+    if (dwMessage == ABM_QUERYPOS && ret && !IsVerticalTaskbar() &&
+        g_taskbarHeight) {
         pData->rc.top =
             pData->rc.bottom -
             MulDiv(g_taskbarHeight, GetDpiForWindow(pData->hWnd), 96);
@@ -1439,7 +1521,7 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
                                  GetDpiForWindow(hTaskbarWnd));
     }
     g_applyingSettings = true;
-    if (taskbarHeight == g_taskbarHeight) {
+    if (!IsVerticalTaskbar() && taskbarHeight == g_taskbarHeight) {
         g_pendingMeasureOverride = true;
         g_taskbarHeight = taskbarHeight - 1;
         if (!TaskbarConfiguration_GetFrameSize_Original &&
@@ -1466,11 +1548,15 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
                          &tempTaskbarHeight, sizeof(double));
     }
     SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
-    for (int i = 0; i < 100; i++) {
-        if (!g_pendingMeasureOverride) {
-            break;
+    if (!IsVerticalTaskbar()) {
+        for (int i = 0; i < 100; i++) {
+            if (!g_pendingMeasureOverride) {
+                break;
+            }
+            Sleep(100);
         }
-        Sleep(100);
+    } else {
+        g_pendingMeasureOverride = false;
     }
     HWND hReBarWindow32 =
         FindWindowEx(hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
@@ -1483,7 +1569,54 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     }
     g_applyingSettings = false;
 }
-bool HookTaskbarViewDllSymbols(HMODULE module) {
+bool HookSystemTraySymbols(HMODULE module) {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTrayController_GetFrameSize_Original,
+            SystemTrayController_GetFrameSize_Hook,
+            true,  // From Windows 11 version 22H2, inlined sometimes.
+        },
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTraySecondaryController_GetFrameSize_Original,
+            SystemTraySecondaryController_GetFrameSize_Hook,
+            true,  // From Windows 11 version 22H2.
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTrayController::UpdateFrameSize(void))"},
+            &SystemTrayController_UpdateFrameSize_SymbolAddress,
+            nullptr,  // Hooked manually, we need the symbol address.
+            true,     // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))"},
+            &SystemTraySecondaryController_UpdateFrameSize_Original,
+            SystemTraySecondaryController_UpdateFrameSize_Hook,
+            true,  // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
+            &SystemTrayFrame_Height_Original,
+            SystemTrayFrame_Height_Hook,
+            true,  // From Windows 11 version 22H2.
+        },
+    };
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+    if (SystemTrayController_UpdateFrameSize_SymbolAddress) {
+        SystemTrayController_UpdateFrameSize_InitOffsets();
+        WindhawkUtils::Wh_SetFunctionHookT(
+            SystemTrayController_UpdateFrameSize_SymbolAddress,
+            SystemTrayController_UpdateFrameSize_Hook,
+            &SystemTrayController_UpdateFrameSize_Original);
+    }
+    return true;
+}
+bool HookTaskbarViewDllSymbols(HMODULE module,
+                               bool hookSystemTraySymbolsInline) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
@@ -1536,18 +1669,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 true,  // From KB5058499 (May 2025).
             },
             {
-                {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
-                &SystemTrayController_GetFrameSize_Original,
-                SystemTrayController_GetFrameSize_Hook,
-                true,  // From Windows 11 version 22H2, inlined sometimes.
-            },
-            {
-                {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
-                &SystemTraySecondaryController_GetFrameSize_Original,
-                SystemTraySecondaryController_GetFrameSize_Hook,
-                true,  // From Windows 11 version 22H2.
-            },
-            {
                 {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
                 &TaskbarConfiguration_GetFrameSize_Original,
                 TaskbarConfiguration_GetFrameSize_Hook,
@@ -1565,12 +1686,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 Event_operator_call_Hook,
             },
 #endif
-            {
-                {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTrayController::UpdateFrameSize(void))"},
-                &SystemTrayController_UpdateFrameSize_SymbolAddress,
-                nullptr,  // Hooked manually, we need the symbol address.
-                true,     // Missing in older Windows 11 versions.
-            },
             {
                 {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::MaxHeight(double)const )"},
                 &TaskbarFrame_MaxHeight_double_Original,
@@ -1597,18 +1712,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 &TaskbarController_UpdateFrameHeight_Original,
                 TaskbarController_UpdateFrameHeight_Hook,
                 true,  // Missing in older Windows 11 versions.
-            },
-            {
-                {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))"},
-                &SystemTraySecondaryController_UpdateFrameSize_Original,
-                SystemTraySecondaryController_UpdateFrameSize_Hook,
-                true,  // Missing in older Windows 11 versions.
-            },
-            {
-                {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
-                &SystemTrayFrame_Height_Original,
-                SystemTrayFrame_Height_Hook,
-                true,  // From Windows 11 version 22H2.
             },
             {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
@@ -1664,7 +1767,51 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 true,  // From Windows 11 version 22H2.
             },
         };
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    WindhawkUtils::SYMBOL_HOOK symbolHooksSystemTray[] = {
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTrayController_GetFrameSize_Original,
+            SystemTrayController_GetFrameSize_Hook,
+            true,  // From Windows 11 version 22H2, inlined sometimes.
+        },
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTraySecondaryController_GetFrameSize_Original,
+            SystemTraySecondaryController_GetFrameSize_Hook,
+            true,  // From Windows 11 version 22H2.
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTrayController::UpdateFrameSize(void))"},
+            &SystemTrayController_UpdateFrameSize_SymbolAddress,
+            nullptr,  // Hooked manually, we need the symbol address.
+            true,     // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))"},
+            &SystemTraySecondaryController_UpdateFrameSize_Original,
+            SystemTraySecondaryController_UpdateFrameSize_Hook,
+            true,  // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
+            &SystemTrayFrame_Height_Original,
+            SystemTrayFrame_Height_Hook,
+            true,  // From Windows 11 version 22H2.
+        },
+    };
+    using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
+    COMBINED_SH allHooks[  //
+        ARRAYSIZE(symbolHooks) + ARRAYSIZE(symbolHooksSystemTray)];
+    int index = 0;
+    for (auto& hook : symbolHooks) {
+        allHooks[index++] = std::move(hook);
+    }
+    if (hookSystemTraySymbolsInline) {
+        for (auto& hook : symbolHooksSystemTray) {
+            allHooks[index++] = std::move(hook);
+        }
+    }
+    if (!HookSymbols(module, allHooks, index)) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -1680,7 +1827,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TaskbarConfiguration_UpdateFrameSize_Original);
     }
 #endif
-    if (SystemTrayController_UpdateFrameSize_SymbolAddress) {
+    if (hookSystemTraySymbolsInline &&
+        SystemTrayController_UpdateFrameSize_SymbolAddress) {
         SystemTrayController_UpdateFrameSize_InitOffsets();
         WindhawkUtils::Wh_SetFunctionHookT(
             SystemTrayController_UpdateFrameSize_SymbolAddress,
@@ -1776,8 +1924,51 @@ bool HookTaskbarDllSymbolsTBIconSize() {
     }
     return true;
 }
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
 HMODULE GetTaskbarViewModuleHandle() {
     HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    return module;
+}
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
     if (!module) {
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
@@ -1795,10 +1986,22 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     if (!module) {
         return module;
     }
+    if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
+        module != GetTaskbarViewModuleHandle() &&
+        !g_systemTrayModuleHooked.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+        if (HookSystemTraySymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
     if (!g_taskbarViewDllLoadedTBIconSize && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
-        if (HookTaskbarViewDllSymbols(module)) {
+        bool hookSystemTraySymbolsInline =
+            !g_systemTrayModuleHooked &&
+            GetSystemTrayModuleHandle() == module &&
+            !g_systemTrayModuleHooked.exchange(true);
+        if (HookTaskbarViewDllSymbols(module, hookSystemTraySymbolsInline)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -1817,13 +2020,31 @@ BOOL Wh_ModInitTBIconSize() {
         return FALSE;
     }
     bool delayLoadingNeeded = false;
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        if (systemTrayModule != GetTaskbarViewModuleHandle()) {
+            g_systemTrayModuleHooked = true;
+            if (!HookSystemTraySymbols(systemTrayModule)) {
+                return FALSE;
+            }
+        }
+    }
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoadedTBIconSize = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+        bool hookSystemTraySymbolsInline =
+            !g_systemTrayModuleHooked &&
+            GetSystemTrayModuleHandle() == taskbarViewModule;
+        if (hookSystemTraySymbolsInline) {
+            g_systemTrayModuleHooked = true;
+        }
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule,
+                                       hookSystemTraySymbolsInline)) {
             return FALSE;
         }
     } else {
         Wh_Log(L"Taskbar view module not loaded yet");
+        delayLoadingNeeded = true;
+    }
+    if (!g_systemTrayModuleHooked) {
         delayLoadingNeeded = true;
     }
     if (HMODULE searchUxUiModule = GetSearchUxUiModuleHandle()) {
@@ -1852,11 +2073,27 @@ BOOL Wh_ModInitTBIconSize() {
     return TRUE;
 }
 void Wh_ModAfterInitTBIconSize() {
+    if (!g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (systemTrayModule != GetTaskbarViewModuleHandle() &&
+                !g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
+                if (HookSystemTraySymbols(systemTrayModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
     if (!g_taskbarViewDllLoadedTBIconSize) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                bool hookSystemTraySymbolsInline =
+                    !g_systemTrayModuleHooked &&
+                    GetSystemTrayModuleHandle() == taskbarViewModule &&
+                    !g_systemTrayModuleHooked.exchange(true);
+                if (HookTaskbarViewDllSymbols(taskbarViewModule,
+                                              hookSystemTraySymbolsInline)) {
                     Wh_ApplyHookOperations();
                 }
             }
