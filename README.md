@@ -78,11 +78,11 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundTint` | Background tint | Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0) | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
 | `TaskbarBackgroundBlurAmount` | Background blur amount | WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30 | Non-negative integer |
-| `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
+| `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBackgroundTintSaturation` | Background saturation | WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500 | Non-negative integer |
 | `TaskbarBackgroundNoiseOpacity` | Background noise opacity | WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0 | Non-negative integer |
 | `TaskbarBackgroundNoiseDensity` | Background noise density | WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100 | Non-negative integer |
-| `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
+| `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20) | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
 | `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Set the scale of the taskbar border. Range 0-100 (Default is 8) | unsigned int percentage |
