@@ -20,3 +20,30 @@ bool IsTaskbarWidgetsEnabled() {
     }
     return false;
 }
+static float SnapToPhysicalPixel(float value, float rasterizationScale = 1.0f) {
+  if (rasterizationScale <= 0.0f) {
+    rasterizationScale = 1.0f;
+  }
+
+  float scaledValue = value * rasterizationScale;
+  float snappedScaledValue =
+      (scaledValue >= 0.0f)
+          ? static_cast<float>(static_cast<long>(scaledValue + 0.5f))
+          : -static_cast<float>(static_cast<long>(-scaledValue + 0.5f));
+
+  return snappedScaledValue / rasterizationScale;
+}
+
+static float GetRasterizationScale(FrameworkElement const& element) {
+  if (element) {
+    auto xamlRoot = element.XamlRoot();
+    if (xamlRoot) {
+      float rasterizationScale = static_cast<float>(xamlRoot.RasterizationScale());
+      if (rasterizationScale > 0.0f) {
+        return rasterizationScale;
+      }
+    }
+  }
+
+  return 1.0f;
+}
