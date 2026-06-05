@@ -240,30 +240,33 @@ void ApplySettingsFromTaskbarThread() {
             } else {
                 return TRUE;
             }
-            if (!xamlRoot) {g_already_requested_debounce_initializing=false;
+            if (!xamlRoot) {
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
   const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
   if (!xamlRootContent) {
-  g_already_requested_debounce_initializing=false;
+  Wh_Log(L"XamlRoot content is null");
   return TRUE;
   }
-  if (!debounceTimer) {
-       xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
-       InitializeDebounce();
-    });
-    return TRUE;
+  auto dispatcher = xamlRootContent.Dispatcher();
+  if (!dispatcher) {
+  Wh_Log(L"XamlRoot content dispatcher is null");
+  return TRUE;
   }
-  if (xamlRootContent && xamlRootContent.Dispatcher()) {
   std::wstring monitorName = GetMonitorName(hWnd);
-    xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
-      if (!ApplyStyle(xamlRootContent,monitorName)) {
-        Wh_Log(L"ApplyStyles failed");
-      }
-    });
-    return TRUE;
+  auto applyOnDispatcher = [xamlRootContent, monitorName]() {
+  if (!ApplyStyle(xamlRootContent, monitorName)) {
+   Wh_Log(L"ApplyStyles failed");
   }
+ };
+            if (dispatcher.HasThreadAccess()) {
+                applyOnDispatcher();
+            } else {
+                dispatcher.TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                    applyOnDispatcher);
+            }
             return TRUE;
         },
         0);
