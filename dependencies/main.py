@@ -1075,7 +1075,7 @@ class TaskbarStylerMod(URLProcessor):
 
 
 def generate_mod_art() -> None:
-    print(generate_slash_block("WinDock"))
+    print(generate_slash_block("TAI"))
 
 
 def process_all_mods() -> None:
