@@ -21,10 +21,8 @@ void ResetFlagAfterDelay() {
 }
 
 void ApplySettingsFromTaskbarThreadIfRequired() {
-  if (!g_scheduled_low_priority_update) {
-    g_scheduled_low_priority_update = true;
+  if (!g_scheduled_low_priority_update.exchange(true)) {
     g_update_flag_set_time_ms = NowMs();
-    std::thread(ResetFlagAfterDelay).detach();
     Wh_Log(L"Scheduled low priority update");
     ApplySettingsDebounced(-1);
   }
@@ -471,7 +469,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.lastApplyStyleTime = now;
 
   if (!xamlRootContent) return false;
-
+  const float rasterizationScale = GetRasterizationScale(xamlRootContent);
+  auto snapPx = [rasterizationScale](float value) -> float {
+    return SnapToPhysicalPixel(value, rasterizationScale);
+  };
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
   if (!taskFrame) {
     Wh_Log(L"Failed to find Taskbar.TaskbarFrame");
@@ -649,6 +650,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras + showDesktopButtonWidth;
+  newXOffsetTray = snapPx(newXOffsetTray);
   // tray animations
   auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
 
@@ -669,7 +671,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
 
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
-
+  targetTaskFrameOffsetX = snapPx(targetTaskFrameOffsetX);
   // 5 pixels tolerance
   if (!g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
     Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
@@ -746,6 +748,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (trayVisualCompositor) {
     if (!g_unloading) {
       float targetOffsetXTray = static_cast<float>(newXOffsetTray - trayGapPlusExtras - (rootWidth - trayFrameWidth));
+      targetOffsetXTray = snapPx(targetOffsetXTray);
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
@@ -771,8 +774,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         auto compositorWidget = widgetVisual.Compositor();
         if (compositorWidget) {
           float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar - 8) + g_settings.userDefinedTrayTaskGap;
+          targetOffsetXWidget = snapPx(targetOffsetXWidget);
+          float targetOffsetYWidget = snapPx(static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)));
           auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
-          widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
+          widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXWidget, targetOffsetYWidget, taskbarVisual.Offset().z});
           if (movingInwards) {
             widgetOffsetAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
           }
@@ -895,35 +900,29 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisualBorderControl);
 
         if (!g_settings.userDefinedFullWidthTaskbarBackground) {
-          float offsetXRect = (rootWidth - targetWidth) / 2;
-          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
+          float offsetXRect = snapPx(static_cast<float>((rootWidth - targetWidth) / 2));
+          float newOffsetYRect = snapPx(userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f);
           // size animation
-
           auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
           sizeAnimationRect.InsertKeyFrame(0.0f, {(std::abs(state.lastTargetWidth - rootWidth) <= 5 ? targetWidthRect : state.lastTargetWidth), clipHeight});
           sizeAnimationRect.InsertKeyFrame(1.0f, {targetWidthRect, clipHeight});
-
           auto sizeAnimationBorderGeometry = compositorTaskBackground.CreateVector2KeyFrameAnimation();
           sizeAnimationBorderGeometry.InsertKeyFrame(0.0f, {(std::abs(state.lastTargetWidth - rootWidth) <= 5 ? targetWidthRect : state.lastTargetWidth) - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
           sizeAnimationBorderGeometry.InsertKeyFrame(1.0f, {targetWidthRect - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
-
           roundedRect.StartAnimation(L"Size", sizeAnimationRect);
           shapeVisualBorderControl.StartAnimation(L"Size", sizeAnimationRect);
           borderGeometry.StartAnimation(L"Size", sizeAnimationBorderGeometry);
-
           //   // centering the clip animation
-          float refinedStateLastTargetOffsetX = state.lastTargetOffsetX == 0 ? offsetXRect : state.lastTargetOffsetX;
-          roundedRect.Offset({refinedStateLastTargetOffsetX, state.lastTargetOffsetY});
-          shapeVisualBorderControl.Offset({refinedStateLastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
-
+          float refinedStateLastTargetOffsetX = state.lastTargetOffsetX == 0 ? offsetXRect : snapPx(state.lastTargetOffsetX);
+          float refinedStateLastTargetOffsetY = snapPx(state.lastTargetOffsetY);
+          roundedRect.Offset({refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY});
+          shapeVisualBorderControl.Offset({refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY, 0.0f});
           auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-          offsetAnimationRect.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, state.lastTargetOffsetY});
+          offsetAnimationRect.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY});
           offsetAnimationRect.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect});
-
           auto offsetAnimationRect3V = compositorTaskBackground.CreateVector3KeyFrameAnimation();
-          offsetAnimationRect3V.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
+          offsetAnimationRect3V.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY, 0.0f});
           offsetAnimationRect3V.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect, 0.0f});
-
           roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
           shapeVisualBorderControl.StartAnimation(L"Offset", offsetAnimationRect3V);
           state.lastTargetOffsetX = offsetXRect;
@@ -948,6 +947,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.wasOverflowing = isOverflowing;
   state.lastTargetWidth = targetWidthRect;
   state.lastTargetWidth = targetWidth;
+  g_initial_style_apply_completed = true;
+  g_initial_style_apply_not_before_ms = 0;
   return true;
 }
 
@@ -1086,7 +1087,7 @@ BOOL Wh_ModInit() {
     return true;
   }
   g_unloading = false;
-
+  ArmInitialExplorerStyleApplyDelay();
   if (!Wh_ModInitTBIconSize()) {
     Wh_Log(L"Wh_ModInitTBIconSize failed");
     return FALSE;
@@ -1104,8 +1105,11 @@ void Wh_ModAfterInit() {
     return;
   }
   Wh_ModAfterInitTBIconSize();
-  Wh_ModSettingsChanged();
-  ApplySettingsDebounced(300);
+  ResetGlobalVars();
+  LoadSettingsTBIconSize();
+  LoadSettingsStartButtonPosition();
+  UpdateGlobalSettings();
+  ScheduleInitialExplorerStyleApply();
 }
 
 void Wh_ModBeforeUninit() {
