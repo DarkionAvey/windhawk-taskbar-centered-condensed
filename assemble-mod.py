@@ -185,4 +185,6 @@ def main(major_minor="1.4"):
 
 
 if __name__ == '__main__':
+    from dependencies import main as fetcher
+    fetcher.process_all_mods()
     main()
