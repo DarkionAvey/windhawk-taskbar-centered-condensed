@@ -109,6 +109,8 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+void ArmInitialExplorerStyleApplyDelay();
+void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;
 int g_lastRecordedStartMenuWidth=670;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
@@ -2109,7 +2111,7 @@ void Wh_ModAfterInitTBIconSize() {
             }
         }
     }
-    ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
+    Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");
 }
 void Wh_ModBeforeUninitTBIconSize() {
     g_unloading = true;
