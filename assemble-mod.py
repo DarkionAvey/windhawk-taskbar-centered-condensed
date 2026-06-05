@@ -108,7 +108,7 @@ def get_compiler_options_string(base_dir: Path):
     return compiler_options
 
 
-def main(major_minor="1.4"):
+def main(major_minor="1.0"):
     base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     version_file_path = os.path.join(base_dir, 'mod-parts', 'mod-build-version.txt')
 
@@ -187,4 +187,4 @@ def main(major_minor="1.4"):
 if __name__ == '__main__':
     from dependencies import main as fetcher
     fetcher.process_all_mods()
-    main()
+    main(major_minor="1.5")
