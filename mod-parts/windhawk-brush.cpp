@@ -324,9 +324,12 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         m_proxyBrush = proxyBrush;
         m_weakProxyElement = winrt::make_weak(fe);
         m_proxyKey = proxyKey;
-        m_proxyBrush.RegisterPropertyChangedCallback(Media::SolidColorBrush::ColorProperty(), [weakThis = get_weak()](auto&&, auto&&) {
-          if (auto self = weakThis.get()) self->RefreshBrush();
-        });
+        m_proxyBrushColorChangedToken = m_proxyBrush.RegisterPropertyChangedCallback(
+            Media::SolidColorBrush::ColorProperty(),
+            [weakThis = get_weak()](auto&&, auto&&) {
+              if (g_unloading) return;
+              if (auto self = weakThis.get()) self->RefreshBrush();
+            });
       }
     }
     if (!m_fallbackThemeResourceKey.empty()) {
@@ -336,9 +339,12 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         m_fallbackProxyBrush = proxyBrush;
         if (!m_weakProxyElement.get()) m_weakProxyElement = winrt::make_weak(fe);
         m_fallbackProxyKey = proxyKey;
-        m_fallbackProxyBrush.RegisterPropertyChangedCallback(Media::SolidColorBrush::ColorProperty(), [weakThis = get_weak()](auto&&, auto&&) {
-          if (auto self = weakThis.get()) self->RefreshBrush();
-        });
+        m_fallbackProxyBrushColorChangedToken = m_fallbackProxyBrush.RegisterPropertyChangedCallback(
+            Media::SolidColorBrush::ColorProperty(),
+            [weakThis = get_weak()](auto&&, auto&&) {
+              if (g_unloading) return;
+              if (auto self = weakThis.get()) self->RefreshBrush();
+            });
       }
     }
 
@@ -347,12 +353,23 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
       try {
         m_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
         auto dispatcher = m_dispatcher;
-        m_advancedEffectsEnabledChangedToken = m_uiSettings.AdvancedEffectsEnabledChanged([weakThis = get_weak(), dispatcher](auto&&, auto&&) {
-          dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
-        });
-        m_energySaverStatusChangedToken = winrt::Windows::System::Power::PowerManager::EnergySaverStatusChanged([weakThis = get_weak(), dispatcher](auto&&, auto&&) {
-          dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
-        });
+        m_advancedEffectsEnabledChangedToken = m_uiSettings.AdvancedEffectsEnabledChanged(
+            [weakThis = get_weak(), dispatcher](auto&&, auto&&) {
+              if (g_unloading || !dispatcher) return;
+              dispatcher.TryEnqueue([weakThis] {
+                if (g_unloading) return;
+                if (auto self = weakThis.get()) self->RefreshBrush();
+              });
+            });
+        m_energySaverStatusChangedToken =
+            winrt::Windows::System::Power::PowerManager::EnergySaverStatusChanged(
+                [weakThis = get_weak(), dispatcher](auto&&, auto&&) {
+                  if (g_unloading || !dispatcher) return;
+                  dispatcher.TryEnqueue([weakThis] {
+                    if (g_unloading) return;
+                    if (auto self = weakThis.get()) self->RefreshBrush();
+                  });
+                });
       } catch (...) {
         Wh_Log(L"Failed to register WindhawkBlur fallback listeners: %08X", winrt::to_hresult());
       }
@@ -362,7 +379,10 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         if (m_regNotifyEvent) {
           regStatus = RegNotifyChangeKeyValue(m_powerKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, m_regNotifyEvent, TRUE);
           if (regStatus == ERROR_SUCCESS) {
-            RegisterWaitForSingleObject(&m_regWaitHandle, m_regNotifyEvent, OnEnergySaverRegistryChanged, this, INFINITE, WT_EXECUTEINWAITTHREAD);
+            if (!RegisterWaitForSingleObject(&m_regWaitHandle, m_regNotifyEvent, OnEnergySaverRegistryChanged, this, INFINITE, WT_EXECUTEINWAITTHREAD)) {
+              Wh_Log(L"RegisterWaitForSingleObject failed: %lu", GetLastError());
+              m_regWaitHandle = nullptr;
+            }
           }
         }
       }
@@ -370,14 +390,41 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
   }
 
   ~XamlBlurBrush() {
-    if (m_regWaitHandle) UnregisterWaitEx(m_regWaitHandle, INVALID_HANDLE_VALUE);
-    if (m_regNotifyEvent) CloseHandle(m_regNotifyEvent);
-    if (m_powerKey) RegCloseKey(m_powerKey);
+    if (m_regWaitHandle) {
+      UnregisterWaitEx(m_regWaitHandle, INVALID_HANDLE_VALUE);
+      m_regWaitHandle = nullptr;
+    }
+    if (m_regNotifyEvent) {
+      CloseHandle(m_regNotifyEvent);
+      m_regNotifyEvent = nullptr;
+    }
+    if (m_powerKey) {
+      RegCloseKey(m_powerKey);
+      m_powerKey = nullptr;
+    }
+    if (m_proxyBrush && m_proxyBrushColorChangedToken) {
+      try {
+        m_proxyBrush.UnregisterPropertyChangedCallback(
+            Media::SolidColorBrush::ColorProperty(),
+            m_proxyBrushColorChangedToken);
+      } catch (...) {}
+      m_proxyBrushColorChangedToken = 0;
+    }
+    if (m_fallbackProxyBrush && m_fallbackProxyBrushColorChangedToken) {
+      try {
+        m_fallbackProxyBrush.UnregisterPropertyChangedCallback(
+            Media::SolidColorBrush::ColorProperty(),
+            m_fallbackProxyBrushColorChangedToken);
+      } catch (...) {}
+      m_fallbackProxyBrushColorChangedToken = 0;
+    }
     if (m_uiSettings && m_advancedEffectsEnabledChangedToken.value) {
       try { m_uiSettings.AdvancedEffectsEnabledChanged(m_advancedEffectsEnabledChangedToken); } catch (...) {}
+      m_advancedEffectsEnabledChangedToken = {};
     }
     if (m_energySaverStatusChangedToken.value) {
       try { winrt::Windows::System::Power::PowerManager::EnergySaverStatusChanged(m_energySaverStatusChangedToken); } catch (...) {}
+      m_energySaverStatusChangedToken = {};
     }
     if (auto element = m_weakProxyElement.get()) {
       try {
@@ -385,7 +432,12 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         if (!m_fallbackProxyKey.empty()) element.Resources().Remove(winrt::box_value(m_fallbackProxyKey));
       } catch (...) {}
     }
+    m_proxyBrush = nullptr;
+    m_fallbackProxyBrush = nullptr;
+    m_weakProxyElement = nullptr;
+    m_dispatcher = nullptr;
   }
+
 
   void OnConnected() {
     if (!CompositionBrush()) {
@@ -405,12 +457,16 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
  private:
   static void CALLBACK OnEnergySaverRegistryChanged(PVOID context, BOOLEAN) {
     auto* self = static_cast<XamlBlurBrush*>(context);
+    if (g_unloading) return;
     if (self->m_powerKey && self->m_regNotifyEvent) {
       RegNotifyChangeKeyValue(self->m_powerKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, self->m_regNotifyEvent, TRUE);
     }
     if (self->m_dispatcher) {
       auto weakThis = self->get_weak();
-      self->m_dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
+      self->m_dispatcher.TryEnqueue([weakThis] {
+        if (g_unloading) return;
+        if (auto self = weakThis.get()) self->RefreshBrush();
+      });
     }
   }
 
@@ -560,6 +616,8 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
   winrt::hstring m_proxyKey;
   winrt::hstring m_fallbackProxyKey;
   winrt::Windows::UI::ViewManagement::UISettings m_uiSettings{nullptr};
+  int64_t m_proxyBrushColorChangedToken{};
+  int64_t m_fallbackProxyBrushColorChangedToken{};
   winrt::event_token m_advancedEffectsEnabledChangedToken{};
   winrt::event_token m_energySaverStatusChangedToken{};
   winrt::Windows::System::DispatcherQueue m_dispatcher{nullptr};
@@ -652,11 +710,15 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
   tintSetting.color.A = tintAlpha;
 
   const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
-  const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 2.0f);
+  const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
   const float noiseOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseOpacity / 100.0f, 0.0f, 1.0f);
   const float noiseDensity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseDensity / 100.0f, 0.01f, 1.0f);
 
   try {
+    auto oldFill = rectangle.Fill();
+    rectangle.Fill(Media::Brush{nullptr});
+    oldFill = nullptr;
+
     auto blurBrush = winrt::make<XamlBlurBrush>(
         rectangle,
         static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),

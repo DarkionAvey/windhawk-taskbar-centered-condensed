@@ -42,26 +42,49 @@ void CleanupDebounce() {
   g_scheduled_low_priority_update = false;
   g_delayed_apply_due_ms = 0;
   g_delayed_apply_generation.fetch_add(1);
+
+  // The debounce worker is detached, so the only safe unload strategy is to
+  // force it to observe cancellation and wait until it has left mod code.
+  // Otherwise a recompilation can unload this DLL while the sleeping worker
+  // later resumes inside DelayedApplyWorker from the old image.
+  for (int i = 0; g_delayed_apply_worker_running.load() && i < 500; ++i) {
+    Sleep(10);
+  }
+  if (g_delayed_apply_worker_running.load()) {
+    Wh_Log(L"Delayed apply worker did not exit before unload");
+  }
 }
 void DelayedApplyWorker() {
+
+
+  try {
   for (;;) {
+
+
     if (g_unloading) {
+
+
       break;
     }
     int64_t dueMs = g_delayed_apply_due_ms.load();
     if (dueMs <= 0) {
+
+
       break;
     }
     int64_t nowMs = DelayedApplyNowMs();
     if (nowMs < dueMs) {
+
+
       DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(250, std::max<int64_t>(1, dueMs - nowMs)));
       Sleep(sleepMs);
       continue;
     }
-
     unsigned long long generation = g_delayed_apply_generation.load();
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+
+
       Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
       g_delayed_apply_generation.fetch_add(1);
       g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
@@ -71,11 +94,14 @@ void DelayedApplyWorker() {
     Wh_Log(L"Delayed apply triggered");
     if (!g_initial_style_apply_completed.load() &&
         !g_initial_taskbar_size_apply_done.exchange(true)) {
+
+
       ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
     }
     ApplySettings(hTaskbarWnd);
-
     if (!g_initial_style_apply_completed.load() && !g_unloading) {
+
+
       Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
       g_delayed_apply_generation.fetch_add(1);
       g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
@@ -83,14 +109,24 @@ void DelayedApplyWorker() {
     }
     int64_t expectedDueMs = dueMs;
     if (g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0)) {
+
+
       if (g_delayed_apply_generation.load() == generation) {
+
+
         break;
       }
     }
   }
-
+  } catch (winrt::hresult_error const& ex) {
+    Wh_Log(L"Delayed apply worker failed %08X: %s", ex.code(), ex.message().c_str());
+  } catch (...) {
+    Wh_Log(L"Delayed apply worker failed: %08X", winrt::to_hresult());
+  }
   g_delayed_apply_worker_running = false;
   if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
+
+
     EnsureDelayedApplyWorker();
   }
 }

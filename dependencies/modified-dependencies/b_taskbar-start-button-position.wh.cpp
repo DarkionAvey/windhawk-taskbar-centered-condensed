@@ -262,7 +262,7 @@ void ApplySettingsFromTaskbarThread() {
  };
             if (dispatcher.HasThreadAccess()) {
                 applyOnDispatcher();
-            } else {
+            } else if (!g_unloading){
                 dispatcher.TryRunAsync(
                     winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
                     applyOnDispatcher);

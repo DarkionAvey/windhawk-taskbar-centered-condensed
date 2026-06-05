@@ -358,7 +358,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTaskbarBackgroundTint = clamp(abs(getInt(L"TaskbarBackgroundTint")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundLuminosity = clamp(abs(getInt(L"TaskbarBackgroundLuminosity")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundBlurAmount = clamp(abs(getInt(L"TaskbarBackgroundBlurAmount")), 0, 100);
-  g_settings.userDefinedTaskbarBackgroundTintSaturation = clamp(abs(getInt(L"TaskbarBackgroundTintSaturation")), 0, 200);
+  g_settings.userDefinedTaskbarBackgroundTintSaturation = clamp(abs(getInt(L"TaskbarBackgroundTintSaturation")), 0, 500);
   g_settings.userDefinedTaskbarBackgroundNoiseOpacity = clamp(abs(getInt(L"TaskbarBackgroundNoiseOpacity")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundNoiseDensity = clamp(abs(getInt(L"TaskbarBackgroundNoiseDensity")), 1, 100);
   PCWSTR bgTintColor = Wh_GetStringSetting(L"TaskbarBackgroundTintColor");
@@ -1061,7 +1061,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
 }
 BOOL Wh_ModInit() {
   Wh_Log(L"======================================================");
-  HMODULE moduleUser32 = LoadLibraryW(L"user32.dll");
+  HMODULE moduleUser32 = GetModuleHandleW(L"user32.dll");
   if (moduleUser32) {
     auto pSetWindowPos = (SetWindowPos_t)GetProcAddress(moduleUser32, "SetWindowPos");
     if (pSetWindowPos) {
@@ -1135,9 +1135,10 @@ void Wh_ModUninit() {
   if (g_PartialMode) {
     return;
   }
+  CleanupDebounce();
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();
-  CleanupDebounce();
-
+  g_taskbarStates.clear();
+  g_settings.userDefinedDividedAppNames.clear();
   Wh_Log(L"... detached");
 }

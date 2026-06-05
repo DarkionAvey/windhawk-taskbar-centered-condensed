@@ -85,7 +85,7 @@
 
 - TaskbarBackgroundTintSaturation: 100
   $name: Background saturation
-  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200 = boosted saturation. Must be non-negative. Default is 100
+  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500
   $type: unsigned int
 
 - TaskbarBackgroundNoiseOpacity: 0
