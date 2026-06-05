@@ -2,7 +2,7 @@
 
 # TAI (Taskbar as (an) island) for Windows 11
 
-Transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
+TAI lets you transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
 
 ---
 
@@ -18,8 +18,6 @@ features.
 4. Press `Ctrl+A` to select all, then `Ctrl+V` to paste.
 5. Click **Compile Mod** button on the top left corner.
 6. Change the mod's settings to fit your preference.
-7. If your explorer.exe is not responding, disable the mod from Windhawk, open task manager, restart explorer.exe, wait
-   for the default taskbar to appear, then apply WinDock.
 
 ---
 
@@ -35,7 +33,7 @@ modify the source files in the `mod-parts` directory.
 
 ## 🛣️ To-do
 
-1. Proper unloading
+1. ~~Proper unloading~~
 2. Fix overflowing
 3. ~~Rebrand because someone claimed the name WinDock~~
 

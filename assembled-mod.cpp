@@ -1,15 +1,14 @@
 // ==WindhawkMod==
 // @id              taskbar-dock-like
-// @name            WinDock (taskbar as a dock) for Windows 11
-// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.5.22
+// @name            TAI (taskbar as island) for Windows 11
+// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
+// @version         1.5.23
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
 // @include         StartMenuExperienceHost.exe
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
-// @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
 // @architecture    x86-64
 // ==/WindhawkMod==
@@ -20,7 +19,7 @@
 /*
 ![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
 # TAI (Taskbar as (an) island) for Windows 11
-Transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
+TAI lets you transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
 ---
 ## 🚀 How to Install (Development Build)
 ⚠️ **Note:** Please disable any mods that affect taskbar height or taskbar icons—this mod already includes those
@@ -33,8 +32,6 @@ features.
 4. Press `Ctrl+A` to select all, then `Ctrl+V` to paste.
 5. Click **Compile Mod** button on the top left corner.
 6. Change the mod's settings to fit your preference.
-7. If your explorer.exe is not responding, disable the mod from Windhawk, open task manager, restart explorer.exe, wait
-   for the default taskbar to appear, then apply WinDock.
 ---
 ## 🛠 Source Code
 The actual mod code is split into files under [
@@ -43,7 +40,7 @@ The actual mod code is split into files under [
 modify the source files in the `mod-parts` directory.
 ---
 ## 🛣️ To-do
-1. Proper unloading
+1. ~~Proper unloading~~
 2. Fix overflowing
 3. ~~Rebrand because someone claimed the name WinDock~~
 ---
