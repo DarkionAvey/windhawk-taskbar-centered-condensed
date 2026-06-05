@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.4.265
+// @version         1.5.0
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -299,6 +299,8 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+void ArmInitialExplorerStyleApplyDelay();
+void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;
 int g_lastRecordedStartMenuWidth=670;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
@@ -2895,7 +2897,7 @@ void Wh_ModAfterInitTBIconSize() {
             }
         }
     }
-    ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
+    Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");
 }
 void Wh_ModBeforeUninitTBIconSize() {
   Wh_Log(L".");
@@ -3226,7 +3228,7 @@ void ApplySettingsFromTaskbarThread() {
             }
             if (!xamlRoot) {
   Wh_Log(L".");
-g_already_requested_debounce_initializing=false;
+
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
@@ -3234,34 +3236,35 @@ g_already_requested_debounce_initializing=false;
   if (!xamlRootContent) {
   Wh_Log(L".");
 
-  g_already_requested_debounce_initializing=false;
+  Wh_Log(L"XamlRoot content is null");
   return TRUE;
   }
-  if (!debounceTimer) {
+  auto dispatcher = xamlRootContent.Dispatcher();
+  if (!dispatcher) {
   Wh_Log(L".");
 
-       xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
-  Wh_Log(L".");
-
-       InitializeDebounce();
-    });
-    return TRUE;
+  Wh_Log(L"XamlRoot content dispatcher is null");
+  return TRUE;
   }
-  if (xamlRootContent && xamlRootContent.Dispatcher()) {
-  Wh_Log(L".");
-
   std::wstring monitorName = GetMonitorName(hWnd);
-    xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
+  auto applyOnDispatcher = [xamlRootContent, monitorName]() {
   Wh_Log(L".");
 
-      if (!ApplyStyle(xamlRootContent,monitorName)) {
+  if (!ApplyStyle(xamlRootContent, monitorName)) {
   Wh_Log(L".");
 
-        Wh_Log(L"ApplyStyles failed");
-      }
-    });
-    return TRUE;
+   Wh_Log(L"ApplyStyles failed");
   }
+ };
+            if (dispatcher.HasThreadAccess()) {
+  Wh_Log(L".");
+
+                applyOnDispatcher();
+            } else {
+                dispatcher.TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                    applyOnDispatcher);
+            }
             return TRUE;
         },
         0);
@@ -4706,100 +4709,172 @@ bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pat
   }
 }
 std::atomic<bool> g_scheduled_low_priority_update = false;
-int debounceDelayMs = 300;
-winrt::event_token debounceToken{};
+std::atomic<bool> g_delayed_apply_worker_running = false;
+std::atomic<int64_t> g_delayed_apply_due_ms = 0;
+std::atomic<unsigned long long> g_delayed_apply_generation = 0;
+std::atomic<bool> g_initial_style_apply_completed = false;
+std::atomic<bool> g_initial_taskbar_size_apply_done = false;
+std::atomic<int64_t> g_initial_style_apply_not_before_ms = 0;
+constexpr int kInitialExplorerStyleDelayMs = 2500;
+constexpr int kLowPriorityStyleDelayMs = 900;
+constexpr int kDefaultStyleDebounceDelayMs = 150;
 void ApplySettings(HWND hTaskbarWnd);
+int64_t DelayedApplyNowMs() {
+  Wh_Log(L".");
+
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+void ArmInitialExplorerStyleApplyDelay() {
+  Wh_Log(L".");
+
+  g_initial_style_apply_completed = false;
+  g_initial_taskbar_size_apply_done = false;
+  g_initial_style_apply_not_before_ms =
+      DelayedApplyNowMs() + kInitialExplorerStyleDelayMs;
+  Wh_Log(L"Initial Explorer style apply armed");
+}
+void DelayedApplyWorker();
+void EnsureDelayedApplyWorker() {
+  Wh_Log(L".");
+
+  bool expected = false;
+  if (!g_delayed_apply_worker_running.compare_exchange_strong(expected, true)) {
+  Wh_Log(L".");
+
+    return;
+  }
+  std::thread(DelayedApplyWorker).detach();
+}
 bool InitializeDebounce() {
   Wh_Log(L".");
 
-  if (debounceTimer) return true;
-  g_already_requested_debounce_initializing = true;
-  debounceTimer = DispatcherTimer();
-  debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(debounceDelayMs)));
-  debounceToken = debounceTimer.Tick([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
-  Wh_Log(L".");
-
-    g_scheduled_low_priority_update = false;
-    debounceTimer.Stop();
-    if (auto debounceHwnd = FindCurrentProcessTaskbarWnd()) {
-  Wh_Log(L".");
-
-      Wh_Log(L"Debounce triggered");
-      ApplySettings(debounceHwnd);
-    }
-  });
-  return false;
+  // Kept as a compatibility shim for older call sites. The old DispatcherTimer
+  // debounce was removed because timer creation/stop could race Explorer/XAML
+  // initialization and crash. Scheduling is now handled by DelayedApplyWorker.
+  g_already_requested_debounce_initializing = false;
+  return true;
 }
 void CleanupDebounce() {
   Wh_Log(L".");
 
   g_already_requested_debounce_initializing = false;
-  if (debounceTimer) {
+  g_scheduled_low_priority_update = false;
+  g_delayed_apply_due_ms = 0;
+  g_delayed_apply_generation.fetch_add(1);
+}
+void DelayedApplyWorker() {
   Wh_Log(L".");
 
-    if (auto debounceHwnd = FindCurrentProcessTaskbarWnd()) {
+  for (;;) {
   Wh_Log(L".");
 
-      RunFromWindowThread(
-          debounceHwnd,
-          [](void* pParam) {
+    if (g_unloading) {
   Wh_Log(L".");
 
-            g_scheduled_low_priority_update = false;
-            debounceTimer.Stop();
-            debounceTimer.Tick(debounceToken);
-            debounceTimer = nullptr;
-          },
-          0);
+      break;
     }
+    int64_t dueMs = g_delayed_apply_due_ms.load();
+    if (dueMs <= 0) {
+  Wh_Log(L".");
+
+      break;
+    }
+    int64_t nowMs = DelayedApplyNowMs();
+    if (nowMs < dueMs) {
+  Wh_Log(L".");
+
+      DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(250, std::max<int64_t>(1, dueMs - nowMs)));
+      Sleep(sleepMs);
+      continue;
+    }
+    unsigned long long generation = g_delayed_apply_generation.load();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+  Wh_Log(L".");
+
+      Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
+      g_delayed_apply_generation.fetch_add(1);
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
+      continue;
+    }
+    g_scheduled_low_priority_update = false;
+    Wh_Log(L"Delayed apply triggered");
+    if (!g_initial_style_apply_completed.load() &&
+        !g_initial_taskbar_size_apply_done.exchange(true)) {
+  Wh_Log(L".");
+
+      ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
+    }
+    ApplySettings(hTaskbarWnd);
+    if (!g_initial_style_apply_completed.load() && !g_unloading) {
+  Wh_Log(L".");
+
+      Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
+      g_delayed_apply_generation.fetch_add(1);
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
+      continue;
+    }
+    int64_t expectedDueMs = dueMs;
+    if (g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0)) {
+  Wh_Log(L".");
+
+      if (g_delayed_apply_generation.load() == generation) {
+  Wh_Log(L".");
+
+        break;
+      }
+    }
+  }
+  g_delayed_apply_worker_running = false;
+  if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
+  Wh_Log(L".");
+
+    EnsureDelayedApplyWorker();
   }
 }
 void ApplySettingsDebounced(int delayMs) {
   Wh_Log(L".");
 
-  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-  if (!hTaskbarWnd) {
+  if (g_unloading) {
   Wh_Log(L".");
 
-    Wh_Log(L"ApplySettingsDebounced aborted: could not find hTaskbarWnd");
     return;
   }
-  if (!debounceTimer) {
-  Wh_Log(L".");
-
-    if (!g_already_requested_debounce_initializing) {
-  Wh_Log(L".");
-
-      g_already_requested_debounce_initializing = true;
-      ApplySettings(hTaskbarWnd);
-      Wh_Log(L"ApplySettingsDebounced aborted: debounceTimer is null; initializing");
-    }
-    return;
-  }
-  bool lowPriority = false;
   if (delayMs <= 0) {
   Wh_Log(L".");
 
-    lowPriority = true;
-    delayMs = 700;
+    delayMs = kLowPriorityStyleDelayMs;
   }
-  debounceDelayMs = delayMs;
-  if (!lowPriority) RunFromWindowThread(hTaskbarWnd, [](void* pParam) {
-  Wh_Log(L".");
- debounceTimer.Stop(); }, 0);
-  RunFromWindowThread(
-      hTaskbarWnd,
-      [](void* pParam) {
+  if (delayMs < 1) {
   Wh_Log(L".");
 
-        debounceTimer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(debounceDelayMs)});
-        debounceTimer.Start();
-      },
-      0);
+    delayMs = kDefaultStyleDebounceDelayMs;
+  }
+  int64_t nowMs = DelayedApplyNowMs();
+  int64_t dueMs = nowMs + delayMs;
+  int64_t initialNotBeforeMs = g_initial_style_apply_not_before_ms.load();
+  if (!g_initial_style_apply_completed.load() && initialNotBeforeMs > dueMs) {
+  Wh_Log(L".");
+
+    dueMs = initialNotBeforeMs;
+  }
+  g_delayed_apply_generation.fetch_add(1);
+  g_delayed_apply_due_ms = dueMs;
+  Wh_Log(L"Scheduled delayed apply in %lld ms", static_cast<long long>(std::max<int64_t>(0, dueMs - nowMs)));
+  EnsureDelayedApplyWorker();
 }
 void ApplySettingsDebounced() {
   Wh_Log(L".");
- ApplySettingsDebounced(100); }
+
+  ApplySettingsDebounced(kDefaultStyleDebounceDelayMs);
+}
+void ScheduleInitialExplorerStyleApply() {
+  Wh_Log(L".");
+
+  ApplySettingsDebounced(kInitialExplorerStyleDelayMs);
+}
 bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
   Wh_Log(L".");
 
@@ -4829,6 +4904,41 @@ bool IsTaskbarWidgetsEnabled() {
         RegCloseKey(hKey);
     }
     return false;
+}
+static float SnapToPhysicalPixel(float value, float rasterizationScale = 1.0f) {
+  Wh_Log(L".");
+
+  if (rasterizationScale <= 0.0f) {
+  Wh_Log(L".");
+
+    rasterizationScale = 1.0f;
+  }
+  float scaledValue = value * rasterizationScale;
+  float snappedScaledValue =
+      (scaledValue >= 0.0f)
+          ? static_cast<float>(static_cast<long>(scaledValue + 0.5f))
+          : -static_cast<float>(static_cast<long>(-scaledValue + 0.5f));
+  return snappedScaledValue / rasterizationScale;
+}
+static float GetRasterizationScale(FrameworkElement const& element) {
+  Wh_Log(L".");
+
+  if (element) {
+  Wh_Log(L".");
+
+    auto xamlRoot = element.XamlRoot();
+    if (xamlRoot) {
+  Wh_Log(L".");
+
+      float rasterizationScale = static_cast<float>(xamlRoot.RasterizationScale());
+      if (rasterizationScale > 0.0f) {
+  Wh_Log(L".");
+
+        return rasterizationScale;
+      }
+    }
+  }
+  return 1.0f;
 }
 using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
 StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
@@ -4863,12 +4973,10 @@ void ResetFlagAfterDelay() {
 void ApplySettingsFromTaskbarThreadIfRequired() {
   Wh_Log(L".");
 
-  if (!g_scheduled_low_priority_update) {
+  if (!g_scheduled_low_priority_update.exchange(true)) {
   Wh_Log(L".");
 
-    g_scheduled_low_priority_update = true;
     g_update_flag_set_time_ms = NowMs();
-    std::thread(ResetFlagAfterDelay).detach();
     Wh_Log(L"Scheduled low priority update");
     ApplySettingsDebounced(-1);
   }
@@ -5366,6 +5474,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
   state.lastApplyStyleTime = now;
   if (!xamlRootContent) return false;
+  const float rasterizationScale = GetRasterizationScale(xamlRootContent);
+  auto snapPx = [rasterizationScale](float value) -> float {
+    return SnapToPhysicalPixel(value, rasterizationScale);
+  };
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
   if (!taskFrame) {
   Wh_Log(L".");
@@ -5565,6 +5677,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras + showDesktopButtonWidth;
+  newXOffsetTray = snapPx(newXOffsetTray);
   // tray animations
   auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
   if (!systemTrayFrameGridVisual) {
@@ -5587,6 +5700,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
+  targetTaskFrameOffsetX = snapPx(targetTaskFrameOffsetX);
   // 5 pixels tolerance
   if (!g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
   Wh_Log(L".");
@@ -5673,6 +5787,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   Wh_Log(L".");
 
       float targetOffsetXTray = static_cast<float>(newXOffsetTray - trayGapPlusExtras - (rootWidth - trayFrameWidth));
+      targetOffsetXTray = snapPx(targetOffsetXTray);
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
@@ -5710,8 +5825,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   Wh_Log(L".");
 
           float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar - 8) + g_settings.userDefinedTrayTaskGap;
+          targetOffsetXWidget = snapPx(targetOffsetXWidget);
+          float targetOffsetYWidget = snapPx(static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)));
           auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
-          widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{static_cast<float>(targetOffsetXWidget), static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)), taskbarVisual.Offset().z});
+          widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXWidget, targetOffsetYWidget, taskbarVisual.Offset().z});
           if (movingInwards) {
   Wh_Log(L".");
 
@@ -5850,8 +5967,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         if (!g_settings.userDefinedFullWidthTaskbarBackground) {
   Wh_Log(L".");
 
-          float offsetXRect = (rootWidth - targetWidth) / 2;
-          float newOffsetYRect = userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f;
+          float offsetXRect = snapPx(static_cast<float>((rootWidth - targetWidth) / 2));
+          float newOffsetYRect = snapPx(userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f);
           // size animation
           auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
           sizeAnimationRect.InsertKeyFrame(0.0f, {(std::abs(state.lastTargetWidth - rootWidth) <= 5 ? targetWidthRect : state.lastTargetWidth), clipHeight});
@@ -5863,14 +5980,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
           shapeVisualBorderControl.StartAnimation(L"Size", sizeAnimationRect);
           borderGeometry.StartAnimation(L"Size", sizeAnimationBorderGeometry);
           //   // centering the clip animation
-          float refinedStateLastTargetOffsetX = state.lastTargetOffsetX == 0 ? offsetXRect : state.lastTargetOffsetX;
-          roundedRect.Offset({refinedStateLastTargetOffsetX, state.lastTargetOffsetY});
-          shapeVisualBorderControl.Offset({refinedStateLastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
+          float refinedStateLastTargetOffsetX = state.lastTargetOffsetX == 0 ? offsetXRect : snapPx(state.lastTargetOffsetX);
+          float refinedStateLastTargetOffsetY = snapPx(state.lastTargetOffsetY);
+          roundedRect.Offset({refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY});
+          shapeVisualBorderControl.Offset({refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY, 0.0f});
           auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-          offsetAnimationRect.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, state.lastTargetOffsetY});
+          offsetAnimationRect.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY});
           offsetAnimationRect.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect});
           auto offsetAnimationRect3V = compositorTaskBackground.CreateVector3KeyFrameAnimation();
-          offsetAnimationRect3V.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
+          offsetAnimationRect3V.InsertKeyFrame(0.0f, {refinedStateLastTargetOffsetX, refinedStateLastTargetOffsetY, 0.0f});
           offsetAnimationRect3V.InsertKeyFrame(1.0f, {offsetXRect, newOffsetYRect, 0.0f});
           roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
           shapeVisualBorderControl.StartAnimation(L"Offset", offsetAnimationRect3V);
@@ -5899,6 +6017,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.wasOverflowing = isOverflowing;
   state.lastTargetWidth = targetWidthRect;
   state.lastTargetWidth = targetWidth;
+  g_initial_style_apply_completed = true;
+  g_initial_style_apply_not_before_ms = 0;
   return true;
 }
 void ApplySettings(HWND hTaskbarWnd) {
@@ -6068,6 +6188,7 @@ BOOL Wh_ModInit() {
     return true;
   }
   g_unloading = false;
+  ArmInitialExplorerStyleApplyDelay();
   if (!Wh_ModInitTBIconSize()) {
   Wh_Log(L".");
 
@@ -6092,8 +6213,11 @@ void Wh_ModAfterInit() {
     return;
   }
   Wh_ModAfterInitTBIconSize();
-  Wh_ModSettingsChanged();
-  ApplySettingsDebounced(300);
+  ResetGlobalVars();
+  LoadSettingsTBIconSize();
+  LoadSettingsStartButtonPosition();
+  UpdateGlobalSettings();
+  ScheduleInitialExplorerStyleApply();
 }
 void Wh_ModBeforeUninit() {
   Wh_Log(L".");
