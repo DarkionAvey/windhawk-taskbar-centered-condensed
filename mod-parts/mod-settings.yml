@@ -80,7 +80,7 @@
 
 - TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
   $name: Background tint color
-  $description: WindhawkBlur tint color. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $description: WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
   $type: string
 
 - TaskbarBackgroundTintSaturation: 100
@@ -100,7 +100,7 @@
 
 - TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
   $name: Background fallback color
-  $description: Color used when transparency effects or energy saver disable blur. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $description: Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
   $type: string
 
 - TaskbarBorderOpacity: 20
