@@ -47,9 +47,30 @@ class CppPatcher:
             flags: int = DEFAULT_RE_FLAGS,
             label: str | None = None,
             required: bool = True,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
     ) -> "CppPatcher":
-        new_content, n = re.subn(pattern, replacement, self.content, count=count, flags=flags)
-        return self._commit(new_content, n, label or f"replace regex: {pattern!r}", required)
+        """Replace a regex globally, or only inside one C++ function body.
+
+        Pass ``in_function="void SomeFunction()"`` to limit the regex
+        replacement to that function's body. The function signature is matched
+        using the same flexible C++ signature matcher used by remove_function()
+        and replace_function(), so copy-pasted multiline signatures work.
+        """
+        patch_label = label or f"replace regex: {pattern!r}"
+        target, span = self._get_patch_target(
+            in_function,
+            in_function_regex=in_function_regex,
+            label=patch_label,
+        )
+        new_target, n = re.subn(pattern, replacement, target, count=count, flags=flags)
+        return self._commit_target(
+            new_target,
+            n,
+            self._scope_label(patch_label, in_function),
+            required,
+            span=span,
+        )
 
     def remove_regex(
             self,
@@ -59,9 +80,19 @@ class CppPatcher:
             flags: int = DEFAULT_RE_FLAGS,
             label: str | None = None,
             required: bool = True,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
     ) -> "CppPatcher":
-        return self.replace_regex(pattern, "", count=count, flags=flags, label=label or f"remove regex: {pattern!r}",
-                                  required=required)
+        return self.replace_regex(
+            pattern,
+            "",
+            count=count,
+            flags=flags,
+            label=label or f"remove regex: {pattern!r}",
+            required=required,
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
     def replace_literal(
             self,
@@ -71,16 +102,41 @@ class CppPatcher:
             count: int = -1,
             label: str | None = None,
             required: bool = True,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
     ) -> "CppPatcher":
+        """Replace literal text globally, or only inside one C++ function body.
+
+        Example:
+            patch.replace_literal(
+                "ApplySettingsDebounced(-1);",
+                "ApplySettingsDebounced(250);",
+                count=1,
+                in_function="void ApplySettingsFromTaskbarThreadIfRequired()",
+            )
+        """
         if count == 0:
             raise ValueError("Use count=-1 for unlimited literal replacements. count=0 is ambiguous for str.replace().")
 
-        n = self.content.count(old) if count < 0 else min(self.content.count(old), count)
+        patch_label = label or f"replace literal: {old!r}"
+        target, span = self._get_patch_target(
+            in_function,
+            in_function_regex=in_function_regex,
+            label=patch_label,
+        )
+        n = target.count(old) if count < 0 else min(target.count(old), count)
+        scoped_label = self._scope_label(patch_label, in_function)
         if n == 0 and required:
-            self._raise_no_change(label or f"replace literal: {old!r}")
+            self._raise_no_change(scoped_label)
 
-        self.content = self.content.replace(old, new, count if count >= 0 else -1)
-        return self
+        new_target = target.replace(old, new, count if count >= 0 else -1)
+        return self._commit_target(
+            new_target,
+            n,
+            scoped_label,
+            required,
+            span=span,
+        )
 
     def remove_literal(
             self,
@@ -89,30 +145,108 @@ class CppPatcher:
             count: int = -1,
             label: str | None = None,
             required: bool = True,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
     ) -> "CppPatcher":
-        return self.replace_literal(old, "", count=count, label=label or f"remove literal: {old!r}", required=required)
+        return self.replace_literal(
+            old,
+            "",
+            count=count,
+            label=label or f"remove literal: {old!r}",
+            required=required,
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
-    def rename_identifier(self, old: str, new: str, *, label: str | None = None) -> "CppPatcher":
+    def rename_identifier(
+            self,
+            old: str,
+            new: str,
+            *,
+            label: str | None = None,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
+    ) -> "CppPatcher":
         """Rename a C/C++ identifier using identifier boundaries."""
         return self.replace_regex(
             rf"(?<![A-Za-z0-9_]){re.escape(old)}(?![A-Za-z0-9_])",
             new,
             label=label or f"rename identifier: {old} -> {new}",
+            in_function=in_function,
+            in_function_regex=in_function_regex,
         )
 
-    def insert_before_regex(self, pattern: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
-        return self.replace_regex(pattern, lambda m: insertion + m.group(0), count=1,
-                                  label=label or f"insert before: {pattern!r}")
+    def insert_before_regex(
+            self,
+            pattern: str,
+            insertion: str,
+            *,
+            label: str | None = None,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
+    ) -> "CppPatcher":
+        return self.replace_regex(
+            pattern,
+            lambda m: insertion + m.group(0),
+            count=1,
+            label=label or f"insert before: {pattern!r}",
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
-    def insert_after_regex(self, pattern: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
-        return self.replace_regex(pattern, lambda m: m.group(0) + insertion, count=1,
-                                  label=label or f"insert after: {pattern!r}")
+    def insert_after_regex(
+            self,
+            pattern: str,
+            insertion: str,
+            *,
+            label: str | None = None,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
+    ) -> "CppPatcher":
+        return self.replace_regex(
+            pattern,
+            lambda m: m.group(0) + insertion,
+            count=1,
+            label=label or f"insert after: {pattern!r}",
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
-    def insert_before_literal(self, marker: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
-        return self.replace_literal(marker, insertion + marker, count=1, label=label or f"insert before: {marker!r}")
+    def insert_before_literal(
+            self,
+            marker: str,
+            insertion: str,
+            *,
+            label: str | None = None,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
+    ) -> "CppPatcher":
+        return self.replace_literal(
+            marker,
+            insertion + marker,
+            count=1,
+            label=label or f"insert before: {marker!r}",
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
-    def insert_after_literal(self, marker: str, insertion: str, *, label: str | None = None) -> "CppPatcher":
-        return self.replace_literal(marker, marker + insertion, count=1, label=label or f"insert after: {marker!r}")
+    def insert_after_literal(
+            self,
+            marker: str,
+            insertion: str,
+            *,
+            label: str | None = None,
+            in_function: str | None = None,
+            in_function_regex: bool = False,
+    ) -> "CppPatcher":
+        return self.replace_literal(
+            marker,
+            marker + insertion,
+            count=1,
+            label=label or f"insert after: {marker!r}",
+            in_function=in_function,
+            in_function_regex=in_function_regex,
+        )
 
     def prepend(self, insertion: str) -> "CppPatcher":
         self.content = insertion + self.content
@@ -254,11 +388,67 @@ class CppPatcher:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _scope_label(self, label: str, in_function: str | None) -> str:
+        if in_function is None:
+            return label
+        return f"{label} inside function: {in_function}"
+
     def _commit(self, new_content: str, n_changes: int, label: str, required: bool) -> "CppPatcher":
         if n_changes == 0 and required:
             self._raise_no_change(label)
         self.content = new_content
         return self
+
+    def _commit_target(
+            self,
+            new_target: str,
+            n_changes: int,
+            label: str,
+            required: bool,
+            *,
+            span: tuple[int, int] | None,
+    ) -> "CppPatcher":
+        if span is None:
+            return self._commit(new_target, n_changes, label, required)
+
+        if n_changes == 0 and required:
+            self._raise_no_change(label)
+
+        start, end = span
+        self.content = self.content[:start] + new_target + self.content[end:]
+        return self
+
+    def _get_patch_target(
+            self,
+            in_function: str | None,
+            *,
+            in_function_regex: bool,
+            label: str,
+    ) -> tuple[str, tuple[int, int] | None]:
+        if in_function is None:
+            return self.content, None
+
+        start, end = self._find_single_cpp_body_after_signature(
+            in_function,
+            regex=in_function_regex,
+            label=f"{label} inside function: {in_function}",
+        )
+        return self.content[start:end], (start, end)
+
+    def _find_single_cpp_body_after_signature(
+            self,
+            signature: str,
+            *,
+            regex: bool = False,
+            label: str | None = None,
+    ) -> tuple[int, int]:
+        block_start, block_end = self._find_single_cpp_block_after_signature(signature, regex=regex, label=label)
+        open_brace = self.content.find("{", block_start, block_end)
+        if open_brace == -1:
+            self._raise_no_change(label or f"find function body: {signature}")
+
+        close_brace = self._find_matching_brace(open_brace)
+        return open_brace + 1, close_brace
 
     def _replace_span(self, start: int, end: int, replacement: str, label: str) -> "CppPatcher":
         if start < 0 or end <= start:
@@ -566,6 +756,10 @@ class TaskbarIconSizeMod(URLProcessor):
             .replace_literal('Wh_GetIntSetting(L"TaskbarButtonWidth")', 'Wh_GetIntSetting(L"TaskbarButtonSize")')
             .replace_literal("STDAPI GetDpiForMonitor", injected_dpi_prefix, count=1,
                              label="insert shared taskbar helpers before GetDpiForMonitor")
+            .replace_literal("ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);",
+                             'Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");',
+                             in_function="void Wh_ModAfterInitTBIconSize()")
+
             .replace_literal(
                 ' = Wh_GetIntSetting(L"TaskbarHeight");',
                 ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));',
@@ -816,43 +1010,41 @@ void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor){
         patch.remove_literal("margin.Right = -width;")
 
     def _patch_reload_and_settings(self, patch: CppPatcher) -> None:
-        patch.replace_literal(
-            "if (!xamlRoot) {",
-            "if (!xamlRoot) {g_already_requested_debounce_initializing=false;\n",
-            count=1,
-            label="reset debounce flag when xamlRoot is missing",
+        patch.disable_function_at_start(
+            "void Wh_ModUninitStartButtonPosition()",
+            "if(true)return;",
+            label="disable Wh_ModUninitStartButtonPosition",
         )
         patch.replace_regex(
             r"if \(!ApplyStyle\(xamlRoot\)\) \{.*?\}",
             r'''
   const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
   if (!xamlRootContent) {
-  g_already_requested_debounce_initializing=false;
+  Wh_Log(L"XamlRoot content is null");
   return TRUE;
   }
-  if (!debounceTimer) {
-       xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent]() {
-       InitializeDebounce();
-    });
-    return TRUE;
+  auto dispatcher = xamlRootContent.Dispatcher();
+  if (!dispatcher) {
+  Wh_Log(L"XamlRoot content dispatcher is null");
+  return TRUE;
   }
-  if (xamlRootContent && xamlRootContent.Dispatcher()) {
   std::wstring monitorName = GetMonitorName(hWnd);
-    xamlRootContent.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [xamlRootContent,monitorName]() {
-      if (!ApplyStyle(xamlRootContent,monitorName)) {
-        Wh_Log(L"ApplyStyles failed");
-      }
-    });
-    return TRUE;
+  auto applyOnDispatcher = [xamlRootContent, monitorName]() {
+  if (!ApplyStyle(xamlRootContent, monitorName)) {
+   Wh_Log(L"ApplyStyles failed");
   }
+ };
+            if (dispatcher.HasThreadAccess()) {
+                applyOnDispatcher();
+            } else {
+                dispatcher.TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                    applyOnDispatcher);
+            }
+
   ''',
             count=1,
             label="replace ApplyStyle reload block",
-        )
-        patch.disable_function_at_start(
-            "void Wh_ModUninitStartButtonPosition()",
-            "if(true)return;",
-            label="disable Wh_ModUninitStartButtonPosition",
         )
         patch.replace_literal(
             'Wh_GetIntSetting(L"startMenuOnTheLeft");',
