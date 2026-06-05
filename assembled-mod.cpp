@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.5.19
+// @version         1.5.22
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -352,6 +352,49 @@ bool IsStartMenuOrbLeftAligned() {
         RegCloseKey(hKey);
     }
     return false;
+}
+int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
+    if (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners ||
+        g_settings.userDefinedFullWidthTaskbarBackground) {
+        return 0;
+    }
+    int offsetY = static_cast<int>(g_settings.userDefinedTaskbarOffsetY);
+    if (offsetY >= 0) {
+        return 0;
+    }
+    return static_cast<int>((-offsetY * dpiScaleY) + 0.5f);
+}
+int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
+    int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
+    if (taskbarHeight <= 0) {
+        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : 44;
+    }
+    return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
+}
+bool IsVerticalTaskbar();
+bool TryCalculateFlyoutYAboveTaskbar(const MONITORINFO& monitorInfo,
+                                     int flyoutHeight,
+                                     float dpiScaleY,
+                                     int& y) {
+    if (flyoutHeight <= 0 || dpiScaleY <= 0.0f || IsVerticalTaskbar()) {
+        return false;
+    }
+    const int monitorTop = monitorInfo.rcMonitor.top;
+    const int monitorBottom = monitorInfo.rcMonitor.bottom;
+    if (monitorBottom <= monitorTop) {
+        return false;
+    }
+    const int taskbarHeightPx = GetFlyoutTaskbarHeightPx(dpiScaleY);
+    const int taskbarBottomGapPx = GetFlyoutTaskbarBottomGapPx(dpiScaleY);
+    const int taskbarTop = monitorBottom - taskbarHeightPx - taskbarBottomGapPx;
+    if (taskbarTop <= monitorTop) {
+        return false;
+    }
+    y = taskbarTop - flyoutHeight;
+    if (y < monitorTop) {
+        y = monitorTop;
+    }
+    return true;
 }
         std::wstring GetMonitorName(HMONITOR monitor) {
             MONITORINFOEX monitorInfo = {};
@@ -3152,73 +3195,58 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int cx = targetRect.right - targetRect.left;
     int cy = targetRect.bottom - targetRect.top;
     float dpiScale = monitorDpiX / 96.0f;
-    float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
-    float absRootWidth = taskbarState.lastRootWidth * dpiScale;
-    float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
-    Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-           taskbarState.lastLeftMostEdgeTray,
-          taskbarState.lastStartButtonXCalculated,
-          taskbarState.lastRootWidth,
-          cx,
-          x,
-          cy,
-          y,
-          target,
-          taskbarState.lastTargetWidth,
-          absStartX,
-          absRootWidth,
-          absTargetWidth);
-    if (target == DwmTarget::StartMenu) {
-    g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
-      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-        g_startMenuWnd = hwnd;
-        g_startMenuOriginalWidth = cx;
-        x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
-        x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
-      } else {
-        if (g_startMenuOriginalWidth) {
-          cx = g_startMenuOriginalWidth;
-        }
-        g_startMenuWnd = nullptr;
-        g_startMenuOriginalWidth = 0;
-        x = 0;
-      }
-    } else if (target == DwmTarget::SearchHost) {
-      if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-        g_searchMenuWnd = hwnd;
-        g_searchMenuOriginalX = x;
-        x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
-        x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-      } else {
-       x = g_unloading && IsStartMenuOrbLeftAligned() ? g_searchMenuOriginalX : (absRootWidth-cx)/2;
-       g_searchMenuWnd = nullptr;
-       g_searchMenuOriginalX = 0;
-      }
-    } else if (target == DwmTarget::ShellExperienceHost) {
-        int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
-        if (y != 0) {
-          return original();
-        }
-        if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-          x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
-          x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
-        } else {
-          x = static_cast<int>(absRootWidth - cx);
-        }
+float dpiScaleY = monitorDpiY / 96.0f;
+float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
+float absRootWidth = taskbarState.lastRootWidth * dpiScale;
+float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+int taskbarAlignedY = y;
+bool hasTaskbarAlignedY = TryCalculateFlyoutYAboveTaskbar(monitorInfo, cy, dpiScaleY, taskbarAlignedY);
+Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
+if (target == DwmTarget::StartMenu) {
+  g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
+  if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+    g_startMenuWnd = hwnd;
+    g_startMenuOriginalWidth = cx;
+    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (g_settings.userDefinedAlignFlyoutInner ? g_lastRecordedStartMenuWidth / 2.0f : 0.0f));
+    x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
+    if (hasTaskbarAlignedY) {
+      y = taskbarAlignedY;
     }
-     Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f",
-               taskbarState.lastLeftMostEdgeTray,
-              taskbarState.lastStartButtonXCalculated,
-              taskbarState.lastRootWidth,
-              cx,
-              x,
-              cy,
-              y,
-              target,
-              taskbarState.lastTargetWidth,
-              absStartX,
-              absRootWidth,
-              absTargetWidth);SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+  } else {
+    if (g_startMenuOriginalWidth) {
+      cx = g_startMenuOriginalWidth;
+    }
+    g_startMenuWnd = nullptr;
+    g_startMenuOriginalWidth = 0;
+    x = 0;
+  }
+} else if (target == DwmTarget::SearchHost) {
+  if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
+    g_searchMenuWnd = hwnd;
+    g_searchMenuOriginalX = x;
+    x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner ? (12 * dpiScale) : (cx / 2.0f)));
+    x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+    if (hasTaskbarAlignedY) {
+      y = taskbarAlignedY;
+    }
+  } else {
+    x = g_unloading && IsStartMenuOrbLeftAligned() ? g_searchMenuOriginalX : (absRootWidth - cx) / 2;
+    g_searchMenuWnd = nullptr;
+    g_searchMenuOriginalX = 0;
+  }
+} else if (target == DwmTarget::ShellExperienceHost) {
+  int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
+  if (y != 0) {
+    return original();
+  }
+  if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
+    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
+    x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+  } else {
+    x = static_cast<int>(absRootWidth - cx);
+  }
+}
+Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
 namespace StartMenuUI {

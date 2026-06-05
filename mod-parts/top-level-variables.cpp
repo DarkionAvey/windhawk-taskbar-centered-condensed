@@ -26,3 +26,48 @@ bool IsStartMenuOrbLeftAligned() {
     return false;
 }
 
+
+int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
+    if (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners ||
+        g_settings.userDefinedFullWidthTaskbarBackground) {
+        return 0;
+    }
+    int offsetY = static_cast<int>(g_settings.userDefinedTaskbarOffsetY);
+    if (offsetY >= 0) {
+        return 0;
+    }
+    return static_cast<int>((-offsetY * dpiScaleY) + 0.5f);
+}
+
+int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
+    int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
+    if (taskbarHeight <= 0) {
+        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : 44;
+    }
+    return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
+}
+bool IsVerticalTaskbar();
+bool TryCalculateFlyoutYAboveTaskbar(const MONITORINFO& monitorInfo,
+                                     int flyoutHeight,
+                                     float dpiScaleY,
+                                     int& y) {
+    if (flyoutHeight <= 0 || dpiScaleY <= 0.0f || IsVerticalTaskbar()) {
+        return false;
+    }
+    const int monitorTop = monitorInfo.rcMonitor.top;
+    const int monitorBottom = monitorInfo.rcMonitor.bottom;
+    if (monitorBottom <= monitorTop) {
+        return false;
+    }
+    const int taskbarHeightPx = GetFlyoutTaskbarHeightPx(dpiScaleY);
+    const int taskbarBottomGapPx = GetFlyoutTaskbarBottomGapPx(dpiScaleY);
+    const int taskbarTop = monitorBottom - taskbarHeightPx - taskbarBottomGapPx;
+    if (taskbarTop <= monitorTop) {
+        return false;
+    }
+    y = taskbarTop - flyoutHeight;
+    if (y < monitorTop) {
+        y = monitorTop;
+    }
+    return true;
+}
