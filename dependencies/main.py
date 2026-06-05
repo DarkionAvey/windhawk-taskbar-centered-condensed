@@ -759,6 +759,7 @@ class TaskbarIconSizeMod(URLProcessor):
             .replace_literal("ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);",
                              'Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");',
                              in_function="void Wh_ModAfterInitTBIconSize()")
+            .insert_before_literal("#include <winrt/Windows.Foundation.h>\n#include <winrt/Windows.UI.Xaml.Automation.h>","#include <initguid.h>\n",)
 
             .replace_literal(
                 ' = Wh_GetIntSetting(L"TaskbarHeight");',

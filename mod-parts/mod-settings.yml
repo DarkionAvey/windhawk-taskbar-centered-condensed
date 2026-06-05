@@ -73,6 +73,36 @@
   $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30)
   $type: unsigned int
 
+- TaskbarBackgroundBlurAmount: 30
+  $name: Background blur amount
+  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30
+  $type: unsigned int
+
+- TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
+  $name: Background tint color
+  $description: WindhawkBlur tint color. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $type: string
+
+- TaskbarBackgroundTintSaturation: 100
+  $name: Background saturation
+  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200 = boosted saturation. Must be non-negative. Default is 100
+  $type: unsigned int
+
+- TaskbarBackgroundNoiseOpacity: 0
+  $name: Background noise opacity
+  $description: WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0
+  $type: unsigned int
+
+- TaskbarBackgroundNoiseDensity: 100
+  $name: Background noise density
+  $description: WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100
+  $type: unsigned int
+
+- TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
+  $name: Background fallback color
+  $description: Color used when transparency effects or energy saver disable blur. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $type: string
+
 - TaskbarBorderOpacity: 20
   $name: Border opacity
   $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20)

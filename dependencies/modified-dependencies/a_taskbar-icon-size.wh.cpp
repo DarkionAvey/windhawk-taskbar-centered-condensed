@@ -13,6 +13,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <windhawk_utils.h>
 #undef GetCurrentTime
+#include <initguid.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -92,6 +93,12 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int userDefinedTaskbarBackgroundOpacity;
   unsigned int userDefinedTaskbarBackgroundTint;
   unsigned int userDefinedTaskbarBackgroundLuminosity;
+  unsigned int userDefinedTaskbarBackgroundBlurAmount;
+  std::wstring userDefinedTaskbarBackgroundTintColor;
+  unsigned int userDefinedTaskbarBackgroundTintSaturation;
+  unsigned int userDefinedTaskbarBackgroundNoiseOpacity;
+  unsigned int userDefinedTaskbarBackgroundNoiseDensity;
+  std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
   double userDefinedTaskbarBorderThickness;
   bool userDefinedFullWidthTaskbarBackground;

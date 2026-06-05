@@ -357,7 +357,20 @@ void UpdateGlobalSettings() {
 
   g_settings.userDefinedTaskbarBackgroundTint = clamp(abs(getInt(L"TaskbarBackgroundTint")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundLuminosity = clamp(abs(getInt(L"TaskbarBackgroundLuminosity")), 0, 100);
-
+  g_settings.userDefinedTaskbarBackgroundBlurAmount = clamp(abs(getInt(L"TaskbarBackgroundBlurAmount")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundTintSaturation = clamp(abs(getInt(L"TaskbarBackgroundTintSaturation")), 0, 200);
+  g_settings.userDefinedTaskbarBackgroundNoiseOpacity = clamp(abs(getInt(L"TaskbarBackgroundNoiseOpacity")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundNoiseDensity = clamp(abs(getInt(L"TaskbarBackgroundNoiseDensity")), 1, 100);
+  PCWSTR bgTintColor = Wh_GetStringSetting(L"TaskbarBackgroundTintColor");
+  g_settings.userDefinedTaskbarBackgroundTintColor = (bgTintColor && *bgTintColor) ? bgTintColor : L"{ThemeResource CardStrokeColorDefaultSolid}";
+  if (bgTintColor) {
+    Wh_FreeStringSetting(bgTintColor);
+  }
+  PCWSTR bgFallbackColor = Wh_GetStringSetting(L"TaskbarBackgroundFallbackColor");
+  g_settings.userDefinedTaskbarBackgroundFallbackColor = (bgFallbackColor && *bgFallbackColor) ? bgFallbackColor : L"{ThemeResource CardStrokeColorDefaultSolid}";
+  if (bgFallbackColor) {
+    Wh_FreeStringSetting(bgFallbackColor);
+  }
   // Border opacity: 0–255
   int bOp = clamp(abs(getInt(L"TaskbarBorderOpacity")), 0, 100);
   g_settings.userDefinedTaskbarBorderOpacity = uint8_t(round(bOp * 2.55f));
@@ -393,35 +406,24 @@ void UpdateGlobalSettings() {
 }
 bool HasInvalidSettings() {
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
-
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
-
   if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
-
   if (g_settings.userDefinedTaskbarHeight < 44 || g_settings.userDefinedTaskbarHeight > 200) return true;
-
   if (g_settings.userDefinedTaskbarIconSize <= 0) return true;
-
   if (g_settings.userDefinedTrayIconSize <= 0) return true;
-
   if (g_settings.userDefinedTaskbarButtonSize <= 0) return true;
-
   if (g_settings.userDefinedTrayButtonSize <= 0) return true;
-
   if (g_settings.userDefinedTaskbarCornerRadius < 0.0f || g_settings.userDefinedTaskbarCornerRadius > (g_settings.userDefinedTaskbarHeight / 2.0f)) return true;
-
   if (g_settings.userDefinedTaskButtonCornerRadius < 0 || g_settings.userDefinedTaskButtonCornerRadius > (g_settings.userDefinedTaskbarHeight / 2)) return true;
-
   if (g_settings.userDefinedTaskbarBackgroundOpacity > 100) return true;
-
   if (g_settings.userDefinedTaskbarBackgroundTint > 100) return true;
-
   if (g_settings.userDefinedTaskbarBackgroundLuminosity > 100) return true;
-
+  if (g_settings.userDefinedTaskbarBackgroundBlurAmount > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundTintSaturation > 200) return true;
+  if (g_settings.userDefinedTaskbarBackgroundNoiseOpacity > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundNoiseDensity < 1 || g_settings.userDefinedTaskbarBackgroundNoiseDensity > 100) return true;
   if (g_settings.userDefinedTaskbarBorderOpacity > 255) return true;
-
   if (g_settings.userDefinedTaskbarBorderThickness < 0.0 || g_settings.userDefinedTaskbarBorderThickness > 10.0) return true;
-
   return false;
 }
 
@@ -440,6 +442,12 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundOpacity, L"userDefinedTaskbarBackgroundOpacity");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundTint, L"userDefinedTaskbarBackgroundTint");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundLuminosity, L"userDefinedTaskbarBackgroundLuminosity");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundBlurAmount, L"userDefinedTaskbarBackgroundBlurAmount");
+  Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundTintColor.c_str(), L"userDefinedTaskbarBackgroundTintColor");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundTintSaturation, L"userDefinedTaskbarBackgroundTintSaturation");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseOpacity, L"userDefinedTaskbarBackgroundNoiseOpacity");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseDensity, L"userDefinedTaskbarBackgroundNoiseDensity");
+  Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundFallbackColor.c_str(), L"userDefinedTaskbarBackgroundFallbackColor");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBorderOpacity, L"userDefinedTaskbarBorderOpacity");
   Wh_Log(L"setting %d %s", (int)(g_settings.userDefinedTaskbarBorderThickness * 100.0 / 10.0), L"userDefinedTaskbarBorderThickness (scaled)");
   Wh_Log(L"setting %d %s", g_settings.userDefinedFullWidthTaskbarBackground ? 1 : 0, L"userDefinedFullWidthTaskbarBackground");
@@ -847,14 +855,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (screenEdgeStroke) {
     screenEdgeStroke.Opacity(g_unloading ? 1.0 : 0.0);
   }
+ if (g_unloading) {
+    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
+  } else if (g_settings.userDefinedCustomizeTaskbarBackground) {
 
-  auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
-  auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
-  auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  if (g_settings.userDefinedCustomizeTaskbarBackground) {
-
-
-    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>", true);
+    ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
 //    For custom brush
 //    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
 //    float blurAmount = float(g_settings.userDefinedTaskbarBackgroundLuminosity);

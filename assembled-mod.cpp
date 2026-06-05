@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            WinDock (taskbar as a dock) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into a macOS-style dock. Based on m417z's code. For Windows 11.
-// @version         1.5.0
+// @version         1.5.15
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -10,7 +10,7 @@
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
 // @architecture    x86-64
 // ==/WindhawkMod==
 // This mod is based on code released under the GNU General Public License v3.0.
@@ -75,6 +75,12 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundOpacity` | Background opacity | Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100) | Non-negative integer |
 | `TaskbarBackgroundTint` | Background tint | Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0) | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30) | Non-negative integer |
+| `TaskbarBackgroundBlurAmount` | Background blur amount | WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30 | Non-negative integer |
+| `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
+| `TaskbarBackgroundTintSaturation` | Background saturation | WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200 = boosted saturation. Must be non-negative. Default is 100 | Non-negative integer |
+| `TaskbarBackgroundNoiseOpacity` | Background noise opacity | WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0 | Non-negative integer |
+| `TaskbarBackgroundNoiseDensity` | Background noise density | WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100 | Non-negative integer |
+| `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20) | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
 | `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Set the scale of the taskbar border. Range 0-100 (Default is 8) | unsigned int percentage |
@@ -139,6 +145,24 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarBackgroundLuminosity: 30
   $name: Background luminosity
   $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30)
+- TaskbarBackgroundBlurAmount: 30
+  $name: Background blur amount
+  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30
+- TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
+  $name: Background tint color
+  $description: WindhawkBlur tint color. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+- TaskbarBackgroundTintSaturation: 100
+  $name: Background saturation
+  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200 = boosted saturation. Must be non-negative. Default is 100
+- TaskbarBackgroundNoiseOpacity: 0
+  $name: Background noise opacity
+  $description: WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0
+- TaskbarBackgroundNoiseDensity: 100
+  $name: Background noise density
+  $description: WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100
+- TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
+  $name: Background fallback color
+  $description: Color used when transparency effects or energy saver disable blur. Accepts #RRGGBB, #AARRGGBB, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
 - TaskbarBorderOpacity: 20
   $name: Border opacity
   $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20)
@@ -203,6 +227,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <windhawk_utils.h>
 #undef GetCurrentTime
+#include <initguid.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -282,6 +307,12 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int userDefinedTaskbarBackgroundOpacity;
   unsigned int userDefinedTaskbarBackgroundTint;
   unsigned int userDefinedTaskbarBackgroundLuminosity;
+  unsigned int userDefinedTaskbarBackgroundBlurAmount;
+  std::wstring userDefinedTaskbarBackgroundTintColor;
+  unsigned int userDefinedTaskbarBackgroundTintSaturation;
+  unsigned int userDefinedTaskbarBackgroundNoiseOpacity;
+  unsigned int userDefinedTaskbarBackgroundNoiseDensity;
+  std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
   double userDefinedTaskbarBorderThickness;
   bool userDefinedFullWidthTaskbarBackground;
@@ -307,20 +338,14 @@ std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 #include <Windows.h>
 bool IsStartMenuOrbLeftAligned() {
-  Wh_Log(L".");
-
     DWORD value = 0;
     DWORD size = sizeof(value);
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
                      LR"(Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced)",
                       0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-  Wh_Log(L".");
-
         if (RegQueryValueExW(hKey, L"TaskbarAl", nullptr, nullptr,
                              reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
-  Wh_Log(L".");
-
             RegCloseKey(hKey);
             return value == 0;
         }
@@ -329,20 +354,14 @@ bool IsStartMenuOrbLeftAligned() {
     return false;
 }
         std::wstring GetMonitorName(HMONITOR monitor) {
-  Wh_Log(L".");
-
             MONITORINFOEX monitorInfo = {};
             monitorInfo.cbSize = sizeof(MONITORINFOEX);
             if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
-  Wh_Log(L".");
-
                 return std::wstring(monitorInfo.szDevice);
             }
             return L"default";
         }
         std::wstring GetMonitorName(HWND hwnd) {
-  Wh_Log(L".");
-
             HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             return GetMonitorName(monitor);
         }
@@ -354,29 +373,19 @@ size_t OffsetFromAssemblyRegex(void* func,
                                size_t defValue,
                                std::regex regex,
                                int limit = 30) {
-  Wh_Log(L".");
-
     BYTE* p = (BYTE*)func;
     for (int i = 0; i < limit; i++) {
-  Wh_Log(L".");
-
         WH_DISASM_RESULT result;
         if (!Wh_Disasm(p, &result)) {
-  Wh_Log(L".");
-
             break;
         }
         p += result.length;
         std::string_view s = result.text;
         if (s == "ret") {
-  Wh_Log(L".");
-
             break;
         }
         std::match_results<std::string_view::const_iterator> match;
         if (std::regex_match(s.begin(), s.end(), match, regex)) {
-  Wh_Log(L".");
-
             return std::stoull(match[1], nullptr, 16);
         }
     }
@@ -384,8 +393,6 @@ size_t OffsetFromAssemblyRegex(void* func,
     return defValue;
 }
 std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
-  Wh_Log(L".");
-
     enum FEATURE_ENABLED_STATE {
         FEATURE_ENABLED_STATE_DEFAULT = 0,
         FEATURE_ENABLED_STATE_DISABLED = 1,
@@ -407,16 +414,12 @@ std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     using RtlQueryFeatureConfiguration_t =
         int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
     static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
-  Wh_Log(L".");
-
         HMODULE hNtDll = GetModuleHandle(L"ntdll.dll");
         return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
                             hNtDll, "RtlQueryFeatureConfiguration")
                       : nullptr;
     }();
     if (!pRtlQueryFeatureConfiguration) {
-  Wh_Log(L".");
-
         Wh_Log(L"RtlQueryFeatureConfiguration not found");
         return std::nullopt;
     }
@@ -425,13 +428,9 @@ std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     HRESULT hr =
         pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
     if (SUCCEEDED(hr)) {
-  Wh_Log(L".");
-
         Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
                feature.enabledState);
         switch (feature.enabledState) {
-  Wh_Log(L".");
-
             case FEATURE_ENABLED_STATE_DISABLED:
                 return false;
             case FEATURE_ENABLED_STATE_ENABLED:
@@ -448,56 +447,36 @@ std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
 FrameworkElement EnumChildElements(
     FrameworkElement element,
     std::function<bool(FrameworkElement)> enumCallback) {
-  Wh_Log(L".");
-
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
     for (int i = 0; i < childrenCount; i++) {
-  Wh_Log(L".");
-
         auto child = Media::VisualTreeHelper::GetChild(element, i)
                          .try_as<FrameworkElement>();
         if (!child) {
-  Wh_Log(L".");
-
             Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
             continue;
         }
         if (enumCallback(child)) {
-  Wh_Log(L".");
-
             return child;
         }
     }
     return nullptr;
 }
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
-  Wh_Log(L".");
-
     return EnumChildElements(element, [name](FrameworkElement child) {
-  Wh_Log(L".");
-
         return child.Name() == name;
     });
 }
 FrameworkElement FindChildByClassName(FrameworkElement element,
                                       PCWSTR className) {
-  Wh_Log(L".");
-
     return EnumChildElements(element, [className](FrameworkElement child) {
-  Wh_Log(L".");
-
         return winrt::get_class_name(child) == className;
     });
 }
 bool IsVerticalTaskbar() {
-  Wh_Log(L".");
-
     APPBARDATA appBarData = {
         .cbSize = sizeof(APPBARDATA),
     };
     if (!SHAppBarMessage(ABM_GETTASKBARPOS, &appBarData)) {
-  Wh_Log(L".");
-
         Wh_Log(L"SHAppBarMessage(ABM_GETTASKBARPOS) failed");
         return false;
     }
@@ -507,40 +486,26 @@ void OverrideResourceDirectoryLookup(
     PCSTR sourceFunctionName,
     const winrt::Windows::Foundation::IInspectable* key,
     winrt::Windows::Foundation::IInspectable* value) {
-  Wh_Log(L".");
-
     if (g_unloading) {
-  Wh_Log(L".");
-
         return;
     }
     const auto keyString = key->try_as<winrt::hstring>();
     if (!keyString) {
-  Wh_Log(L".");
-
         return;
     }
     double newValueDouble;
     if (*keyString == L"MediumTaskbarButtonExtent") {
-  Wh_Log(L".");
-
         newValueDouble = g_settings_tbiconsize.taskbarButtonWidth;
     } else if (*keyString == L"SmallTaskbarButtonExtent") {
-  Wh_Log(L".");
-
         newValueDouble = g_settings_tbiconsize.taskbarButtonWidthSmall;
     } else {
         return;
     }
     const auto valueDouble = value->try_as<double>();
     if (!valueDouble) {
-  Wh_Log(L".");
-
         return;
     }
     if (newValueDouble != *valueDouble) {
-  Wh_Log(L".");
-
         Wh_Log(L"[%S] Overriding value %s: %f->%f", sourceFunctionName,
                keyString->c_str(), *valueDouble, newValueDouble);
         *value = winrt::box_value(newValueDouble);
@@ -558,13 +523,9 @@ ResourceDictionary_Lookup_TaskbarView_Hook(
     void* pThis,
     void** result,
     winrt::Windows::Foundation::IInspectable* key) {
-  Wh_Log(L".");
-
     auto ret =
         ResourceDictionary_Lookup_TaskbarView_Original(pThis, result, key);
     if (!*ret) {
-  Wh_Log(L".");
-
         return ret;
     }
     OverrideResourceDirectoryLookup(__FUNCTION__, key, ret);
@@ -582,13 +543,9 @@ ResourceDictionary_Lookup_SearchUxUi_Hook(
     void* pThis,
     void** result,
     winrt::Windows::Foundation::IInspectable* key) {
-  Wh_Log(L".");
-
     auto ret =
         ResourceDictionary_Lookup_SearchUxUi_Original(pThis, result, key);
     if (!*ret) {
-  Wh_Log(L".");
-
         return ret;
     }
     OverrideResourceDirectoryLookup(__FUNCTION__, key, ret);
@@ -599,23 +556,17 @@ using IconUtils_GetIconSize_t = void(WINAPI*)(bool isSmall,
                                               SIZE* size);
 IconUtils_GetIconSize_t IconUtils_GetIconSize_Original;
 void WINAPI IconUtils_GetIconSize_Hook(bool isSmall, int type, SIZE* size) {
-  Wh_Log(L".");
-
     [[maybe_unused]] static bool logged = [] {
         Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
                __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
         return true;
     }();
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         IconUtils_GetIconSize_Original(isSmall, type, size);
         return;
     }
     IconUtils_GetIconSize_Original(isSmall, type, size);
     if (!g_unloading && !isSmall) {
-  Wh_Log(L".");
-
         size->cx = MulDiv(size->cx, g_settings_tbiconsize.iconSize, 24);
         size->cy = MulDiv(size->cy, g_settings_tbiconsize.iconSize, 24);
     }
@@ -628,22 +579,16 @@ IconContainer_IsStorageRecreationRequired_t
 bool WINAPI IconContainer_IsStorageRecreationRequired_Hook(void* pThis,
                                                            void* param1,
                                                            int flags) {
-  Wh_Log(L".");
-
     [[maybe_unused]] static bool logged = [] {
         Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
                __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
         return true;
     }();
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         return IconContainer_IsStorageRecreationRequired_Original(pThis, param1,
                                                                   flags);
     }
     if (g_applyingSettings) {
-  Wh_Log(L".");
-
         return true;
     }
     return IconContainer_IsStorageRecreationRequired_Original(pThis, param1,
@@ -654,12 +599,8 @@ using TrayUI_GetMinSize_t = void(WINAPI*)(void* pThis,
                                           SIZE* size);
 TrayUI_GetMinSize_t TrayUI_GetMinSize_Original;
 void WINAPI TrayUI_GetMinSize_Hook(void* pThis, HMONITOR monitor, SIZE* size) {
-  Wh_Log(L".");
-
     TrayUI_GetMinSize_Original(pThis, monitor, size);
     if (!IsVerticalTaskbar() && g_taskbarHeight) {
-  Wh_Log(L".");
-
         UINT dpiX = 0;
         UINT dpiY = 0;
         GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY);
@@ -674,19 +615,13 @@ CIconLoadingFunctions_GetClassLongPtrW_t
 ULONG_PTR WINAPI CIconLoadingFunctions_GetClassLongPtrW_Hook(void* pThis,
                                                              HWND hWnd,
                                                              int nIndex) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d, nIndex=%d", g_hasDynamicIconScaling,
            nIndex);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         return CIconLoadingFunctions_GetClassLongPtrW_Original(pThis, hWnd,
                                                                nIndex);
     }
     if (!g_unloading && nIndex == GCLP_HICON && g_settings_tbiconsize.iconSize <= 16) {
-  Wh_Log(L".");
-
         nIndex = GCLP_HICONSM;
     }
     ULONG_PTR ret =
@@ -711,20 +646,14 @@ CIconLoadingFunctions_SendMessageCallbackW_Hook(void* pThis,
                                                 LPARAM lParam,
                                                 SENDASYNCPROC lpResultCallBack,
                                                 ULONG_PTR dwData) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d, Msg=%u, wParam=%zu, lParam=%zu",
            g_hasDynamicIconScaling, Msg, wParam, lParam);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         return CIconLoadingFunctions_SendMessageCallbackW_Original(
             pThis, hWnd, Msg, wParam, lParam, lpResultCallBack, dwData);
     }
     if (!g_unloading && Msg == WM_GETICON && wParam == ICON_BIG &&
         g_settings_tbiconsize.iconSize <= 16) {
-  Wh_Log(L".");
-
         wParam = ICON_SMALL2;
     }
     BOOL ret = CIconLoadingFunctions_SendMessageCallbackW_Original(
@@ -736,12 +665,8 @@ using ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_t =
 ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_t
     ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Original;
 void WINAPI ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Hook(void* pThis) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Original(pThis);
         return;
     }
@@ -763,12 +688,8 @@ void WINAPI TrayUI__HandleSettingChange_Hook(void* pThis,
                                              void* param2,
                                              void* param3,
                                              void* param4) {
-  Wh_Log(L".");
-
     TrayUI__HandleSettingChange_Original(pThis, param1, param2, param3, param4);
     if (g_applyingSettings) {
-  Wh_Log(L".");
-
         TrayUI__StuckTrayChange_Original(pThis);
     }
 }
@@ -780,24 +701,18 @@ TaskListItemViewModel_GetIconHeight_t
 int WINAPI TaskListItemViewModel_GetIconHeight_Hook(void* pThis,
                                                     void* param1,
                                                     double* iconHeight) {
-  Wh_Log(L".");
-
     [[maybe_unused]] static bool logged = [] {
         Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
                __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
         return true;
     }();
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         return TaskListItemViewModel_GetIconHeight_Original(pThis, param1,
                                                             iconHeight);
     }
     int ret =
         TaskListItemViewModel_GetIconHeight_Original(pThis, param1, iconHeight);
     if (!g_unloading) {
-  Wh_Log(L".");
-
         *iconHeight = g_settings_tbiconsize.iconSize;
     }
     return ret;
@@ -810,20 +725,14 @@ TaskListGroupViewModel_GetIconHeight_t
 int WINAPI TaskListGroupViewModel_GetIconHeight_Hook(void* pThis,
                                                      void* param1,
                                                      double* iconHeight) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         return TaskListGroupViewModel_GetIconHeight_Original(pThis, param1,
                                                              iconHeight);
     }
     int ret = TaskListGroupViewModel_GetIconHeight_Original(pThis, param1,
                                                             iconHeight);
     if (!g_unloading) {
-  Wh_Log(L".");
-
         *iconHeight = g_settings_tbiconsize.iconSize;
     }
     return ret;
@@ -835,19 +744,13 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d, enumTaskbarSize=%d",
            g_hasDynamicIconScaling, enumTaskbarSize);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         Wh_Log(L"Setting hasDynamicIconScaling to false");
         g_hasDynamicIconScaling = false;
     }
     if (!g_unloading && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-  Wh_Log(L".");
-
         return g_settings_tbiconsize.iconSize ;
     }
     return TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Original(
@@ -859,19 +762,13 @@ TaskbarConfiguration_GetIconHeightInViewPixels_double_t
     TaskbarConfiguration_GetIconHeightInViewPixels_double_Original;
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_double_Hook(double baseHeight) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d, baseHeight=%f",
            g_hasDynamicIconScaling, baseHeight);
     if (g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         Wh_Log(L"Setting hasDynamicIconScaling to false");
         g_hasDynamicIconScaling = false;
     }
     if (!g_unloading) {
-  Wh_Log(L".");
-
         return g_settings_tbiconsize.iconSize;
     }
     return TaskbarConfiguration_GetIconHeightInViewPixels_double_Original(
@@ -883,8 +780,6 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_t
     TaskbarConfiguration_GetIconHeightInViewPixels_method_Original;
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
-  Wh_Log(L".");
-
     [[maybe_unused]] static bool logged = [] {
         Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
                __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
@@ -893,8 +788,6 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
     double iconSize =
         TaskbarConfiguration_GetIconHeightInViewPixels_method_Original(pThis);
     if (!g_unloading) {
-  Wh_Log(L".");
-
         return iconSize <= 16 ? g_settings_tbiconsize.iconSizeSmall : g_settings_tbiconsize.iconSize;
     }
     return iconSize;
@@ -902,12 +795,8 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
 using TaskListButton_IconHeight_t = void(WINAPI*)(void* pThis, double height);
 TaskListButton_IconHeight_t TaskListButton_IconHeight_Original;
 size_t GetIconHeightOffset() {
-  Wh_Log(L".");
-
     static size_t iconHeightOffset = []() -> size_t {
         if (!TaskListButton_IconHeight_Original) {
-  Wh_Log(L".");
-
             Wh_Log(L"Error: TaskListButton_IconHeight_Original is null");
             return 0;
         }
@@ -933,8 +822,6 @@ size_t GetIconHeightOffset() {
     return iconHeightOffset;
 }
 void TaskListButton_IconHeight_InitOffsets() {
-  Wh_Log(L".");
-
     GetIconHeightOffset();
 }
 using SystemTrayController_GetFrameSize_t =
@@ -942,13 +829,9 @@ using SystemTrayController_GetFrameSize_t =
 SystemTrayController_GetFrameSize_t SystemTrayController_GetFrameSize_Original;
 double WINAPI SystemTrayController_GetFrameSize_Hook(void* pThis,
                                                      int enumTaskbarSize) {
-  Wh_Log(L".");
-
     Wh_Log(L"> %d", enumTaskbarSize);
     if (!IsVerticalTaskbar() && g_taskbarHeight &&
         (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-  Wh_Log(L".");
-
         return g_taskbarHeight;
     }
     return SystemTrayController_GetFrameSize_Original(pThis, enumTaskbarSize);
@@ -960,13 +843,9 @@ SystemTraySecondaryController_GetFrameSize_t
 double WINAPI
 SystemTraySecondaryController_GetFrameSize_Hook(void* pThis,
                                                 int enumTaskbarSize) {
-  Wh_Log(L".");
-
     Wh_Log(L"> %d", enumTaskbarSize);
     if (!IsVerticalTaskbar() && g_taskbarHeight &&
         (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-  Wh_Log(L".");
-
         return g_taskbarHeight;
     }
     return SystemTraySecondaryController_GetFrameSize_Original(pThis,
@@ -976,20 +855,14 @@ using TaskbarConfiguration_GetFrameSize_t =
     double(WINAPI*)(int enumTaskbarSize);
 TaskbarConfiguration_GetFrameSize_t TaskbarConfiguration_GetFrameSize_Original;
 double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int enumTaskbarSize) {
-  Wh_Log(L".");
-
     Wh_Log(L"> %d", enumTaskbarSize);
     if (!g_originalTaskbarHeight &&
         (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-  Wh_Log(L".");
-
         g_originalTaskbarHeight =
             TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
     }
     if (!IsVerticalTaskbar() && g_taskbarHeight &&
         (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
-  Wh_Log(L".");
-
         return g_taskbarHeight;
     }
     return TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
@@ -1000,12 +873,8 @@ using TaskbarConfiguration_UpdateFrameSize_t = void(WINAPI*)(void* pThis);
 TaskbarConfiguration_UpdateFrameSize_t
     TaskbarConfiguration_UpdateFrameSize_SymbolAddress;
 LONG GetFrameSizeOffset() {
-  Wh_Log(L".");
-
     static LONG frameSizeOffset = []() -> LONG {
         if (!TaskbarConfiguration_UpdateFrameSize_SymbolAddress) {
-  Wh_Log(L".");
-
             Wh_Log(
                 L"Error: TaskbarConfiguration_UpdateFrameSize_SymbolAddress is "
                 L"null");
@@ -1016,24 +885,16 @@ LONG GetFrameSizeOffset() {
         const DWORD* end = start + 0x80;
         std::regex regex1(R"(str\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])");
         for (const DWORD* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             WH_DISASM_RESULT result1;
             if (!Wh_Disasm((void*)p, &result1)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s1 = result1.text;
             if (s1 == "ret") {
-  Wh_Log(L".");
-
                 break;
             }
             std::match_results<std::string_view::const_iterator> match1;
             if (!std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
-  Wh_Log(L".");
-
                 continue;
             }
             LONG offset = std::stoull(match1[1], nullptr, 16);
@@ -1046,19 +907,13 @@ LONG GetFrameSizeOffset() {
     return frameSizeOffset;
 }
 void TaskbarConfiguration_UpdateFrameSize_InitOffsets() {
-  Wh_Log(L".");
-
     GetFrameSizeOffset();
 }
 TaskbarConfiguration_UpdateFrameSize_t
     TaskbarConfiguration_UpdateFrameSize_Original;
 void WINAPI TaskbarConfiguration_UpdateFrameSize_Hook(void* pThis) {
-  Wh_Log(L".");
-
     LONG frameSizeOffset = GetFrameSizeOffset();
     if (!frameSizeOffset) {
-  Wh_Log(L".");
-
         Wh_Log(L"Error: frameSizeOffset is invalid");
         TaskbarConfiguration_UpdateFrameSize_Original(pThis);
         return;
@@ -1071,20 +926,12 @@ void WINAPI TaskbarConfiguration_UpdateFrameSize_Hook(void* pThis) {
 using Event_operator_call_t = void(WINAPI*)(void* pThis);
 Event_operator_call_t Event_operator_call_Original;
 void WINAPI Event_operator_call_Hook(void* pThis) {
-  Wh_Log(L".");
-
     if (g_TaskbarConfiguration_UpdateFrameSize_frameSize) {
-  Wh_Log(L".");
-
         if (!g_originalTaskbarHeight) {
-  Wh_Log(L".");
-
             g_originalTaskbarHeight =
                 *g_TaskbarConfiguration_UpdateFrameSize_frameSize;
         }
         if (!IsVerticalTaskbar() && g_taskbarHeight) {
-  Wh_Log(L".");
-
             *g_TaskbarConfiguration_UpdateFrameSize_frameSize = g_taskbarHeight;
         }
     }
@@ -1095,12 +942,8 @@ using SystemTrayController_UpdateFrameSize_t = void(WINAPI*)(void* pThis);
 SystemTrayController_UpdateFrameSize_t
     SystemTrayController_UpdateFrameSize_SymbolAddress;
 LONG GetLastHeightOffset() {
-  Wh_Log(L".");
-
     static LONG lastHeightOffset = []() -> LONG {
         if (!SystemTrayController_UpdateFrameSize_SymbolAddress) {
-  Wh_Log(L".");
-
             Wh_Log(
                 L"Error: SystemTrayController_UpdateFrameSize_SymbolAddress is "
                 L"null");
@@ -1111,14 +954,10 @@ LONG GetLastHeightOffset() {
             (const BYTE*)SystemTrayController_UpdateFrameSize_SymbolAddress;
         const BYTE* end = start + 0x400;
         for (const BYTE* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E &&
                 (p[3] & 0xC0) == 0x80 && p[8] == 0x7A &&
                 (p[10] == 0x74 || p[10] == 0x75 ||
                  (p[10] == 0x0F && (p[11] == 0x84 || p[11] == 0x85)))) {
-  Wh_Log(L".");
-
                 LONG offset = *(LONG*)(p + 4);
                 Wh_Log(L"lastHeightOffset=0x%X", offset);
                 return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
@@ -1132,48 +971,32 @@ LONG GetLastHeightOffset() {
         std::regex regex2(R"(fcmp\s+d\d+, d\d+)");
         std::regex regex3(R"(b\.eq\s+0x[0-9a-f]+)");
         for (const DWORD* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             WH_DISASM_RESULT result1;
             if (!Wh_Disasm((void*)p, &result1)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s1 = result1.text;
             if (s1 == "ret") {
-  Wh_Log(L".");
-
                 break;
             }
             std::match_results<std::string_view::const_iterator> match1;
             if (!std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
-  Wh_Log(L".");
-
                 continue;
             }
             WH_DISASM_RESULT result2;
             if (!Wh_Disasm((void*)(p + 1), &result2)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s2 = result2.text;
             if (!std::regex_match(s2.begin(), s2.end(), regex2)) {
-  Wh_Log(L".");
-
                 continue;
             }
             WH_DISASM_RESULT result3;
             if (!Wh_Disasm((void*)(p + 2), &result3)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s3 = result3.text;
             if (!std::regex_match(s3.begin(), s3.end(), regex3)) {
-  Wh_Log(L".");
-
                 continue;
             }
             LONG offset = std::stoull(match1[1], nullptr, 16);
@@ -1189,25 +1012,17 @@ LONG GetLastHeightOffset() {
     return lastHeightOffset;
 }
 void SystemTrayController_UpdateFrameSize_InitOffsets() {
-  Wh_Log(L".");
-
     GetLastHeightOffset();
 }
 SystemTrayController_UpdateFrameSize_t
     SystemTrayController_UpdateFrameSize_Original;
 void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
-  Wh_Log(L".");
-
     if (IsVerticalTaskbar()) {
-  Wh_Log(L".");
-
         SystemTrayController_UpdateFrameSize_Original(pThis);
         return;
     }
     LONG lastHeightOffset = GetLastHeightOffset();
     if (lastHeightOffset) {
-  Wh_Log(L".");
-
         *(double*)((BYTE*)pThis + lastHeightOffset) = 0;
     } else {
         Wh_Log(L"Error: lastHeightOffset is invalid");
@@ -1222,17 +1037,11 @@ TaskbarFrame_MaxHeight_double_t TaskbarFrame_MaxHeight_double_Original;
 using TaskbarFrame_Height_double_t = void(WINAPI*)(void* pThis, double value);
 TaskbarFrame_Height_double_t TaskbarFrame_Height_double_Original;
 void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
-  Wh_Log(L".");
-
     if (IsVerticalTaskbar()) {
-  Wh_Log(L".");
-
         TaskbarFrame_Height_double_Original(pThis, value);
         return;
     }
     if (TaskbarFrame_MaxHeight_double_Original) {
-  Wh_Log(L".");
-
         TaskbarFrame_MaxHeight_double_Original(
             pThis, std::numeric_limits<double>::infinity());
     }
@@ -1240,12 +1049,8 @@ void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
 }
 void* TaskbarController_OnGroupingModeChanged_Original;
 LONG GetTaskbarFrameOffset() {
-  Wh_Log(L".");
-
     static LONG taskbarFrameOffset = []() -> LONG {
         if (!TaskbarController_OnGroupingModeChanged_Original) {
-  Wh_Log(L".");
-
             Wh_Log(
                 L"Error: TaskbarController_OnGroupingModeChanged_Original is "
                 L"null");
@@ -1257,8 +1062,6 @@ LONG GetTaskbarFrameOffset() {
         if (p && p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
             (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B &&
             (p[6] & 0xC0) == 0x80) {
-  Wh_Log(L".");
-
             LONG offset = *(LONG*)(p + 7);
             Wh_Log(L"taskbarFrameOffset=0x%X", offset);
             return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
@@ -1269,24 +1072,16 @@ LONG GetTaskbarFrameOffset() {
         const DWORD* end = start + 10;
         std::regex regex1(R"(ldr\s+x\d+, \[x\d+, #0x([0-9a-f]+)\])");
         for (const DWORD* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             WH_DISASM_RESULT result1;
             if (!Wh_Disasm((void*)p, &result1)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s1 = result1.text;
             if (s1 == "ret") {
-  Wh_Log(L".");
-
                 break;
             }
             std::match_results<std::string_view::const_iterator> match1;
             if (!std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
-  Wh_Log(L".");
-
                 continue;
             }
             LONG offset = std::stoull(match1[1], nullptr, 16);
@@ -1302,34 +1097,24 @@ LONG GetTaskbarFrameOffset() {
     return taskbarFrameOffset;
 }
 void TaskbarController_OnGroupingModeChanged_InitOffsets() {
-  Wh_Log(L".");
-
     GetTaskbarFrameOffset();
 }
 using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
 TaskbarController_UpdateFrameHeight_t
     TaskbarController_UpdateFrameHeight_Original;
 void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
-  Wh_Log(L".");
-
     if (IsVerticalTaskbar()) {
-  Wh_Log(L".");
-
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
     }
     LONG taskbarFrameOffset = GetTaskbarFrameOffset();
     if (!taskbarFrameOffset) {
-  Wh_Log(L".");
-
         Wh_Log(L"Error: taskbarFrameOffset is invalid");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
     }
     void* taskbarFrame = *(void**)((BYTE*)pThis + taskbarFrameOffset);
     if (!taskbarFrame) {
-  Wh_Log(L".");
-
         Wh_Log(L"Error: taskbarFrame is null");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
@@ -1339,8 +1124,6 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
         winrt::guid_of<FrameworkElement>(),
         winrt::put_abi(taskbarFrameElement));
     if (!taskbarFrameElement) {
-  Wh_Log(L".");
-
         Wh_Log(L"Error: taskbarFrameElement is null");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
@@ -1350,13 +1133,9 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
     auto contentGrid = Media::VisualTreeHelper::GetParent(taskbarFrameElement)
                            .try_as<FrameworkElement>();
     if (contentGrid) {
-  Wh_Log(L".");
-
         double height = taskbarFrameElement.Height();
         double contentGridHeight = contentGrid.Height();
         if (contentGridHeight > 0 && contentGridHeight != height) {
-  Wh_Log(L".");
-
             Wh_Log(L"Adjusting contentGrid.Height: %f->%f", contentGridHeight,
                    height);
             contentGrid.Height(height);
@@ -1368,8 +1147,6 @@ using SystemTraySecondaryController_UpdateFrameSize_t =
 SystemTraySecondaryController_UpdateFrameSize_t
     SystemTraySecondaryController_UpdateFrameSize_Original;
 void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
-  Wh_Log(L".");
-
     g_inSystemTrayController_UpdateFrameSize = true;
     SystemTraySecondaryController_UpdateFrameSize_Original(pThis);
     g_inSystemTrayController_UpdateFrameSize = false;
@@ -1377,11 +1154,7 @@ void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
 using SystemTrayFrame_Height_t = void(WINAPI*)(void* pThis, double value);
 SystemTrayFrame_Height_t SystemTrayFrame_Height_Original;
 void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
-  Wh_Log(L".");
-
     if (!IsVerticalTaskbar() && g_inSystemTrayController_UpdateFrameSize) {
-  Wh_Log(L".");
-
         value = std::numeric_limits<double>::quiet_NaN();
     }
     SystemTrayFrame_Height_Original(pThis, value);
@@ -1395,8 +1168,6 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
     void* pThis,
     winrt::Windows::Foundation::Size size,
     winrt::Windows::Foundation::Size* resultSize) {
-  Wh_Log(L".");
-
     g_hookCallCounter++;
     int ret = TaskbarFrame_MeasureOverride_Original(pThis, size, resultSize);
     g_pendingMeasureOverride = false;
@@ -1407,20 +1178,14 @@ using TaskListButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateButtonPadding_t
     TaskListButton_UpdateButtonPadding_Original;
 void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
     if (!g_hasDynamicIconScaling || g_unloading) {
-  Wh_Log(L".");
-
         TaskListButton_UpdateButtonPadding_Original(pThis);
         return;
     }
     double* iconHeight = nullptr;
     double prevIconHeight;
     if (size_t iconHeightOffset = GetIconHeightOffset()) {
-  Wh_Log(L".");
-
         iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
         prevIconHeight = *iconHeight;
         double newIconHeight = g_smallIconSize ? 16 : 24;
@@ -1429,28 +1194,20 @@ void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
     }
     TaskListButton_UpdateButtonPadding_Original(pThis);
     if (iconHeight) {
-  Wh_Log(L".");
-
         *iconHeight = prevIconHeight;
     }
 }
 using TaskListButton_OverlayIcon_t = void(WINAPI*)(void* pThis, void* param1);
 TaskListButton_OverlayIcon_t TaskListButton_OverlayIcon_Original;
 void WINAPI TaskListButton_OverlayIcon_Hook(void* pThis, void* param1) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
     if (!g_hasDynamicIconScaling || g_unloading) {
-  Wh_Log(L".");
-
         TaskListButton_OverlayIcon_Original(pThis, param1);
         return;
     }
     double* iconHeight = nullptr;
     double prevIconHeight;
     if (size_t iconHeightOffset = GetIconHeightOffset()) {
-  Wh_Log(L".");
-
         iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
         prevIconHeight = *iconHeight;
         double newIconHeight = 24;
@@ -1459,28 +1216,20 @@ void WINAPI TaskListButton_OverlayIcon_Hook(void* pThis, void* param1) {
     }
     TaskListButton_OverlayIcon_Original(pThis, param1);
     if (iconHeight) {
-  Wh_Log(L".");
-
         *iconHeight = prevIconHeight;
     }
 }
 using TaskListButton_UpdateBadge_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateBadge_t TaskListButton_UpdateBadge_Original;
 void WINAPI TaskListButton_UpdateBadge_Hook(void* pThis) {
-  Wh_Log(L".");
-
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
     if (!g_hasDynamicIconScaling || g_unloading) {
-  Wh_Log(L".");
-
         TaskListButton_UpdateBadge_Original(pThis);
         return;
     }
     double* iconHeight = nullptr;
     double prevIconHeight;
     if (size_t iconHeightOffset = GetIconHeightOffset()) {
-  Wh_Log(L".");
-
         iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
         prevIconHeight = *iconHeight;
         double newIconHeight = 24;
@@ -1489,15 +1238,11 @@ void WINAPI TaskListButton_UpdateBadge_Hook(void* pThis) {
     }
     TaskListButton_UpdateBadge_Original(pThis);
     if (iconHeight) {
-  Wh_Log(L".");
-
         *iconHeight = prevIconHeight;
     }
 }
 void* TaskListButton_UpdateIconColumnDefinition_Original;
 LONG GetMediumTaskbarButtonExtentOffset() {
-  Wh_Log(L".");
-
     static LONG mediumTaskbarButtonExtentOffset = []() -> LONG {
 #if defined(_M_X64)
         const BYTE* start =
@@ -1506,31 +1251,21 @@ LONG GetMediumTaskbarButtonExtentOffset() {
         LONG offsetCandidate = 0;
         LONG offset = 0;
         for (const BYTE* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
                 (p[3] & 0xC0) == 0x80) {
-  Wh_Log(L".");
-
                 offsetCandidate = *(LONG*)(p + 4);
             }
             if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F && p[3] == 0x10 &&
                 (p[4] & 0xC0) == 0x80) {
-  Wh_Log(L".");
-
                 offsetCandidate = *(LONG*)(p + 5);
             }
             if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
                 (p[3] & 0xC0) == 0x80) {
-  Wh_Log(L".");
-
                 offset = offsetCandidate;
                 break;
             }
             if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F && p[3] == 0x5C &&
                 (p[4] & 0xC0) == 0x80) {
-  Wh_Log(L".");
-
                 offset = offsetCandidate;
                 break;
             }
@@ -1551,30 +1286,20 @@ LONG GetMediumTaskbarButtonExtentOffset() {
         } ldrs[32];
         size_t ldrCount = 0;
         for (const DWORD* p = start; p != end; p++) {
-  Wh_Log(L".");
-
             WH_DISASM_RESULT result;
             if (!Wh_Disasm((void*)p, &result)) {
-  Wh_Log(L".");
-
                 break;
             }
             std::string_view s = result.text;
             if (s == "ret") {
-  Wh_Log(L".");
-
                 break;
             }
             if (ldrCount == ARRAYSIZE(ldrs)) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Too many ldr instructions");
                 break;
             }
             std::match_results<std::string_view::const_iterator> matchLdr;
             if (std::regex_match(s.begin(), s.end(), matchLdr, regexLdr)) {
-  Wh_Log(L".");
-
                 std::string reg = matchLdr[1];
                 std::string regSrc = matchLdr[2];
                 LONG offset = std::stoull(matchLdr[3], nullptr, 16);
@@ -1584,39 +1309,27 @@ LONG GetMediumTaskbarButtonExtentOffset() {
             std::match_results<std::string_view::const_iterator> matchLdrOther;
             if (std::regex_match(s.begin(), s.end(), matchLdrOther,
                                  regexLdrOther)) {
-  Wh_Log(L".");
-
                 std::string reg = matchLdrOther[1];
                 ldrs[ldrCount++] = {std::move(reg), std::string(), 0};
                 continue;
             }
             std::match_results<std::string_view::const_iterator> matchFsub;
             if (std::regex_match(s.begin(), s.end(), matchFsub, regexFsub)) {
-  Wh_Log(L".");
-
                 std::string regA = matchFsub[1];
                 std::string regB = matchFsub[2];
                 std::remove_reference_t<decltype(ldrs[0])>* ldrA = nullptr;
                 std::remove_reference_t<decltype(ldrs[0])>* ldrB = nullptr;
                 for (size_t i = 0; i < ldrCount; i++) {
-  Wh_Log(L".");
-
                     const auto& [ldrReg, ldrRegSrc, ldrOffset] =
                         ldrs[ldrCount - 1 - i];
                     if (!ldrA && ldrReg == regA) {
-  Wh_Log(L".");
-
                         ldrA = &ldrs[ldrCount - 1 - i];
                     }
                     if (!ldrB && ldrReg == regB) {
-  Wh_Log(L".");
-
                         ldrB = &ldrs[ldrCount - 1 - i];
                     }
                 }
                 if (ldrA && ldrB && ldrA->regSrc == ldrB->regSrc) {
-  Wh_Log(L".");
-
                     LONG offset = ldrA->offset;
                     Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
                     return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
@@ -1632,36 +1345,24 @@ LONG GetMediumTaskbarButtonExtentOffset() {
     return mediumTaskbarButtonExtentOffset;
 }
 void TaskListButton_UpdateIconColumnDefinition_InitOffsets() {
-  Wh_Log(L".");
-
     GetMediumTaskbarButtonExtentOffset();
 }
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
-  Wh_Log(L".");
-
     if (TaskListButton_UpdateIconColumnDefinition_Original &&
         (g_applyingSettings || g_taskbarButtonWidthCustomized)) {
-  Wh_Log(L".");
-
         LONG mediumTaskbarButtonExtentOffset =
             GetMediumTaskbarButtonExtentOffset();
         if (mediumTaskbarButtonExtentOffset) {
-  Wh_Log(L".");
-
             bool updateButtonPadding = false;
             double* mediumTaskbarButtonExtent =
                 (double*)((BYTE*)pThis + mediumTaskbarButtonExtentOffset);
             if (*mediumTaskbarButtonExtent >= 1 &&
                 *mediumTaskbarButtonExtent < 10000) {
-  Wh_Log(L".");
-
                 double newValue =
                     g_unloading ? 44 : g_settings_tbiconsize.taskbarButtonWidth;
                 if (newValue != *mediumTaskbarButtonExtent) {
-  Wh_Log(L".");
-
                     Wh_Log(
                         L"Updating MediumTaskbarButtonExtent for "
                         L"TaskListButton: %f->%f",
@@ -1675,13 +1376,9 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                                         : nullptr;
             if (smallTaskbarButtonExtent && *smallTaskbarButtonExtent >= 1 &&
                 *smallTaskbarButtonExtent < 10000) {
-  Wh_Log(L".");
-
                 double newValue =
                     g_unloading ? 32 : g_settings_tbiconsize.taskbarButtonWidthSmall;
                 if (newValue != *smallTaskbarButtonExtent) {
-  Wh_Log(L".");
-
                     Wh_Log(
                         L"Updating SmallTaskbarButtonExtent for "
                         L"TaskListButton: %f->%f",
@@ -1691,8 +1388,6 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                 }
             }
             if (updateButtonPadding) {
-  Wh_Log(L".");
-
                 g_taskbarButtonWidthCustomized = true;
                 TaskListButton_UpdateButtonPadding_Hook(pThis);
             }
@@ -1702,23 +1397,15 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_applyingSettings && !g_hasDynamicIconScaling) {
-  Wh_Log(L".");
-
         FrameworkElement taskListButtonElement = nullptr;
         ((IUnknown*)pThis + 3)
             ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                              winrt::put_abi(taskListButtonElement));
         if (taskListButtonElement) {
-  Wh_Log(L".");
-
             if (auto iconPanelElement =
                     FindChildByName(taskListButtonElement, L"IconPanel")) {
-  Wh_Log(L".");
-
                 if (auto iconElement =
                         FindChildByName(iconPanelElement, L"Icon")) {
-  Wh_Log(L".");
-
                     double iconSize = g_unloading ? 24 : g_settings_tbiconsize.iconSize;
                     iconElement.Width(iconSize);
                     iconElement.Height(iconSize);
@@ -1733,8 +1420,6 @@ LaunchListItemViewModel_IconHeight_t
     LaunchListItemViewModel_IconHeight_Original;
 void WINAPI LaunchListItemViewModel_IconHeight_Hook(void* pThis,
                                                     double iconHeight) {
-  Wh_Log(L".");
-
     Wh_Log(L"> iconHeight=%f", iconHeight);
     g_smallIconSize = iconHeight == g_settings_tbiconsize.iconSizeSmall &&
                       iconHeight != g_settings_tbiconsize.iconSize;
@@ -1744,48 +1429,32 @@ using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 ExperienceToggleButton_UpdateButtonPadding_t
     ExperienceToggleButton_UpdateButtonPadding_Original;
 void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
-  Wh_Log(L".");
-
     ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
-  Wh_Log(L".");
-
         return;
     }
     FrameworkElement toggleButtonElement = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(toggleButtonElement));
     if (!toggleButtonElement) {
-  Wh_Log(L".");
-
         return;
     }
     auto panelElement =
         FindChildByName(toggleButtonElement, L"ExperienceToggleButtonRootPanel")
             .try_as<Controls::Grid>();
     if (!panelElement) {
-  Wh_Log(L".");
-
         return;
     }
     double defaultWidthExtra = -4;
     auto className = winrt::get_class_name(toggleButtonElement);
     if (className == L"Taskbar.ExperienceToggleButton") {
-  Wh_Log(L".");
-
         auto automationId = Automation::AutomationProperties::GetAutomationId(
             toggleButtonElement);
         if (automationId == L"StartButton") {
-  Wh_Log(L".");
-
             defaultWidthExtra = -3;
         }
     } else if (className == L"Taskbar.SearchBoxButton") {
-  Wh_Log(L".");
-
         if (panelElement.Margin() != Thickness{}) {
-  Wh_Log(L".");
-
             return;
         }
     } else {
@@ -1793,8 +1462,6 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     }
     double buttonWidth = panelElement.Width();
     if (!(buttonWidth > 0)) {
-  Wh_Log(L".");
-
         return;
     }
     auto buttonPadding = panelElement.Padding();
@@ -1806,8 +1473,6 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     double newWidth = overrideWidth + buttonPadding.Left + buttonPadding.Right +
                       defaultWidthExtra;
     if (newWidth != buttonWidth) {
-  Wh_Log(L".");
-
         Wh_Log(L"Updating MediumTaskbarButtonExtent for %s: %f->%f",
                className.c_str(), buttonWidth, newWidth);
         panelElement.Width(newWidth);
@@ -1817,39 +1482,27 @@ using SearchButtonBase_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 SearchButtonBase_UpdateButtonPadding_t
     SearchButtonBase_UpdateButtonPadding_Original;
 void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
-  Wh_Log(L".");
-
     SearchButtonBase_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
-  Wh_Log(L".");
-
         return;
     }
     FrameworkElement toggleButtonElement = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(toggleButtonElement));
     if (!toggleButtonElement) {
-  Wh_Log(L".");
-
         return;
     }
     auto panelElement =
         FindChildByName(toggleButtonElement, L"SearchBoxButtonRootPanel")
             .try_as<Controls::Grid>();
     if (!panelElement) {
-  Wh_Log(L".");
-
         return;
     }
     if (FindChildByName(panelElement, L"SearchBoxTextBlock")) {
-  Wh_Log(L".");
-
         return;
     }
     double buttonWidth = panelElement.Width();
     if (!(buttonWidth > 0)) {
-  Wh_Log(L".");
-
         return;
     }
     auto buttonPadding = panelElement.Padding();
@@ -1861,8 +1514,6 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
     double newWidth =
         overrideWidth + buttonPadding.Left + buttonPadding.Right - 4;
     if (newWidth != buttonWidth) {
-  Wh_Log(L".");
-
         Wh_Log(L"Updating MediumTaskbarButtonExtent: %f->%f", buttonWidth,
                newWidth);
         panelElement.Width(newWidth);
@@ -1873,8 +1524,6 @@ using AugmentedEntryPointButton_UpdateButtonPadding_t =
 AugmentedEntryPointButton_UpdateButtonPadding_t
     AugmentedEntryPointButton_UpdateButtonPadding_Original;
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
-  Wh_Log(L".");
-
     g_inAugmentedEntryPointButton_UpdateButtonPadding = true;
     AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
     g_inAugmentedEntryPointButton_UpdateButtonPadding = false;
@@ -1882,13 +1531,9 @@ void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
 using RepeatButton_Width_t = void(WINAPI*)(void* pThis, double width);
 RepeatButton_Width_t RepeatButton_Width_Original;
 void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
-  Wh_Log(L".");
-
     Wh_Log(L"> width=%f", width);
     RepeatButton_Width_Original(pThis, width);
     if (!g_inAugmentedEntryPointButton_UpdateButtonPadding) {
-  Wh_Log(L".");
-
         return;
     }
     FrameworkElement button = nullptr;
@@ -1896,45 +1541,31 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(button));
     if (!button) {
-  Wh_Log(L".");
-
         return;
     }
     FrameworkElement augmentedEntryPointContentGrid =
         FindChildByName(button, L"AugmentedEntryPointContentGrid");
     if (!augmentedEntryPointContentGrid) {
-  Wh_Log(L".");
-
         return;
     }
     double marginValue = static_cast<double>(40 - g_settings_tbiconsize.iconSize) / 2;
     if (marginValue < 0) {
-  Wh_Log(L".");
-
         marginValue = 0;
     }
     EnumChildElements(augmentedEntryPointContentGrid, [marginValue](
                                                           FrameworkElement
                                                               child) {
-  Wh_Log(L".");
-
         if (winrt::get_class_name(child) != L"Windows.UI.Xaml.Controls.Grid") {
-  Wh_Log(L".");
-
             return false;
         }
         FrameworkElement panelGrid =
             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid");
         if (!panelGrid) {
-  Wh_Log(L".");
-
             return false;
         }
         FrameworkElement panel = FindChildByClassName(
             panelGrid, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel");
         if (!panel) {
-  Wh_Log(L".");
-
             return false;
         }
         Wh_Log(L"Processing %f x %f widget", panelGrid.Width(),
@@ -1942,12 +1573,8 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         double labelsTopBorderExtraMargin = 0;
         bool widePanel = panelGrid.Width() > panelGrid.Height();
         if (widePanel) {
-  Wh_Log(L".");
-
             auto margin = Thickness{3, 3, 3, 3};
             if (!g_unloading && marginValue <= 3) {
-  Wh_Log(L".");
-
                 labelsTopBorderExtraMargin = 3 - marginValue;
                 margin.Left = marginValue;
                 margin.Top = marginValue;
@@ -1963,19 +1590,13 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         } else {
             auto margin = Thickness{8, 8, 8, 8};
             if (!g_unloading) {
-  Wh_Log(L".");
-
                 margin.Left = marginValue;
                 margin.Top = marginValue;
                 margin.Right = 0;
                 margin.Bottom = 0;
                 if (g_taskbarHeight < 48) {
-  Wh_Log(L".");
-
                     margin.Top -= static_cast<double>(48 - g_taskbarHeight) / 2;
                     if (margin.Top < 0) {
-  Wh_Log(L".");
-
                         margin.Top = 0;
                     }
                 }
@@ -1991,8 +1612,6 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                  tickerGrid, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
             (tickerGrid = FindChildByClassName(
                  tickerGrid, L"Windows.UI.Xaml.Controls.Grid"))) {
-  Wh_Log(L".");
-
         } else {
             return false;
         }
@@ -2003,8 +1622,6 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                  badgeSmall, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
             (badgeSmall =
                  FindChildByName(badgeSmall, L"BadgeAnchorSmallTicker"))) {
-  Wh_Log(L".");
-
             Wh_Log(L"Setting MaxWidth=%f, MaxHeight=%f for small badge",
                    badgeMaxValue, badgeMaxValue);
             badgeSmall.MaxWidth(badgeMaxValue);
@@ -2016,8 +1633,6 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                  badgeLarge, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
             (badgeLarge =
                  FindChildByName(badgeLarge, L"BadgeAnchorLargeTicker"))) {
-  Wh_Log(L".");
-
             Wh_Log(L"Setting MaxWidth=%f, MaxHeight=%f for large badge",
                    badgeMaxValue, badgeMaxValue);
             badgeLarge.MaxWidth(badgeMaxValue);
@@ -2025,8 +1640,6 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         }
         FrameworkElement labelsBorder = tickerGrid;
         if ((labelsBorder = FindChildByName(labelsBorder, L"LargeTicker2"))) {
-  Wh_Log(L".");
-
             auto margin = Thickness{0, labelsTopBorderExtraMargin, 0, 0};
             Wh_Log(L"Setting Margin=%f,%f,%f,%f for labels border", margin.Left,
                    margin.Top, margin.Right, margin.Bottom);
@@ -2038,13 +1651,9 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
 using SHAppBarMessage_t = decltype(&SHAppBarMessage);
 SHAppBarMessage_t SHAppBarMessage_Original;
 auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
-  Wh_Log(L".");
-
     auto ret = SHAppBarMessage_Original(dwMessage, pData);
     if (dwMessage == ABM_QUERYPOS && ret && !IsVerticalTaskbar() &&
         g_taskbarHeight) {
-  Wh_Log(L".");
-
         pData->rc.top =
             pData->rc.bottom -
             MulDiv(g_taskbarHeight, GetDpiForWindow(pData->hWnd), 96);
@@ -2060,15 +1669,11 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
                                         UINT fuFlags,
                                         UINT uTimeout,
                                         PDWORD_PTR lpdwResult) {
-  Wh_Log(L".");
-
     if (g_shellIconLoaderV2_LoadAsyncIcon__ResumeCoro_ThreadId ==
             GetCurrentThreadId() &&
         !g_unloading && Msg == WM_GETICON && wParam == ICON_BIG &&
         (g_smallIconSize ? g_settings_tbiconsize.iconSizeSmall : g_settings_tbiconsize.iconSize) <=
             16) {
-  Wh_Log(L".");
-
         wParam = ICON_SMALL2;
     }
     LRESULT ret = SendMessageTimeoutW_Original(hWnd, Msg, wParam, lParam,
@@ -2076,8 +1681,6 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
     return ret;
 }
 void LoadSettingsTBIconSize() {
-  Wh_Log(L".");
-
   g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
   if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
   g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
@@ -2096,8 +1699,6 @@ void LoadSettingsTBIconSize() {
   g_settings_tbiconsize.taskbarButtonWidth = value;
 }
 HWND FindCurrentProcessTaskbarWnd() {
-  Wh_Log(L".");
-
     HWND hTaskbarWnd = nullptr;
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
@@ -2107,8 +1708,6 @@ HWND FindCurrentProcessTaskbarWnd() {
                 dwProcessId == GetCurrentProcessId() &&
                 GetClassName(hWnd, className, ARRAYSIZE(className)) &&
                 _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-  Wh_Log(L".");
-
                 *reinterpret_cast<HWND*>(lParam) = hWnd;
                 return FALSE;
             }
@@ -2118,12 +1717,8 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 bool ProtectAndMemcpy(DWORD protect, void* dst, const void* src, size_t size) {
-  Wh_Log(L".");
-
     DWORD oldProtect;
     if (!VirtualProtect(dst, size, protect, &oldProtect)) {
-  Wh_Log(L".");
-
         return false;
     }
     memcpy(dst, src, size);
@@ -2131,17 +1726,11 @@ bool ProtectAndMemcpy(DWORD protect, void* dst, const void* src, size_t size) {
     return true;
 }
 void ApplySettingsTBIconSize(int taskbarHeight) {
-  Wh_Log(L".");
-
     if (taskbarHeight < 2) {
-  Wh_Log(L".");
-
         taskbarHeight = 2;
     }
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
-  Wh_Log(L".");
-
         Wh_Log(L"No taskbar found");
         g_taskbarHeight = taskbarHeight;
         return;
@@ -2149,8 +1738,6 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     Wh_Log(L"Applying settings for taskbar %08X",
            (DWORD)(DWORD_PTR)hTaskbarWnd);
     if (!g_taskbarHeight) {
-  Wh_Log(L".");
-
         RECT taskbarRect{};
         GetWindowRect(hTaskbarWnd, &taskbarRect);
         g_taskbarHeight = MulDiv(taskbarRect.bottom - taskbarRect.top, 96,
@@ -2158,14 +1745,10 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     }
     g_applyingSettings = true;
     if (!IsVerticalTaskbar() && taskbarHeight == g_taskbarHeight) {
-  Wh_Log(L".");
-
         g_pendingMeasureOverride = true;
         g_taskbarHeight = taskbarHeight - 1;
         if (!TaskbarConfiguration_GetFrameSize_Original &&
             double_48_value_Original) {
-  Wh_Log(L".");
-
             double tempTaskbarHeight = g_taskbarHeight;
             ProtectAndMemcpy(PAGE_READWRITE, double_48_value_Original,
                              &tempTaskbarHeight, sizeof(double));
@@ -2173,11 +1756,7 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
         SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE,
                     0);
         for (int i = 0; i < 100; i++) {
-  Wh_Log(L".");
-
             if (!g_pendingMeasureOverride) {
-  Wh_Log(L".");
-
                 break;
             }
             Sleep(100);
@@ -2187,22 +1766,14 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     g_taskbarHeight = taskbarHeight;
     if (!TaskbarConfiguration_GetFrameSize_Original &&
         double_48_value_Original) {
-  Wh_Log(L".");
-
         double tempTaskbarHeight = g_taskbarHeight;
         ProtectAndMemcpy(PAGE_READWRITE, double_48_value_Original,
                          &tempTaskbarHeight, sizeof(double));
     }
     SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
     if (!IsVerticalTaskbar()) {
-  Wh_Log(L".");
-
         for (int i = 0; i < 100; i++) {
-  Wh_Log(L".");
-
             if (!g_pendingMeasureOverride) {
-  Wh_Log(L".");
-
                 break;
             }
             Sleep(100);
@@ -2213,21 +1784,15 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     HWND hReBarWindow32 =
         FindWindowEx(hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
     if (hReBarWindow32) {
-  Wh_Log(L".");
-
         HWND hMSTaskSwWClass =
             FindWindowEx(hReBarWindow32, nullptr, L"MSTaskSwWClass", nullptr);
         if (hMSTaskSwWClass) {
-  Wh_Log(L".");
-
             SendMessage(hMSTaskSwWClass, 0x452, 3, 0);
         }
     }
     g_applyingSettings = false;
 }
 bool HookSystemTraySymbols(HMODULE module) {
-  Wh_Log(L".");
-
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
@@ -2261,14 +1826,10 @@ bool HookSystemTraySymbols(HMODULE module) {
         },
     };
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-  Wh_Log(L".");
-
         Wh_Log(L"HookSymbols failed");
         return false;
     }
     if (SystemTrayController_UpdateFrameSize_SymbolAddress) {
-  Wh_Log(L".");
-
         SystemTrayController_UpdateFrameSize_InitOffsets();
         WindhawkUtils::Wh_SetFunctionHookT(
             SystemTrayController_UpdateFrameSize_SymbolAddress,
@@ -2279,8 +1840,6 @@ bool HookSystemTraySymbols(HMODULE module) {
 }
 bool HookTaskbarViewDllSymbols(HMODULE module,
                                bool hookSystemTraySymbolsInline) {
-  Wh_Log(L".");
-
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
@@ -2468,34 +2027,22 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
         ARRAYSIZE(symbolHooks) + ARRAYSIZE(symbolHooksSystemTray)];
     int index = 0;
     for (auto& hook : symbolHooks) {
-  Wh_Log(L".");
-
         allHooks[index++] = std::move(hook);
     }
     if (hookSystemTraySymbolsInline) {
-  Wh_Log(L".");
-
         for (auto& hook : symbolHooksSystemTray) {
-  Wh_Log(L".");
-
             allHooks[index++] = std::move(hook);
         }
     }
     if (!HookSymbols(module, allHooks, index)) {
-  Wh_Log(L".");
-
         Wh_Log(L"HookSymbols failed");
         return false;
     }
     if (TaskListButton_IconHeight_Original) {
-  Wh_Log(L".");
-
         TaskListButton_IconHeight_InitOffsets();
     }
 #ifdef _M_ARM64
     if (TaskbarConfiguration_UpdateFrameSize_SymbolAddress) {
-  Wh_Log(L".");
-
         TaskbarConfiguration_UpdateFrameSize_InitOffsets();
         WindhawkUtils::Wh_SetFunctionHookT(
             TaskbarConfiguration_UpdateFrameSize_SymbolAddress,
@@ -2505,8 +2052,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
 #endif
     if (hookSystemTraySymbolsInline &&
         SystemTrayController_UpdateFrameSize_SymbolAddress) {
-  Wh_Log(L".");
-
         SystemTrayController_UpdateFrameSize_InitOffsets();
         WindhawkUtils::Wh_SetFunctionHookT(
             SystemTrayController_UpdateFrameSize_SymbolAddress,
@@ -2514,28 +2059,20 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
             &SystemTrayController_UpdateFrameSize_Original);
     }
     if (TaskbarController_OnGroupingModeChanged_Original) {
-  Wh_Log(L".");
-
         TaskbarController_OnGroupingModeChanged_InitOffsets();
     }
     if (TaskListButton_UpdateIconColumnDefinition_Original) {
-  Wh_Log(L".");
-
         TaskListButton_UpdateIconColumnDefinition_InitOffsets();
     }
     constexpr UINT kDynamicIconScaling = 29785184;
     if (TaskbarConfiguration_GetIconHeightInViewPixels_method_Original &&
         IsOsFeatureEnabled(kDynamicIconScaling).value_or(true)) {
-  Wh_Log(L".");
-
         g_hasDynamicIconScaling = true;
         Wh_Log(L"Dynamic icon scaling is enabled");
     }
     return true;
 }
 bool HookSearchUxUiDllSymbols(HMODULE module) {
-  Wh_Log(L".");
-
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IMap<struct winrt::Windows::UI::Xaml::ResourceDictionary,struct winrt::Windows::Foundation::IInspectable,struct winrt::Windows::Foundation::IInspectable>::Lookup(struct winrt::Windows::Foundation::IInspectable const &)const )"},
@@ -2549,21 +2086,15 @@ bool HookSearchUxUiDllSymbols(HMODULE module) {
         },
     };
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-  Wh_Log(L".");
-
         Wh_Log(L"HookSymbols failed");
         return false;
     }
     return true;
 }
 bool HookTaskbarDllSymbolsTBIconSize() {
-  Wh_Log(L".");
-
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
-  Wh_Log(L".");
-
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
@@ -2611,35 +2142,23 @@ bool HookTaskbarDllSymbolsTBIconSize() {
         },
     };
     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
-  Wh_Log(L".");
-
         Wh_Log(L"HookSymbols failed");
         return false;
     }
     return true;
 }
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
-  Wh_Log(L".");
-
     void* pFixedFileInfo = nullptr;
     UINT uPtrLen = 0;
     HRSRC hResource =
         FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
     if (hResource) {
-  Wh_Log(L".");
-
         HGLOBAL hGlobal = LoadResource(hModule, hResource);
         if (hGlobal) {
-  Wh_Log(L".");
-
             void* pData = LockResource(hGlobal);
             if (pData) {
-  Wh_Log(L".");
-
                 if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
                     uPtrLen == 0) {
-  Wh_Log(L".");
-
                     pFixedFileInfo = nullptr;
                     uPtrLen = 0;
                 }
@@ -2647,56 +2166,38 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         }
     }
     if (puPtrLen) {
-  Wh_Log(L".");
-
         *puPtrLen = uPtrLen;
     }
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 HMODULE GetTaskbarViewModuleHandle() {
-  Wh_Log(L".");
-
     HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
     if (!module) {
-  Wh_Log(L".");
-
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
     return module;
 }
 HMODULE GetSystemTrayModuleHandle() {
-  Wh_Log(L".");
-
     HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
-  Wh_Log(L".");
-
         module = GetModuleHandle(L"Taskbar.View.dll");
         if (module) {
-  Wh_Log(L".");
-
             VS_FIXEDFILEINFO* fixedFileInfo =
                 GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor =
                 fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
             if (!moduleMajor || moduleMajor >= 2604) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
                 module = nullptr;
             }
         }
     }
     if (!module) {
-  Wh_Log(L".");
-
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
     return module;
 }
 HMODULE GetSearchUxUiModuleHandle() {
-  Wh_Log(L".");
-
     return GetModuleHandle(L"SearchUx.UI.dll");
 }
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -2704,94 +2205,62 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
-  Wh_Log(L".");
-
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (!module) {
-  Wh_Log(L".");
-
         return module;
     }
     if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
         module != GetTaskbarViewModuleHandle() &&
         !g_systemTrayModuleHooked.exchange(true)) {
-  Wh_Log(L".");
-
         Wh_Log(L"Loaded %s", lpLibFileName);
         if (HookSystemTraySymbols(module)) {
-  Wh_Log(L".");
-
             Wh_ApplyHookOperations();
         }
     }
     if (!g_taskbarViewDllLoadedTBIconSize && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
-  Wh_Log(L".");
-
         Wh_Log(L"Loaded %s", lpLibFileName);
         bool hookSystemTraySymbolsInline =
             !g_systemTrayModuleHooked &&
             GetSystemTrayModuleHandle() == module &&
             !g_systemTrayModuleHooked.exchange(true);
         if (HookTaskbarViewDllSymbols(module, hookSystemTraySymbolsInline)) {
-  Wh_Log(L".");
-
             Wh_ApplyHookOperations();
         }
     }
     if (!g_searchUxUiDllLoaded && GetSearchUxUiModuleHandle() == module &&
         !g_searchUxUiDllLoaded.exchange(true)) {
-  Wh_Log(L".");
-
         Wh_Log(L"Loaded %s", lpLibFileName);
         if (HookSearchUxUiDllSymbols(module)) {
-  Wh_Log(L".");
-
             Wh_ApplyHookOperations();
         }
     }
     return module;
 }
 BOOL Wh_ModInitTBIconSize() {
-  Wh_Log(L".");
-
     LoadSettingsTBIconSize();
     if (!HookTaskbarDllSymbolsTBIconSize()) {
-  Wh_Log(L".");
-
         return FALSE;
     }
     bool delayLoadingNeeded = false;
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
-  Wh_Log(L".");
-
         if (systemTrayModule != GetTaskbarViewModuleHandle()) {
-  Wh_Log(L".");
-
             g_systemTrayModuleHooked = true;
             if (!HookSystemTraySymbols(systemTrayModule)) {
-  Wh_Log(L".");
-
                 return FALSE;
             }
         }
     }
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-  Wh_Log(L".");
-
         g_taskbarViewDllLoadedTBIconSize = true;
         bool hookSystemTraySymbolsInline =
             !g_systemTrayModuleHooked &&
             GetSystemTrayModuleHandle() == taskbarViewModule;
         if (hookSystemTraySymbolsInline) {
-  Wh_Log(L".");
-
             g_systemTrayModuleHooked = true;
         }
         if (!HookTaskbarViewDllSymbols(taskbarViewModule,
                                        hookSystemTraySymbolsInline)) {
-  Wh_Log(L".");
-
             return FALSE;
         }
     } else {
@@ -2799,17 +2268,11 @@ BOOL Wh_ModInitTBIconSize() {
         delayLoadingNeeded = true;
     }
     if (!g_systemTrayModuleHooked) {
-  Wh_Log(L".");
-
         delayLoadingNeeded = true;
     }
     if (HMODULE searchUxUiModule = GetSearchUxUiModuleHandle()) {
-  Wh_Log(L".");
-
         g_searchUxUiDllLoaded = true;
         if (!HookSearchUxUiDllSymbols(searchUxUiModule)) {
-  Wh_Log(L".");
-
             return FALSE;
         }
     } else {
@@ -2817,8 +2280,6 @@ BOOL Wh_ModInitTBIconSize() {
         delayLoadingNeeded = true;
     }
     if (delayLoadingNeeded) {
-  Wh_Log(L".");
-
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
@@ -2835,36 +2296,20 @@ BOOL Wh_ModInitTBIconSize() {
     return TRUE;
 }
 void Wh_ModAfterInitTBIconSize() {
-  Wh_Log(L".");
-
     if (!g_systemTrayModuleHooked) {
-  Wh_Log(L".");
-
         if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
-  Wh_Log(L".");
-
             if (systemTrayModule != GetTaskbarViewModuleHandle() &&
                 !g_systemTrayModuleHooked.exchange(true)) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Got system tray module");
                 if (HookSystemTraySymbols(systemTrayModule)) {
-  Wh_Log(L".");
-
                     Wh_ApplyHookOperations();
                 }
             }
         }
     }
     if (!g_taskbarViewDllLoadedTBIconSize) {
-  Wh_Log(L".");
-
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-  Wh_Log(L".");
-
             if (!g_taskbarViewDllLoadedTBIconSize.exchange(true)) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Got Taskbar.View.dll");
                 bool hookSystemTraySymbolsInline =
                     !g_systemTrayModuleHooked &&
@@ -2872,26 +2317,16 @@ void Wh_ModAfterInitTBIconSize() {
                     !g_systemTrayModuleHooked.exchange(true);
                 if (HookTaskbarViewDllSymbols(taskbarViewModule,
                                               hookSystemTraySymbolsInline)) {
-  Wh_Log(L".");
-
                     Wh_ApplyHookOperations();
                 }
             }
         }
     }
     if (!g_searchUxUiDllLoaded) {
-  Wh_Log(L".");
-
         if (HMODULE searchUxUiModule = GetSearchUxUiModuleHandle()) {
-  Wh_Log(L".");
-
             if (!g_searchUxUiDllLoaded.exchange(true)) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Got SearchUx.UI.dll");
                 if (HookSearchUxUiDllSymbols(searchUxUiModule)) {
-  Wh_Log(L".");
-
                     Wh_ApplyHookOperations();
                 }
             }
@@ -2900,23 +2335,15 @@ void Wh_ModAfterInitTBIconSize() {
     Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");
 }
 void Wh_ModBeforeUninitTBIconSize() {
-  Wh_Log(L".");
-
     g_unloading = true;
     ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : 48);
 }
 void Wh_ModUninitTBIconSize() {
-  Wh_Log(L".");
-
     while (g_hookCallCounter > 0) {
-  Wh_Log(L".");
-
         Sleep(100);
     }
 }
 void Wh_ModSettingsChangedTBIconSize() {
-  Wh_Log(L".");
-
     LoadSettingsTBIconSize();
     ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
 }
@@ -2970,9 +2397,7 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor,
                         MONITOR_DPI_TYPE dpiType,
                         UINT* dpiX,
                         UINT* dpiY);
-bool ApplyStyle(XamlRoot xamlRoot) {
-  Wh_Log(L".");
-if(true)return false;
+bool ApplyStyle(XamlRoot xamlRoot) {if(true)return false;
     FrameworkElement xamlRootContent =
         xamlRoot.Content().try_as<FrameworkElement>();
     FrameworkElement taskbarFrameRepeater = nullptr;
@@ -2981,23 +2406,15 @@ if(true)return false;
         (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
         (child = FindChildByName(child, L"RootGrid")) &&
         (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
-  Wh_Log(L".");
-
         taskbarFrameRepeater = child;
     }
     if (!taskbarFrameRepeater) {
-  Wh_Log(L".");
-
         return false;
     }
     auto startButton =
         EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
-  Wh_Log(L".");
-
             auto childClassName = winrt::get_class_name(child);
             if (childClassName != L"Taskbar.ExperienceToggleButton") {
-  Wh_Log(L".");
-
                 return false;
             }
             auto automationId =
@@ -3005,8 +2422,6 @@ if(true)return false;
             return automationId == L"StartButton";
         });
     if (startButton) {
-  Wh_Log(L".");
-
         double startButtonWidth = startButton.ActualWidth();
         Thickness startButtonMargin = startButton.Margin();
         startButtonMargin.Right = g_unloading ? 0 : -startButtonWidth;
@@ -3014,31 +2429,21 @@ if(true)return false;
     }
     auto widgetElement =
         EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
-  Wh_Log(L".");
-
             auto childClassName = winrt::get_class_name(child);
             if (childClassName != L"Taskbar.AugmentedEntryPointButton") {
-  Wh_Log(L".");
-
                 return false;
             }
             if (child.Name() != L"AugmentedEntryPointButton") {
-  Wh_Log(L".");
-
                 return false;
             }
             auto margin = child.Margin();
             auto offset = child.ActualOffset();
             if (offset.x != margin.Left || offset.y != 0) {
-  Wh_Log(L".");
-
                 return false;
             }
             return true;
         });
     if (widgetElement) {
-  Wh_Log(L".");
-
         auto margin = widgetElement.Margin();
         margin.Left = g_unloading ? 0 : 44;
         widgetElement.Margin(margin);
@@ -3056,11 +2461,7 @@ CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
-  Wh_Log(L".");
-
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
-  Wh_Log(L".");
-
         return nullptr;
     }
     size_t taskbarElementIUnknownOffset = 0x48;
@@ -3069,8 +2470,6 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
         if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-  Wh_Log(L".");
-
             taskbarElementIUnknownOffset = b[7];
         } else {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
@@ -3091,12 +2490,8 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     return result;
 }
 XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-  Wh_Log(L".");
-
     HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) {
-  Wh_Log(L".");
-
         return nullptr;
     }
     void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
@@ -3104,11 +2499,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     for (int i = 0; *(void**)taskBandForTaskListWndSite !=
                     CTaskBand_ITaskListWndSite_vftable;
          i++) {
-  Wh_Log(L".");
-
         if (i == 20) {
-  Wh_Log(L".");
-
             return nullptr;
         }
         taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
@@ -3119,13 +2510,9 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
 }
 XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
-  Wh_Log(L".");
-
     HWND hTaskSwWnd =
         (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
     if (!hTaskSwWnd) {
-  Wh_Log(L".");
-
         return nullptr;
     }
     void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
@@ -3133,11 +2520,7 @@ XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
     for (int i = 0; *(void**)taskBandForTaskListWndSite !=
                     CSecondaryTaskBand_ITaskListWndSite_vftable;
          i++) {
-  Wh_Log(L".");
-
         if (i == 20) {
-  Wh_Log(L".");
-
             return nullptr;
         }
         taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
@@ -3151,8 +2534,6 @@ using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
                          void* procParam) {
-  Wh_Log(L".");
-
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     struct RUN_FROM_WINDOW_THREAD_PARAM {
@@ -3161,13 +2542,9 @@ bool RunFromWindowThread(HWND hWnd,
     };
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
-  Wh_Log(L".");
-
         return false;
     }
     if (dwThreadId == GetCurrentThreadId()) {
-  Wh_Log(L".");
-
         proc(procParam);
         return true;
     }
@@ -3175,12 +2552,8 @@ bool RunFromWindowThread(HWND hWnd,
         WH_CALLWNDPROC,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
-  Wh_Log(L".");
-
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
-  Wh_Log(L".");
-
                     RUN_FROM_WINDOW_THREAD_PARAM* param =
                         (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
                     param->proc(param->procParam);
@@ -3190,8 +2563,6 @@ bool RunFromWindowThread(HWND hWnd,
         },
         nullptr, dwThreadId);
     if (!hook) {
-  Wh_Log(L".");
-
         return false;
     }
     RUN_FROM_WINDOW_THREAD_PARAM param;
@@ -3202,63 +2573,43 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 void ApplySettingsFromTaskbarThread() {
-  Wh_Log(L".");
-
     Wh_Log(L"Applying settings");
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
             WCHAR szClassName[32];
             if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-  Wh_Log(L".");
-
                 return TRUE;
             }
             XamlRoot xamlRoot = nullptr;
             if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
-  Wh_Log(L".");
-
                 xamlRoot = GetTaskbarXamlRoot(hWnd);
             } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
-  Wh_Log(L".");
-
                 xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
             } else {
                 return TRUE;
             }
             if (!xamlRoot) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
   const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
   if (!xamlRootContent) {
-  Wh_Log(L".");
-
   Wh_Log(L"XamlRoot content is null");
   return TRUE;
   }
   auto dispatcher = xamlRootContent.Dispatcher();
   if (!dispatcher) {
-  Wh_Log(L".");
-
   Wh_Log(L"XamlRoot content dispatcher is null");
   return TRUE;
   }
   std::wstring monitorName = GetMonitorName(hWnd);
   auto applyOnDispatcher = [xamlRootContent, monitorName]() {
-  Wh_Log(L".");
-
   if (!ApplyStyle(xamlRootContent, monitorName)) {
-  Wh_Log(L".");
-
    Wh_Log(L"ApplyStyles failed");
   }
  };
             if (dispatcher.HasThreadAccess()) {
-  Wh_Log(L".");
-
                 applyOnDispatcher();
             } else {
                 dispatcher.TryRunAsync(
@@ -3270,25 +2621,17 @@ void ApplySettingsFromTaskbarThread() {
         0);
 }
 void ApplySettingsStartButtonPosition(HWND hTaskbarWnd) {
-  Wh_Log(L".");
-
     RunFromWindowThread(
-        hTaskbarWnd, [](void* pParam) {
-  Wh_Log(L".");
- ApplySettingsFromTaskbarThread(); }, 0);
+        hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
 }
 using IUIElement_Arrange_t =
     HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect rect);
 IUIElement_Arrange_t IUIElement_Arrange_Original;
 HRESULT WINAPI IIUIElement_Arrange_Hook_StartButtonPosition(void* pThis,
                                        winrt::Windows::Foundation::Rect rect) {
-  Wh_Log(L".");
-
     auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };
 if(true)return original();
     if (!g_TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride || g_unloading) {
-  Wh_Log(L".");
-
         return original();
     }
     FrameworkElement element = nullptr;
@@ -3296,57 +2639,39 @@ if(true)return original();
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(element));
     if (!element) {
-  Wh_Log(L".");
-
         return original();
     }
     auto className = winrt::get_class_name(element);
     if (className != L"Taskbar.ExperienceToggleButton") {
-  Wh_Log(L".");
-
         return original();
     }
     auto automationId =
         Automation::AutomationProperties::GetAutomationId(element);
     if (automationId != L"StartButton") {
-  Wh_Log(L".");
-
         return original();
     }
     auto taskbarFrameRepeater =
         Media::VisualTreeHelper::GetParent(element).as<FrameworkElement>();
     auto widgetElement =
         EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
-  Wh_Log(L".");
-
             auto childClassName = winrt::get_class_name(child);
             if (childClassName != L"Taskbar.AugmentedEntryPointButton") {
-  Wh_Log(L".");
-
                 return false;
             }
             if (child.Name() != L"AugmentedEntryPointButton") {
-  Wh_Log(L".");
-
                 return false;
             }
             auto margin = child.Margin();
             auto offset = child.ActualOffset();
             if (offset.x != margin.Left || offset.y != 0) {
-  Wh_Log(L".");
-
                 return false;
             }
             return true;
         });
     if (!widgetElement) {
-  Wh_Log(L".");
-
         element.Dispatcher().TryRunAsync(
             winrt::Windows::UI::Core::CoreDispatcherPriority::High,
             [element]() {
-  Wh_Log(L".");
-
                 double width = element.ActualWidth();
                 double minX = std::numeric_limits<double>::infinity();
                 auto taskbarFrameRepeater =
@@ -3354,29 +2679,19 @@ if(true)return original();
                         .as<FrameworkElement>();
                 EnumChildElements(taskbarFrameRepeater,
                                   [&element, &minX](FrameworkElement child) {
-  Wh_Log(L".");
-
                                       if (child == element) {
-  Wh_Log(L".");
-
                                           return false;
                                       }
                                       auto offset = child.ActualOffset();
                                       if (offset.x >= 0 && offset.x < minX) {
-  Wh_Log(L".");
-
                                           minX = offset.x;
                                       }
                                       return false;
                                   });
                 if (minX < width) {
-  Wh_Log(L".");
-
                     Thickness margin = element.Margin();
                     element.Margin(margin);
                 } else if (minX > width * 2) {
-  Wh_Log(L".");
-
                     Thickness margin = element.Margin();
                     element.Margin(margin);
                 }
@@ -3398,8 +2713,6 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
     void* context,
     winrt::Windows::Foundation::Size size,
     winrt::Windows::Foundation::Size* resultSize) {
-  Wh_Log(L".");
-
     [[maybe_unused]] static bool hooked = [] {
         Shapes::Rectangle rectangle;
         IUIElement element = rectangle;
@@ -3420,30 +2733,20 @@ using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 using AugmentedEntryPointButton_UpdateButtonPadding_t =
     void(WINAPI*)(void* pThis);
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPosition(void* pThis) {
-  Wh_Log(L".");
-
     AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
     if (g_unloading) {
-  Wh_Log(L".");
-
         return;
     }
     FrameworkElement button = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(button));
     if (!button) {
-  Wh_Log(L".");
-
         return;
     }
     button.Dispatcher().TryRunAsync(
         winrt::Windows::UI::Core::CoreDispatcherPriority::High, [button]() {
-  Wh_Log(L".");
-
             auto offset = button.ActualOffset();
             if (offset.x != 0 || offset.y != 0) {
-  Wh_Log(L".");
-
                 return;
             }
             auto margin = button.Margin();
@@ -3454,40 +2757,30 @@ void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPositi
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
-  Wh_Log(L".");
-
   TrayUI__Hide_Original(pThis);
   ApplySettingsFromTaskbarThreadIfRequired();
 }
 using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
 CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
-  Wh_Log(L".");
-
   CSecondaryTray__AutoHide_Original(pThis, param1);
   ApplySettingsFromTaskbarThreadIfRequired();
 }
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
 TrayUI_WndProc_t TrayUI_WndProc_Original;
 LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
 }
 using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
 LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
 }
 using CTaskBand__ProcessWindowDestroyed_t = void(WINAPI*)(void* pThis, void* pHwnd);
 CTaskBand__ProcessWindowDestroyed_t CTaskBand__ProcessWindowDestroyed_Original;
 void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
-  Wh_Log(L".");
-
   Wh_Log(L"CTaskBand::CTaskBand__ProcessWindowDestroyed_Hook Hook");
   CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3495,8 +2788,6 @@ void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
 using CTaskBand__InsertItem_t = long(WINAPI*)(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2);
 CTaskBand__InsertItem_t CTaskBand__InsertItem_Original;
 long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2) {
-  Wh_Log(L".");
-
   Wh_Log(L"CTaskBand::_InsertItem Hook");
   auto original_call = CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3505,8 +2796,6 @@ long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskIt
 using CTaskBand__UpdateAllIcons_t = void(WINAPI*)(void* pThis);
 CTaskBand__UpdateAllIcons_t CTaskBand__UpdateAllIcons_Original;
 void WINAPI CTaskBand__UpdateAllIcons_Hook(void* pThis) {
-  Wh_Log(L".");
-
   Wh_Log(L"CTaskBand::_UpdateAllIcons Hook");
   CTaskBand__UpdateAllIcons_Original(pThis);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3514,8 +2803,6 @@ void WINAPI CTaskBand__UpdateAllIcons_Hook(void* pThis) {
 using CTaskBand__TaskOrderChanged_t = void(WINAPI*)(void* pThis, void* pTaskGroup, int param);
 CTaskBand__TaskOrderChanged_t CTaskBand__TaskOrderChanged_Original;
 void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int param) {
-  Wh_Log(L".");
-
   Wh_Log(L"CTaskBand::TaskOrderChanged Hook");
   CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3523,40 +2810,30 @@ void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int 
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
 __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskBand__WndProc_t CTaskBand__WndProc_Original;
 __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
 __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
 __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
 using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
 __int64 WINAPI CTraySearchControl__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  Wh_Log(L".");
-
   ApplySettingsFromTaskbarThreadIfRequired();
   return CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
 }
@@ -3565,8 +2842,6 @@ interface ITaskItem;
 using CTaskBand__UpdateItemIcon_WithArgs_t = void(WINAPI*)(void* pThis, ITaskGroup* param1, ITaskItem* param2);
 CTaskBand__UpdateItemIcon_WithArgs_t CTaskBand__UpdateItemIcon_WithArgs_Original;
 void WINAPI CTaskBand__UpdateItemIcon_WithArgs_Hook(void* pThis, ITaskGroup* param1, ITaskItem* param2) {
-  Wh_Log(L".");
-
   Wh_Log(L"Method called: CTaskBand__UpdateItemIcon");
   CTaskBand__UpdateItemIcon_WithArgs_Original(pThis, param1, param2);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3574,8 +2849,6 @@ void WINAPI CTaskBand__UpdateItemIcon_WithArgs_Hook(void* pThis, ITaskGroup* par
 using CTaskBand_RemoveIcon_WithArgs_t = void(WINAPI*)(void* pThis, ITaskItem* param1);
 CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
-  Wh_Log(L".");
-
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
   ApplySettingsFromTaskbarThreadIfRequired();
@@ -3583,13 +2856,9 @@ void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {
-  Wh_Log(L".");
-
   HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
   Wh_Log(L"Method called: ITaskbarSettings_get_Alignment_Hook alignment: %d", *alignment);
   if (SUCCEEDED(ret)) {
-  Wh_Log(L".");
-
     *alignment = 1;
   }
   return ret;
@@ -3598,8 +2867,6 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) 
 using CTaskListWnd_ComputeJumpViewPosition_t = HRESULT(WINAPI*)(void* pThis, void* taskBtnGroup, int param2, winrt::Windows::Foundation::Point* point, HorizontalAlignment* horizontalAlignment, VerticalAlignment* verticalAlignment);
 CTaskListWnd_ComputeJumpViewPosition_t CTaskListWnd_ComputeJumpViewPosition_Original;
 HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(void* pThis, void* taskBtnGroup, int param2, winrt::Windows::Foundation::Point* point, HorizontalAlignment* horizontalAlignment, VerticalAlignment* verticalAlignment) {
-  Wh_Log(L".");
-
   HRESULT ret = CTaskListWnd_ComputeJumpViewPosition_Original(pThis, taskBtnGroup, param2, point, horizontalAlignment, verticalAlignment);
   DWORD messagePos = GetMessagePos();
   POINT pt{
@@ -3612,19 +2879,13 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(void* pThis, void* task
 using TrayUI__OnDPIChanged_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TrayUI__OnDPIChanged_WithoutArgs_t TrayUI__OnDPIChanged_WithoutArgs_Original;
 void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
-  Wh_Log(L".");
-
                TrayUI__OnDPIChanged_WithoutArgs_Original(pThis);
                g_invalidateDimensions = true;
             }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
-  Wh_Log(L".");
-
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
-  Wh_Log(L".");
-
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
@@ -3739,15 +3000,11 @@ static TaskbarTelemetry_StartItemEntranceAnimation_t orig_StartItemEntranceAnima
 using TaskbarTelemetry_StartItemPlateEntranceAnimation_t = void(WINAPI*)(const bool&);
 static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEntranceAnimation = nullptr;
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
-  Wh_Log(L".");
-
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
   orig_StartItemEntranceAnimation(b);
   ApplySettingsDebounced(50);
 }
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
-  Wh_Log(L".");
-
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
   orig_StartItemPlateEntranceAnimation(b);
   ApplySettingsDebounced(50);
@@ -3755,8 +3012,6 @@ void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-  Wh_Log(L".");
-
   Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
   TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
   ApplySettingsDebounced(300);
@@ -3765,16 +3020,12 @@ static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-  Wh_Log(L".");
-
   TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
   Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
   ApplySettingsDebounced(300);
   return;
 }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
-  Wh_Log(L".");
-
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
@@ -3798,16 +3049,10 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-  Wh_Log(L".");
-
     if (!g_taskbarViewDllLoadedStartButtonPosition && GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
-  Wh_Log(L".");
-
         Wh_Log(L"Loaded %s", lpLibFileName);
         if (HookTaskbarViewDllSymbolsStartButtonPosition(module)) {
-  Wh_Log(L".");
-
             Wh_ApplyHookOperations();
         }
     }
@@ -3816,39 +3061,27 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 HMODULE WINAPI LoadLibraryExW_Hook_StartButtonPosition(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
-  Wh_Log(L".");
-
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
-  Wh_Log(L".");
-
         HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
     return module;
 }
 std::wstring GetProcessFileName(DWORD dwProcessId) {
-  Wh_Log(L".");
-
     HANDLE hProcess =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
     if (!hProcess) {
-  Wh_Log(L".");
-
         return std::wstring{};
     }
     WCHAR processPath[MAX_PATH];
     DWORD dwSize = ARRAYSIZE(processPath);
     if (!QueryFullProcessImageName(hProcess, 0, processPath, &dwSize)) {
-  Wh_Log(L".");
-
         CloseHandle(hProcess);
         return std::wstring{};
     }
     CloseHandle(hProcess);
     PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
     if (!processFileNameUpper) {
-  Wh_Log(L".");
-
         return std::wstring{};
     }
     processFileNameUpper++;
@@ -3860,30 +3093,20 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
                                           DWORD dwAttribute,
                                           LPCVOID pvAttribute,
                                           DWORD cbAttribute) {
-  Wh_Log(L".");
-
     auto original = [=]() {
-  Wh_Log(L".");
-
         return DwmSetWindowAttribute_Original(hwnd, dwAttribute, pvAttribute,
                                               cbAttribute);
     };
     if (dwAttribute != DWMWA_CLOAK || cbAttribute != sizeof(BOOL)) {
-  Wh_Log(L".");
-
         return original();
     }
     BOOL cloak = *(BOOL*)pvAttribute;
     if (cloak) {
-  Wh_Log(L".");
-
         return original();
     }
     Wh_Log(L"> %08X", (DWORD)(DWORD_PTR)hwnd);
     DWORD processId = 0;
     if (!hwnd || !GetWindowThreadProcessId(hwnd, &processId)) {
-  Wh_Log(L".");
-
         return original();
     }
     TCHAR className[256];
@@ -3898,16 +3121,10 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     };
     DwmTarget target;
     if (_wcsicmp(processFileName.c_str(), L"StartMenuExperienceHost.exe") == 0) {
-  Wh_Log(L".");
-
         target = DwmTarget::StartMenu;
     } else if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
-  Wh_Log(L".");
-
         target = DwmTarget::SearchHost;
     }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
-  Wh_Log(L".");
-
         target = DwmTarget::ShellExperienceHost;
     }  else {
         return original();
@@ -3923,15 +3140,11 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     auto monitorName = GetMonitorName(monitor);
     auto iterationTbStates = g_taskbarStates.find(monitorName);
     if (iterationTbStates == g_taskbarStates.end()) {
-  Wh_Log(L".");
-
       return original();
     }
     TaskbarState& taskbarState = iterationTbStates->second;
     RECT targetRect;
     if (!GetWindowRect(hwnd, &targetRect)) {
-  Wh_Log(L".");
-
         return original();
     }
     int x = targetRect.left;
@@ -3956,20 +3169,14 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
           absRootWidth,
           absTargetWidth);
     if (target == DwmTarget::StartMenu) {
-  Wh_Log(L".");
-
     g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-  Wh_Log(L".");
-
         g_startMenuWnd = hwnd;
         g_startMenuOriginalWidth = cx;
         x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth+ (g_settings.userDefinedAlignFlyoutInner?g_lastRecordedStartMenuWidth/2.0f : 0.0f));
         x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
       } else {
         if (g_startMenuOriginalWidth) {
-  Wh_Log(L".");
-
           cx = g_startMenuOriginalWidth;
         }
         g_startMenuWnd = nullptr;
@@ -3977,11 +3184,7 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         x = 0;
       }
     } else if (target == DwmTarget::SearchHost) {
-  Wh_Log(L".");
-
       if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
-  Wh_Log(L".");
-
         g_searchMenuWnd = hwnd;
         g_searchMenuOriginalX = x;
         x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner? ( 12 * dpiScale) :( cx / 2.0f)));
@@ -3992,17 +3195,11 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
        g_searchMenuOriginalX = 0;
       }
     } else if (target == DwmTarget::ShellExperienceHost) {
-  Wh_Log(L".");
-
         int lastRecordedTrayRightMostEdgeForMonitor = taskbarState.lastRightMostEdgeTray;
         if (y != 0) {
-  Wh_Log(L".");
-
           return original();
         }
         if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-  Wh_Log(L".");
-
           x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
           x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
         } else {
@@ -4035,8 +3232,6 @@ std::optional<HorizontalAlignment> g_previousHorizontalAlignment;
 winrt::event_token g_layoutUpdatedToken;
 winrt::event_token g_visibilityChangedToken;
 HWND GetCoreWnd() {
-  Wh_Log(L".");
-
     struct ENUM_WINDOWS_PARAM {
         HWND* hWnd;
     };
@@ -4048,19 +3243,13 @@ HWND GetCoreWnd() {
             DWORD dwProcessId = 0;
             if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
                 dwProcessId != GetCurrentProcessId()) {
-  Wh_Log(L".");
-
                 return TRUE;
             }
             WCHAR szClassName[32];
             if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-  Wh_Log(L".");
-
                 return TRUE;
             }
             if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-  Wh_Log(L".");
-
                 *param.hWnd = hWnd;
                 return FALSE;
             }
@@ -4076,32 +3265,22 @@ void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor){
          }
          }
 void ApplyStyleRedesignedStartMenu(FrameworkElement content) {
-  Wh_Log(L".");
-
     FrameworkElement frameRoot = FindChildByName(content, L"FrameRoot");
     if (!frameRoot) {
-  Wh_Log(L".");
-
         Wh_Log(L"Failed to find Start menu frame root");
         return;
     }
     if (g_unloading) {
-  Wh_Log(L".");
-
         frameRoot.HorizontalAlignment(g_previousHorizontalAlignment.value_or(
             HorizontalAlignment::Center));
     } else {
         if (!g_previousHorizontalAlignment) {
-  Wh_Log(L".");
-
             g_previousHorizontalAlignment = frameRoot.HorizontalAlignment();
         }
         frameRoot.HorizontalAlignment(HorizontalAlignment::Center);
     }
 }
 void ApplyStyle() {
-  Wh_Log(L".");
-
     g_inApplyStyle = true;
     HWND coreWnd = GetCoreWnd();
     HMONITOR monitor = MonitorFromWindow(coreWnd, MONITOR_DEFAULTTONEAREST);
@@ -4111,12 +3290,8 @@ void ApplyStyle() {
     winrt::hstring contentClassName = winrt::get_class_name(content);
     Wh_Log(L"Start menu content class name: %s", contentClassName.c_str());
     if (contentClassName == L"Windows.UI.Xaml.Controls.Canvas") {
-  Wh_Log(L".");
-
         ApplyStyleClassicStartMenu(content, monitor);
     } else if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
-  Wh_Log(L".");
-
         ApplyStyleClassicStartMenu(content, monitor);
     }
      else {
@@ -4125,51 +3300,33 @@ void ApplyStyle() {
     g_inApplyStyle = false;
 }
 void Init() {
-  Wh_Log(L".");
-
     if (g_layoutUpdatedToken) {
-  Wh_Log(L".");
-
         return;
     }
     auto window = Window::Current();
     if (!window) {
-  Wh_Log(L".");
-
         return;
     }
     if (!g_visibilityChangedToken) {
-  Wh_Log(L".");
-
         g_visibilityChangedToken = window.VisibilityChanged(
             [](winrt::Windows::Foundation::IInspectable const& sender,
                winrt::Windows::UI::Core::VisibilityChangedEventArgs const&
                    args) {
-  Wh_Log(L".");
-
                 Wh_Log(L"Window visibility changed: %d", args.Visible());
                 if (args.Visible()) {
-  Wh_Log(L".");
-
                     g_applyStylePending = true;
                 }
             });
     }
     auto contentUI = window.Content();
     if (!contentUI) {
-  Wh_Log(L".");
-
         return;
     }
     auto content = contentUI.as<FrameworkElement>();
     g_layoutUpdatedToken = content.LayoutUpdated(
         [](winrt::Windows::Foundation::IInspectable const&,
            winrt::Windows::Foundation::IInspectable const&) {
-  Wh_Log(L".");
-
             if (g_applyStylePending) {
-  Wh_Log(L".");
-
                 g_applyStylePending = false;
                 ApplyStyle();
             }
@@ -4177,29 +3334,19 @@ void Init() {
     ApplyStyle();
 }
 void Uninit() {
-  Wh_Log(L".");
-
     if (!g_layoutUpdatedToken) {
-  Wh_Log(L".");
-
         return;
     }
     auto window = Window::Current();
     if (!window) {
-  Wh_Log(L".");
-
         return;
     }
     if (g_visibilityChangedToken) {
-  Wh_Log(L".");
-
         window.VisibilityChanged(g_visibilityChangedToken);
         g_visibilityChangedToken = {};
     }
     auto contentUI = window.Content();
     if (!contentUI) {
-  Wh_Log(L".");
-
         return;
     }
     auto content = contentUI.as<FrameworkElement>();
@@ -4207,19 +3354,13 @@ void Uninit() {
     g_layoutUpdatedToken = {};
     auto startSizingFrameDo = g_startSizingFrameWeakRef.get();
     if (startSizingFrameDo) {
-  Wh_Log(L".");
-
         if (g_canvasTopPropertyChangedToken) {
-  Wh_Log(L".");
-
             startSizingFrameDo.UnregisterPropertyChangedCallback(
                 Controls::Canvas::TopProperty(),
                 g_canvasTopPropertyChangedToken);
             g_canvasTopPropertyChangedToken = 0;
         }
         if (g_canvasLeftPropertyChangedToken) {
-  Wh_Log(L".");
-
             startSizingFrameDo.UnregisterPropertyChangedCallback(
                 Controls::Canvas::LeftProperty(),
                 g_canvasLeftPropertyChangedToken);
@@ -4230,8 +3371,6 @@ void Uninit() {
     ApplyStyle();
 }
 void SettingsChanged() {
-  Wh_Log(L".");
-
     ApplyStyle();
 }
 using RoGetActivationFactory_t = decltype(&RoGetActivationFactory);
@@ -4239,25 +3378,17 @@ RoGetActivationFactory_t RoGetActivationFactory_Original;
 HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
                                            REFIID iid,
                                            void** factory) {
-  Wh_Log(L".");
-
     thread_local static bool isInHook;
     if (isInHook) {
-  Wh_Log(L".");
-
         return RoGetActivationFactory_Original(activatableClassId, iid,
                                                factory);
     }
     isInHook = true;
     if (wcscmp(WindowsGetStringRawBuffer(activatableClassId, nullptr),
                L"Windows.UI.Xaml.Hosting.XamlIsland") == 0) {
-  Wh_Log(L".");
-
         try {
             Init();
         } catch (...) {
-  Wh_Log(L".");
-
             HRESULT hr = winrt::to_hresult();
             Wh_Log(L"Error %08X", hr);
         }
@@ -4269,22 +3400,14 @@ HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
 }
 }  // namespace StartMenuUI
 void RestoreMenuPositions() {
-  Wh_Log(L".");
-
     if (g_searchMenuWnd && g_searchMenuOriginalX) {
-  Wh_Log(L".");
-
         RECT rect;
         if (GetWindowRect(g_searchMenuWnd, &rect)) {
-  Wh_Log(L".");
-
             int x = rect.left;
             int y = rect.top;
             int cx = rect.right - rect.left;
             int cy = rect.bottom - rect.top;
             if (g_searchMenuOriginalX != x) {
-  Wh_Log(L".");
-
                 x = g_searchMenuOriginalX;
                 SetWindowPos(g_searchMenuWnd, nullptr, x, y, cx, cy,
                              SWP_NOZORDER | SWP_NOACTIVATE);
@@ -4295,33 +3418,23 @@ void RestoreMenuPositions() {
     }
 }
 void LoadSettingsStartButtonPosition() {
-  Wh_Log(L".");
-
     g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
 }
 BOOL Wh_ModInitStartButtonPosition() {
-  Wh_Log(L".");
-
     LoadSettingsStartButtonPosition();
     g_target = Target::Explorer;
     WCHAR moduleFilePath[MAX_PATH];
     switch (
         GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-  Wh_Log(L".");
-
         case 0:
         case ARRAYSIZE(moduleFilePath):
             Wh_Log(L"GetModuleFileName failed");
             break;
         default:
             if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
-  Wh_Log(L".");
-
                 moduleFileName++;
                 if (_wcsicmp(moduleFileName, L"StartMenuExperienceHost.exe") ==
                     0) {
-  Wh_Log(L".");
-
                     g_target = Target::StartMenuExperienceHost;
                 }
             } else {
@@ -4330,11 +3443,7 @@ BOOL Wh_ModInitStartButtonPosition() {
             break;
     }
     if (g_target == Target::StartMenuExperienceHost) {
-  Wh_Log(L".");
-
         if (!g_settings_startbuttonposition.startMenuOnTheLeft) {
-  Wh_Log(L".");
-
             return FALSE;
         }
         HMODULE winrtModule =
@@ -4348,17 +3457,11 @@ BOOL Wh_ModInitStartButtonPosition() {
         return TRUE;
     }
     if (!HookTaskbarDllSymbolsStartButtonPosition()) {
-  Wh_Log(L".");
-
         return FALSE;
     }
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-  Wh_Log(L".");
-
         g_taskbarViewDllLoadedStartButtonPosition = true;
         if (!HookTaskbarViewDllSymbolsStartButtonPosition(taskbarViewModule)) {
-  Wh_Log(L".");
-
             return FALSE;
         }
     } else {
@@ -4374,14 +3477,10 @@ BOOL Wh_ModInitStartButtonPosition() {
     HMODULE dwmapiModule =
         LoadLibraryEx(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (dwmapiModule) {
-  Wh_Log(L".");
-
         auto pDwmSetWindowAttribute =
             (decltype(&DwmSetWindowAttribute))GetProcAddress(
                 dwmapiModule, "DwmSetWindowAttribute");
         if (pDwmSetWindowAttribute) {
-  Wh_Log(L".");
-
             WindhawkUtils::SetFunctionHook(pDwmSetWindowAttribute,
                                            DwmSetWindowAttribute_Hook,
                                            &DwmSetWindowAttribute_Original);
@@ -4390,24 +3489,12 @@ BOOL Wh_ModInitStartButtonPosition() {
     return TRUE;
 }
 void Wh_ModAfterInitStartButtonPosition() {
-  Wh_Log(L".");
-
     if (g_target == Target::Explorer) {
-  Wh_Log(L".");
-
         if (!g_taskbarViewDllLoadedStartButtonPosition) {
-  Wh_Log(L".");
-
             if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-  Wh_Log(L".");
-
                 if (!g_taskbarViewDllLoadedStartButtonPosition.exchange(true)) {
-  Wh_Log(L".");
-
                     Wh_Log(L"Got Taskbar.View.dll");
                     if (HookTaskbarViewDllSymbolsStartButtonPosition(taskbarViewModule)) {
-  Wh_Log(L".");
-
                         Wh_ApplyHookOperations();
                     }
                 }
@@ -4415,88 +3502,52 @@ void Wh_ModAfterInitStartButtonPosition() {
         }
         HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
         if (hTaskbarWnd) {
-  Wh_Log(L".");
-
             ApplySettingsStartButtonPosition(hTaskbarWnd);
         }
     } else if (g_target == Target::StartMenuExperienceHost) {
-  Wh_Log(L".");
-
         HWND hCoreWnd = StartMenuUI::GetCoreWnd();
         if (hCoreWnd) {
-  Wh_Log(L".");
-
             Wh_Log(L"Initializing - Found core window");
             RunFromWindowThread(
-                hCoreWnd, [](PVOID) {
-  Wh_Log(L".");
- StartMenuUI::Init(); }, nullptr);
+                hCoreWnd, [](PVOID) { StartMenuUI::Init(); }, nullptr);
         }
     }
 }
 void Wh_ModBeforeUninitStartButtonPosition() {
-  Wh_Log(L".");
-
     g_unloading = true;
     if (g_target == Target::Explorer) {
-  Wh_Log(L".");
-
         HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
         if (hTaskbarWnd) {
-  Wh_Log(L".");
-
             ApplySettingsStartButtonPosition(hTaskbarWnd);
         }
     } else if (g_target == Target::StartMenuExperienceHost) {
-  Wh_Log(L".");
-
         HWND hCoreWnd = StartMenuUI::GetCoreWnd();
         if (hCoreWnd) {
-  Wh_Log(L".");
-
             Wh_Log(L"Uninitializing - Found core window");
             RunFromWindowThread(
-                hCoreWnd, [](PVOID) {
-  Wh_Log(L".");
- StartMenuUI::Uninit(); }, nullptr);
+                hCoreWnd, [](PVOID) { StartMenuUI::Uninit(); }, nullptr);
         }
     }
 }
-void Wh_ModUninitStartButtonPosition() {
-  Wh_Log(L".");
-if(true)return;
+void Wh_ModUninitStartButtonPosition() {if(true)return;
     if (g_target == Target::Explorer) {
-  Wh_Log(L".");
-
         RestoreMenuPositions();
     }
 }
 BOOL Wh_ModSettingsChangedStartButtonPosition() {
-  Wh_Log(L".");
-
     if (g_target == Target::Explorer) {
-  Wh_Log(L".");
-
         RestoreMenuPositions();
     }
     LoadSettingsStartButtonPosition();
     if (g_target == Target::StartMenuExperienceHost) {
-  Wh_Log(L".");
-
         if (!g_settings_startbuttonposition.startMenuOnTheLeft) {
-  Wh_Log(L".");
-
             return FALSE;
         }
         HWND hCoreWnd = StartMenuUI::GetCoreWnd();
         if (hCoreWnd) {
-  Wh_Log(L".");
-
             Wh_Log(L"Applying settings - Found core window");
             RunFromWindowThread(
-                hCoreWnd, [](PVOID) {
-  Wh_Log(L".");
- StartMenuUI::SettingsChanged(); },
+                hCoreWnd, [](PVOID) { StartMenuUI::SettingsChanged(); },
                 nullptr);
         }
     }
@@ -4560,16 +3611,12 @@ BOOL Wh_ModSettingsChangedStartButtonPosition() {
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 using namespace winrt::Windows::UI::Xaml;
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
-  Wh_Log(L".");
-
   std::wstring buffer;
   buffer.reserve(data.size());
   for (wchar_t c : data) buffer.append((c == L'&') ? L"&amp;" : (c == L'\"') ? L"&quot;" : (c == L'<') ? L"&lt;" : (c == L'>') ? L"&gt;" : std::wstring(1, c));
   return buffer;
 }
 Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_view xamlStyleSetters, std::wstring& outXaml) {
-  Wh_Log(L".");
-
   std::wstring xaml =
       LR"(<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -4578,8 +3625,6 @@ Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_v
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls")";
   if (auto pos = type.rfind('.'); pos != type.npos) {
-  Wh_Log(L".");
-
     auto typeNamespace = std::wstring_view(type).substr(0, pos);
     auto typeName = std::wstring_view(type).substr(pos + 1);
     xaml += L"\n    xmlns:windhawkstyler=\"using:";
@@ -4602,8 +3647,6 @@ Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_v
   return styleInspectable.as<Style>();
 }
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue, bool isXamlValue) {
-  Wh_Log(L".");
-
   if(!obj) return;
   std::wstring outXamlResult;
   try {
@@ -4611,8 +3654,6 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
     xamlSetter += EscapeXmlAttribute(propertyName);
     xamlSetter += L"\"";
     if (isXamlValue) {
-  Wh_Log(L".");
-
       xamlSetter +=
           L">\n"
           L"    <Setter.Value>\n";
@@ -4626,70 +3667,674 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
     }
     auto style = GetStyleFromXamlSetters(type, xamlSetter, outXamlResult);
     for (uint32_t i = 0; i < style.Setters().Size(); ++i) {
-  Wh_Log(L".");
-
       auto setter = style.Setters().GetAt(i).as<Setter>();
       obj.SetValue(setter.Property(), setter.Value());
     }
   } catch (const std::exception& ex) {
-  Wh_Log(L".");
-
     if (!outXamlResult.empty()) {
-  Wh_Log(L".");
-
       Wh_Log(L"Error: %S. Xaml Result: %s", ex.what(), outXamlResult.c_str());
     } else {
       Wh_Log(L"Error: %S", ex.what());
     }
   } catch (const winrt::hresult_error& ex) {
-  Wh_Log(L".");
-
     if (!outXamlResult.empty()) {
-  Wh_Log(L".");
-
       Wh_Log(L"Error %08X: %s. Xaml Result: %s", ex.code(), ex.message().c_str(), outXamlResult.c_str());
     } else {
       Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
   } catch (...) {
-  Wh_Log(L".");
-
     if (!outXamlResult.empty()) {
-  Wh_Log(L".");
-
       Wh_Log(L"Unknown error occurred while setting property. Xaml Result: %s", outXamlResult.c_str());
     } else {
       Wh_Log(L"Unknown error occurred while setting property.");
     }
   }
 }
-void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) {
-  Wh_Log(L".");
- return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
+void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
+// ---- WindhawkBlur support ---------------------------------------------------
+// Based on the WindhawkBlur/XamlBlurBrush approach used by Windows 11 Taskbar Styler.
+// Yoinked from ramensoftware windows-11-taskbar-styler
+// which is yoinked from https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp
+#include <cmath>
+#include <d2d1_1.h>
+#include <d2d1effects.h>
+#include <list>
+#include <mutex>
+#include <random>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.System.Power.h>
+#include <winrt/Windows.UI.ViewManagement.h>
+namespace wf = winrt::Windows::Foundation;
+namespace wge = winrt::Windows::Graphics::Effects;
+namespace wuc = winrt::Windows::UI::Composition;
+namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
+#ifndef BUILD_WINDOWS
+namespace ABI {
+#endif
+namespace Windows {
+namespace Graphics {
+namespace Effects {
+typedef interface IGraphicsEffectSource IGraphicsEffectSource;
+typedef interface IGraphicsEffectD2D1Interop IGraphicsEffectD2D1Interop;
+typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING {
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_UNKNOWN,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORX,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORY,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORZ,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORW,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_RECT_TO_VECTOR4,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_RADIANS_TO_DEGREES,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_COLORMATRIX_ALPHA_MODE,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR3,
+  GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR4
+} GRAPHICS_EFFECT_PROPERTY_MAPPING;
+#undef INTERFACE
+#define INTERFACE IGraphicsEffectD2D1Interop
+DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop, IUnknown, "2FC57384-A068-44D7-A331-30982FCF7177") {
+  STDMETHOD(GetEffectId)(_Out_ GUID* id) PURE;
+  STDMETHOD(GetNamedPropertyMapping)(LPCWSTR name, _Out_ UINT* index, _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) PURE;
+  STDMETHOD(GetPropertyCount)(_Out_ UINT* count) PURE;
+  STDMETHOD(GetProperty)(UINT index, _Outptr_ winrt::impl::abi_t<wf::IPropertyValue>** value) PURE;
+  STDMETHOD(GetSource)(UINT index, _Outptr_ IGraphicsEffectSource** source) PURE;
+  STDMETHOD(GetSourceCount)(_Out_ UINT* count) PURE;
+};
+}  // namespace Effects
+}  // namespace Graphics
+}  // namespace Windows
+#ifndef BUILD_WINDOWS
+}  // namespace ABI
+#endif
+template <>
+inline constexpr winrt::guid winrt::impl::guid_v<ABI::Windows::Graphics::Effects::IGraphicsEffectSource>{
+    winrt::impl::guid_v<wge::IGraphicsEffectSource>};
+template <>
+inline constexpr winrt::guid winrt::impl::guid_v<ABI::Windows::Graphics::Effects::IGraphicsEffectD2D1Interop>{
+    0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
+namespace awge = ABI::Windows::Graphics::Effects;
+inline void CopyWindhawkBlurPropertyValueToAbi(wf::IPropertyValue const& propertyValue, winrt::impl::abi_t<wf::IPropertyValue>** value) {
+  winrt::copy_to_abi(propertyValue, *reinterpret_cast<void**>(value));
+}
+typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION {
+  MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_SPEED = 0,
+  MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED = 1,
+  MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_QUALITY = 2,
+  MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_FORCE_DWORD = 0xffffffff
+} MY_D2D1_GAUSSIANBLUR_OPTIMIZATION;
+struct CompositeEffect : winrt::implements<CompositeEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
+  std::vector<wge::IGraphicsEffectSource> Sources;
+  D2D1_COMPOSITE_MODE Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+  winrt::hstring m_name = L"CompositeEffect";
+  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1Composite; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+    if (!index || !mapping) return E_INVALIDARG;
+    if (std::wstring_view(name) == L"Mode") { *index = D2D1_COMPOSITE_PROP_MODE; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    return E_INVALIDARG;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+    if (!value) return E_INVALIDARG;
+    if (index != D2D1_COMPOSITE_PROP_MODE) return E_BOUNDS;
+    CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(Mode)).as<wf::IPropertyValue>(), value);
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override try {
+    if (!source) return E_INVALIDARG;
+    winrt::copy_to_abi(Sources.at(index), *reinterpret_cast<void**>(source));
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = static_cast<UINT>(Sources.size()); return S_OK; }
+  winrt::hstring Name() { return m_name; }
+  void Name(winrt::hstring value) { m_name = std::move(value); }
+};
+struct FloodEffect : winrt::implements<FloodEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
+  winrt::Windows::UI::Color Color{};
+  winrt::hstring m_name = L"FloodEffect";
+  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1Flood; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+    if (!index || !mapping) return E_INVALIDARG;
+    if (std::wstring_view(name) == L"Color") { *index = D2D1_FLOOD_PROP_COLOR; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    return E_INVALIDARG;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+    if (!value) return E_INVALIDARG;
+    if (index != D2D1_FLOOD_PROP_COLOR) return E_BOUNDS;
+    float rgba[] = {Color.R / 255.0f, Color.G / 255.0f, Color.B / 255.0f, Color.A / 255.0f};
+    CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateSingleArray(winrt::array_view<float const>(rgba, rgba + 4)).as<wf::IPropertyValue>(), value);
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSource(UINT, awge::IGraphicsEffectSource** source) noexcept override { if (!source) return E_INVALIDARG; return E_BOUNDS; }
+  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 0; return S_OK; }
+  winrt::hstring Name() { return m_name; }
+  void Name(winrt::hstring value) { m_name = std::move(value); }
+};
+struct BorderEffect : winrt::implements<BorderEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
+  wge::IGraphicsEffectSource Source{nullptr};
+  D2D1_BORDER_EDGE_MODE ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
+  D2D1_BORDER_EDGE_MODE ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
+  winrt::hstring m_name = L"BorderEffect";
+  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1Border; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+    if (!index || !mapping) return E_INVALIDARG;
+    const std::wstring_view n(name);
+    if (n == L"ExtendX") { *index = D2D1_BORDER_PROP_EDGE_MODE_X; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    if (n == L"ExtendY") { *index = D2D1_BORDER_PROP_EDGE_MODE_Y; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    return E_INVALIDARG;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 2; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+    if (!value) return E_INVALIDARG;
+    switch (index) {
+      case D2D1_BORDER_PROP_EDGE_MODE_X: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendX)).as<wf::IPropertyValue>(), value); break;
+      case D2D1_BORDER_PROP_EDGE_MODE_Y: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendY)).as<wf::IPropertyValue>(), value); break;
+      default: return E_BOUNDS;
+    }
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
+    if (!source) return E_INVALIDARG;
+    if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
+    return E_BOUNDS;
+  }
+  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+  winrt::hstring Name() { return m_name; }
+  void Name(winrt::hstring value) { m_name = std::move(value); }
+};
+struct GaussianBlurEffect : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
+  wge::IGraphicsEffectSource Source{nullptr};
+  float BlurAmount = 30.0f;
+  MY_D2D1_GAUSSIANBLUR_OPTIMIZATION Optimization = MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED;
+  D2D1_BORDER_MODE BorderMode = D2D1_BORDER_MODE_SOFT;
+  winrt::hstring m_name = L"GaussianBlurEffect";
+  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1GaussianBlur; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+    if (!index || !mapping) return E_INVALIDARG;
+    const std::wstring_view n(name);
+    if (n == L"BlurAmount") { *index = D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    if (n == L"Optimization") { *index = D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    if (n == L"BorderMode") { *index = D2D1_GAUSSIANBLUR_PROP_BORDER_MODE; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    return E_INVALIDARG;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 3; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+    if (!value) return E_INVALIDARG;
+    switch (index) {
+      case D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateSingle(BlurAmount).as<wf::IPropertyValue>(), value); break;
+      case D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(Optimization)).as<wf::IPropertyValue>(), value); break;
+      case D2D1_GAUSSIANBLUR_PROP_BORDER_MODE: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(BorderMode)).as<wf::IPropertyValue>(), value); break;
+      default: return E_BOUNDS;
+    }
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
+    if (!source) return E_INVALIDARG;
+    if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
+    return E_BOUNDS;
+  }
+  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+  winrt::hstring Name() { return m_name; }
+  void Name(winrt::hstring value) { m_name = std::move(value); }
+};
+struct ColorMatrixEffect : winrt::implements<ColorMatrixEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
+  wge::IGraphicsEffectSource Source{nullptr};
+  float Matrix[20] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
+  uint32_t AlphaMode = D2D1_COLORMATRIX_ALPHA_MODE_PREMULTIPLIED;
+  bool ClampOutput = false;
+  winrt::hstring m_name = L"ColorMatrixEffect";
+  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1ColorMatrix; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
+    if (!index || !mapping) return E_INVALIDARG;
+    const std::wstring_view n(name);
+    if (n == L"ColorMatrix") { *index = D2D1_COLORMATRIX_PROP_COLOR_MATRIX; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    if (n == L"AlphaMode") { *index = D2D1_COLORMATRIX_PROP_ALPHA_MODE; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    if (n == L"ClampOutput") { *index = D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
+    return E_INVALIDARG;
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 3; return S_OK; }
+  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+    if (!value) return E_INVALIDARG;
+    switch (index) {
+      case D2D1_COLORMATRIX_PROP_COLOR_MATRIX: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateSingleArray(winrt::array_view<float const>(Matrix, Matrix + 20)).as<wf::IPropertyValue>(), value); break;
+      case D2D1_COLORMATRIX_PROP_ALPHA_MODE: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(AlphaMode).as<wf::IPropertyValue>(), value); break;
+      case D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateBoolean(ClampOutput).as<wf::IPropertyValue>(), value); break;
+      default: return E_BOUNDS;
+    }
+    return S_OK;
+  } catch (...) { return winrt::to_hresult(); }
+  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
+    if (!source) return E_INVALIDARG;
+    if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
+    return E_BOUNDS;
+  }
+  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
+  winrt::hstring Name() { return m_name; }
+  void Name(winrt::hstring value) { m_name = std::move(value); }
+};
+winrt::Windows::Storage::Streams::IRandomAccessStream CreateWindhawkBlurNoiseStream(float density) {
+  thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
+  thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream cachedStream{nullptr};
+  if (density == cachedDensity && cachedStream) {
+    return cachedStream.CloneStream();
+  }
+  constexpr int kSize = 256;
+  constexpr DWORD kBpp = 32;
+  constexpr DWORD rowSize = kSize * (kBpp / 8);
+  constexpr DWORD dataSize = rowSize * kSize;
+  BITMAPFILEHEADER fileHeader{0x4D42, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dataSize, 0, 0, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)};
+  BITMAPINFOHEADER infoHeader{};
+  infoHeader.biSize = sizeof(BITMAPINFOHEADER);
+  infoHeader.biWidth = kSize;
+  infoHeader.biHeight = kSize;
+  infoHeader.biPlanes = 1;
+  infoHeader.biBitCount = kBpp;
+  infoHeader.biSizeImage = dataSize;
+  std::vector<uint8_t> pixels(dataSize);
+  const float safeDensity = std::clamp(density, 0.001f, 1.0f);
+  const float exponent = 1.0f / safeDensity;
+  uint8_t lut[256];
+  for (int i = 0; i < 256; i++) {
+    lut[i] = static_cast<uint8_t>(std::pow(i / 255.0f, exponent) * 255.0f);
+  }
+  std::mt19937 rng(0);
+  std::uniform_int_distribution<int> dist(0, 255);
+  for (size_t i = 0; i < pixels.size(); i += 4) {
+    const uint8_t gray = lut[dist(rng)];
+    pixels[i] = gray;
+    pixels[i + 1] = gray;
+    pixels[i + 2] = gray;
+    pixels[i + 3] = 255;
+  }
+  winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
+  winrt::Windows::Storage::Streams::DataWriter writer(stream);
+  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&fileHeader), reinterpret_cast<uint8_t const*>(&fileHeader) + sizeof(fileHeader)));
+  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&infoHeader), reinterpret_cast<uint8_t const*>(&infoHeader) + sizeof(infoHeader)));
+  writer.WriteBytes(pixels);
+  writer.StoreAsync().get();
+  writer.DetachStream();
+  cachedStream = stream;
+  cachedDensity = density;
+  return cachedStream.CloneStream();
+}
+class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
+ public:
+  XamlBlurBrush(UIElement element,
+                float blurAmount,
+                winrt::Windows::UI::Color tint,
+                std::optional<uint8_t> tintOpacity,
+                winrt::hstring tintThemeResourceKey,
+                std::optional<float> tintLuminosityOpacity,
+                std::optional<float> tintSaturation,
+                std::optional<float> noiseOpacity,
+                std::optional<float> noiseDensity,
+                std::optional<winrt::Windows::UI::Color> fallbackColor,
+                winrt::hstring fallbackThemeResourceKey)
+      : m_compositor(wuxh::ElementCompositionPreview::GetElementVisual(element).Compositor()),
+        m_blurAmount(blurAmount),
+        m_tint(tint),
+        m_tintOpacity(tintOpacity),
+        m_tintThemeResourceKey(std::move(tintThemeResourceKey)),
+        m_tintLuminosityOpacity(tintLuminosityOpacity),
+        m_tintSaturation(tintSaturation),
+        m_noiseOpacity(noiseOpacity),
+        m_noiseDensity(noiseDensity),
+        m_fallbackColor(fallbackColor),
+        m_fallbackThemeResourceKey(std::move(fallbackThemeResourceKey)) {
+    auto fe = element.try_as<FrameworkElement>();
+    auto createProxy = [&](winrt::hstring const& themeResourceKey) -> Media::SolidColorBrush {
+      if (!fe || themeResourceKey.empty()) return nullptr;
+      std::wstring xaml = LR"(<SolidColorBrush xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Color="{ThemeResource )";
+      xaml += std::wstring(themeResourceKey.c_str());
+      xaml += LR"(}"/>)";
+      try {
+        return Markup::XamlReader::Load(winrt::hstring(xaml)).try_as<Media::SolidColorBrush>();
+      } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Failed to create WindhawkBlur theme proxy brush %08X", ex.code());
+        return nullptr;
+      }
+    };
+    static std::atomic<unsigned int> s_proxyCounter{0};
+    if (!m_tintThemeResourceKey.empty()) {
+      if (auto proxyBrush = createProxy(m_tintThemeResourceKey)) {
+        auto proxyKey = winrt::hstring(L"__WinDockWindhawkBlurTint_" + std::to_wstring(++s_proxyCounter));
+        fe.Resources().Insert(winrt::box_value(proxyKey), proxyBrush);
+        m_proxyBrush = proxyBrush;
+        m_weakProxyElement = winrt::make_weak(fe);
+        m_proxyKey = proxyKey;
+        m_proxyBrush.RegisterPropertyChangedCallback(Media::SolidColorBrush::ColorProperty(), [weakThis = get_weak()](auto&&, auto&&) {
+          if (auto self = weakThis.get()) self->RefreshBrush();
+        });
+      }
+    }
+    if (!m_fallbackThemeResourceKey.empty()) {
+      if (auto proxyBrush = createProxy(m_fallbackThemeResourceKey)) {
+        auto proxyKey = winrt::hstring(L"__WinDockWindhawkBlurFallback_" + std::to_wstring(++s_proxyCounter));
+        fe.Resources().Insert(winrt::box_value(proxyKey), proxyBrush);
+        m_fallbackProxyBrush = proxyBrush;
+        if (!m_weakProxyElement.get()) m_weakProxyElement = winrt::make_weak(fe);
+        m_fallbackProxyKey = proxyKey;
+        m_fallbackProxyBrush.RegisterPropertyChangedCallback(Media::SolidColorBrush::ColorProperty(), [weakThis = get_weak()](auto&&, auto&&) {
+          if (auto self = weakThis.get()) self->RefreshBrush();
+        });
+      }
+    }
+    if (m_fallbackColor || !m_fallbackThemeResourceKey.empty()) {
+      m_dispatcher = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+      try {
+        m_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+        auto dispatcher = m_dispatcher;
+        m_advancedEffectsEnabledChangedToken = m_uiSettings.AdvancedEffectsEnabledChanged([weakThis = get_weak(), dispatcher](auto&&, auto&&) {
+          dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
+        });
+        m_energySaverStatusChangedToken = winrt::Windows::System::Power::PowerManager::EnergySaverStatusChanged([weakThis = get_weak(), dispatcher](auto&&, auto&&) {
+          dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
+        });
+      } catch (...) {
+        Wh_Log(L"Failed to register WindhawkBlur fallback listeners: %08X", winrt::to_hresult());
+      }
+      LONG regStatus = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Power", 0, KEY_NOTIFY, &m_powerKey);
+      if (regStatus == ERROR_SUCCESS) {
+        m_regNotifyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (m_regNotifyEvent) {
+          regStatus = RegNotifyChangeKeyValue(m_powerKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, m_regNotifyEvent, TRUE);
+          if (regStatus == ERROR_SUCCESS) {
+            RegisterWaitForSingleObject(&m_regWaitHandle, m_regNotifyEvent, OnEnergySaverRegistryChanged, this, INFINITE, WT_EXECUTEINWAITTHREAD);
+          }
+        }
+      }
+    }
+  }
+  ~XamlBlurBrush() {
+    if (m_regWaitHandle) UnregisterWaitEx(m_regWaitHandle, INVALID_HANDLE_VALUE);
+    if (m_regNotifyEvent) CloseHandle(m_regNotifyEvent);
+    if (m_powerKey) RegCloseKey(m_powerKey);
+    if (m_uiSettings && m_advancedEffectsEnabledChangedToken.value) {
+      try { m_uiSettings.AdvancedEffectsEnabledChanged(m_advancedEffectsEnabledChangedToken); } catch (...) {}
+    }
+    if (m_energySaverStatusChangedToken.value) {
+      try { winrt::Windows::System::Power::PowerManager::EnergySaverStatusChanged(m_energySaverStatusChangedToken); } catch (...) {}
+    }
+    if (auto element = m_weakProxyElement.get()) {
+      try {
+        if (!m_proxyKey.empty()) element.Resources().Remove(winrt::box_value(m_proxyKey));
+        if (!m_fallbackProxyKey.empty()) element.Resources().Remove(winrt::box_value(m_fallbackProxyKey));
+      } catch (...) {}
+    }
+  }
+  void OnConnected() {
+    if (!CompositionBrush()) {
+      RefreshThemeTint();
+      RefreshFallbackColor();
+      CompositionBrush(ShouldUseFallback() ? CreateFallbackBrush() : CreateEffectBrush());
+    }
+  }
+  void OnDisconnected() {
+    if (const auto brush = CompositionBrush()) {
+      brush.Close();
+      CompositionBrush(nullptr);
+    }
+  }
+ private:
+  static void CALLBACK OnEnergySaverRegistryChanged(PVOID context, BOOLEAN) {
+    auto* self = static_cast<XamlBlurBrush*>(context);
+    if (self->m_powerKey && self->m_regNotifyEvent) {
+      RegNotifyChangeKeyValue(self->m_powerKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, self->m_regNotifyEvent, TRUE);
+    }
+    if (self->m_dispatcher) {
+      auto weakThis = self->get_weak();
+      self->m_dispatcher.TryEnqueue([weakThis] { if (auto self = weakThis.get()) self->RefreshBrush(); });
+    }
+  }
+  void RefreshThemeTint() {
+    if (!m_proxyBrush) return;
+    m_tint = m_proxyBrush.Color();
+    if (m_tintOpacity) m_tint.A = *m_tintOpacity;
+  }
+  void RefreshFallbackColor() {
+    if (!m_fallbackProxyBrush) return;
+    m_fallbackColor = m_fallbackProxyBrush.Color();
+  }
+  bool ShouldUseFallback() const {
+    if (!m_fallbackColor && m_fallbackThemeResourceKey.empty()) return false;
+    bool energySaverActive = false;
+    HKEY key{};
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Power", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
+      DWORD value = 0, type = 0, size = sizeof(value);
+      if (RegQueryValueExW(key, L"EnergySaverState", nullptr, &type, reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS && type == REG_DWORD) {
+        energySaverActive = (value == 1);
+      }
+      RegCloseKey(key);
+    }
+    if (!energySaverActive) {
+      SYSTEM_POWER_STATUS powerStatus{};
+      if (GetSystemPowerStatus(&powerStatus) && powerStatus.SystemStatusFlag != 0) energySaverActive = true;
+    }
+    bool advancedEffectsOff = false;
+    if (m_uiSettings) {
+      try { advancedEffectsOff = !m_uiSettings.AdvancedEffectsEnabled(); } catch (...) {}
+    }
+    return energySaverActive || advancedEffectsOff;
+  }
+  void RefreshBrush() {
+    if (const auto brush = CompositionBrush()) {
+      brush.Close();
+      CompositionBrush(nullptr);
+      OnConnected();
+    }
+  }
+  wuc::CompositionBrush CreateFallbackBrush() {
+    return m_compositor.CreateColorBrush(m_fallbackColor.value_or(m_tint));
+  }
+  wuc::CompositionBrush CreateEffectBrush() {
+    auto backdropBrush = m_compositor.CreateBackdropBrush();
+    constexpr float kLumaR = 0.2126f;
+    constexpr float kLumaG = 0.7152f;
+    constexpr float kLumaB = 0.0722f;
+    auto blurEffect = winrt::make_self<GaussianBlurEffect>();
+    blurEffect->Source = wuc::CompositionEffectSourceParameter(L"backdrop");
+    blurEffect->BlurAmount = m_blurAmount;
+    blurEffect->Name(L"BlurEffect");
+    wge::IGraphicsEffectSource topOfStack = *blurEffect;
+    if (m_tintSaturation && *m_tintSaturation != 1.0f) {
+      float s = std::max(*m_tintSaturation, 0.0f);
+      float invS = 1.0f - s;
+      auto satMatrix = winrt::make_self<ColorMatrixEffect>();
+      satMatrix->Source = topOfStack;
+      auto& m = satMatrix->Matrix;
+      m[0] = invS * kLumaR + s; m[1] = invS * kLumaR;     m[2] = invS * kLumaR;     m[3] = 0.0f;
+      m[4] = invS * kLumaG;     m[5] = invS * kLumaG + s; m[6] = invS * kLumaG;     m[7] = 0.0f;
+      m[8] = invS * kLumaB;     m[9] = invS * kLumaB;     m[10] = invS * kLumaB + s; m[11] = 0.0f;
+      m[12] = 0.0f;             m[13] = 0.0f;             m[14] = 0.0f;             m[15] = 1.0f;
+      satMatrix->Name(L"SaturationEffect");
+      topOfStack = *satMatrix;
+    }
+    if (m_tintLuminosityOpacity && *m_tintLuminosityOpacity > 0.0f) {
+      float op = std::clamp(*m_tintLuminosityOpacity, 0.0f, 1.0f);
+      float tintLum = (m_tint.R / 255.0f) * kLumaR + (m_tint.G / 255.0f) * kLumaG + (m_tint.B / 255.0f) * kLumaB;
+      auto lumMatrix = winrt::make_self<ColorMatrixEffect>();
+      lumMatrix->Source = topOfStack;
+      auto& m = lumMatrix->Matrix;
+      m[0] = 1.0f - (kLumaR * op); m[1] = -(kLumaR * op);       m[2] = -(kLumaR * op);       m[3] = 0.0f;
+      m[4] = -(kLumaG * op);       m[5] = 1.0f - (kLumaG * op); m[6] = -(kLumaG * op);       m[7] = 0.0f;
+      m[8] = -(kLumaB * op);       m[9] = -(kLumaB * op);       m[10] = 1.0f - (kLumaB * op); m[11] = 0.0f;
+      m[12] = 0.0f;                m[13] = 0.0f;                m[14] = 0.0f;                m[15] = 1.0f;
+      m[16] = tintLum * op;        m[17] = tintLum * op;        m[18] = tintLum * op;        m[19] = 0.0f;
+      lumMatrix->Name(L"LuminosityBlend");
+      topOfStack = *lumMatrix;
+    }
+    wuc::CompositionSurfaceBrush noiseBrush{nullptr};
+    if (m_noiseOpacity && *m_noiseOpacity > 0.0f) {
+      float density = m_noiseDensity.value_or(1.0f);
+      auto stream = CreateWindhawkBlurNoiseStream(density);
+      auto surface = Media::LoadedImageSurface::StartLoadFromStream(stream);
+      noiseBrush = m_compositor.CreateSurfaceBrush(surface);
+      noiseBrush.Stretch(wuc::CompositionStretch::None);
+      auto borderEffect = winrt::make_self<BorderEffect>();
+      borderEffect->Source = wuc::CompositionEffectSourceParameter(L"NoiseSource");
+      float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
+      auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
+      opacityEffect->Source = *borderEffect;
+      opacityEffect->Matrix[0] = nOp;
+      opacityEffect->Matrix[5] = nOp;
+      opacityEffect->Matrix[10] = nOp;
+      opacityEffect->Matrix[15] = nOp;
+      opacityEffect->Name(L"NoiseOpacityEffect");
+      auto noiseComposite = winrt::make_self<CompositeEffect>();
+      noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+      noiseComposite->Sources.push_back(topOfStack);
+      noiseComposite->Sources.push_back(*opacityEffect);
+      noiseComposite->Name(L"NoiseComposite");
+      topOfStack = *noiseComposite;
+    }
+    auto floodEffect = winrt::make_self<FloodEffect>();
+    floodEffect->Color = m_tint;
+    floodEffect->Name(L"FloodEffect");
+    auto compositeEffect = winrt::make_self<CompositeEffect>();
+    compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+    compositeEffect->Sources.push_back(topOfStack);
+    compositeEffect->Sources.push_back(*floodEffect);
+    auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
+    auto brush = factory.CreateBrush();
+    brush.SetSourceParameter(L"backdrop", backdropBrush);
+    if (noiseBrush) brush.SetSourceParameter(L"NoiseSource", noiseBrush);
+    return brush;
+  }
+  wuc::Compositor m_compositor{nullptr};
+  float m_blurAmount = 30.0f;
+  winrt::Windows::UI::Color m_tint{};
+  std::optional<uint8_t> m_tintOpacity;
+  winrt::hstring m_tintThemeResourceKey;
+  std::optional<float> m_tintLuminosityOpacity;
+  std::optional<float> m_tintSaturation;
+  std::optional<float> m_noiseOpacity;
+  std::optional<float> m_noiseDensity;
+  std::optional<winrt::Windows::UI::Color> m_fallbackColor;
+  winrt::hstring m_fallbackThemeResourceKey;
+  Media::SolidColorBrush m_proxyBrush{nullptr};
+  Media::SolidColorBrush m_fallbackProxyBrush{nullptr};
+  winrt::weak_ref<FrameworkElement> m_weakProxyElement;
+  winrt::hstring m_proxyKey;
+  winrt::hstring m_fallbackProxyKey;
+  winrt::Windows::UI::ViewManagement::UISettings m_uiSettings{nullptr};
+  winrt::event_token m_advancedEffectsEnabledChangedToken{};
+  winrt::event_token m_energySaverStatusChangedToken{};
+  winrt::Windows::System::DispatcherQueue m_dispatcher{nullptr};
+  HKEY m_powerKey{nullptr};
+  HANDLE m_regNotifyEvent{nullptr};
+  HANDLE m_regWaitHandle{nullptr};
+};
+std::wstring TrimWide(std::wstring value) {
+  const auto start = value.find_first_not_of(L" \t\r\n");
+  if (start == std::wstring::npos) return L"";
+  const auto end = value.find_last_not_of(L" \t\r\n");
+  return value.substr(start, end - start + 1);
+}
+struct ParsedWindhawkColorSetting {
+  winrt::Windows::UI::Color color;
+  std::wstring themeResourceKey;
+};
+ParsedWindhawkColorSetting ParseWindhawkColorSetting(std::wstring value, winrt::Windows::UI::Color fallbackColor) {
+  value = TrimWide(std::move(value));
+  constexpr std::wstring_view prefix = L"{ThemeResource ";
+  if (value.size() > prefix.size() + 1 && value.rfind(prefix, 0) == 0 && value.back() == L'}') {
+    auto key = TrimWide(value.substr(prefix.size(), value.size() - prefix.size() - 1));
+    if (!key.empty()) return {fallbackColor, key};
+  }
+  if (!value.empty() && value[0] == L'#') value.erase(value.begin());
+  if (value.size() == 6 || value.size() == 8) {
+    try {
+      const unsigned long parsed = std::stoul(value, nullptr, 16);
+      if (value.size() == 8) {
+        return {winrt::Windows::UI::Color{static_cast<uint8_t>((parsed >> 24) & 0xFF), static_cast<uint8_t>((parsed >> 16) & 0xFF), static_cast<uint8_t>((parsed >> 8) & 0xFF), static_cast<uint8_t>(parsed & 0xFF)}, L""};
+      }
+      return {winrt::Windows::UI::Color{255, static_cast<uint8_t>((parsed >> 16) & 0xFF), static_cast<uint8_t>((parsed >> 8) & 0xFF), static_cast<uint8_t>(parsed & 0xFF)}, L""};
+    } catch (...) {
+    }
+  }
+  return {fallbackColor, L""};
+}
+void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillChild) {
+  if (!backgroundFillChild) return;
+  auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
+  if (!rectangle) {
+    return;
+  }
+  try {
+    // Do not leave a mod-implemented XamlCompositionBrushBase attached to
+    // Explorer's XAML tree while Windhawk unloads/reloads this DLL.
+    // Otherwise Explorer can later call into the old brush object's vtable after
+    // the module that implemented it has been unloaded.
+    auto oldFill = rectangle.Fill();
+    rectangle.Fill(Media::Brush{nullptr});
+    rectangle.ClearValue(winrt::Windows::UI::Xaml::Shapes::Shape::FillProperty());
+    rectangle.Opacity(1.0);
+    oldFill = nullptr;
+  } catch (winrt::hresult_error const& ex) {
+    Wh_Log(L"WindhawkBlur cleanup failed %08X: %s", ex.code(), ex.message().c_str());
+  } catch (...) {
+    Wh_Log(L"WindhawkBlur cleanup failed: %08X", winrt::to_hresult());
+  }
+}
+void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
+  if (!backgroundFillChild) return;
+  auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
+  if (!rectangle) {
+    Wh_Log(L"WindhawkBlur: BackgroundFill is not a Rectangle");
+    return;
+  }
+  if (g_unloading) {
+    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
+    return;
+  }
+  const float backgroundOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f, 0.0f, 1.0f);
+  rectangle.Opacity(backgroundOpacity);
+  auto tintSetting = ParseWindhawkColorSetting(
+      g_settings.userDefinedTaskbarBackgroundTintColor,
+      winrt::Windows::UI::Color{0, 255, 255, 255});
+  auto fallbackSetting = ParseWindhawkColorSetting(
+      g_settings.userDefinedTaskbarBackgroundFallbackColor,
+      winrt::Windows::UI::Color{255, 32, 32, 32});
+  const float tintOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundTint / 100.0f, 0.0f, 1.0f);
+  const auto tintAlpha = static_cast<uint8_t>(std::round(tintOpacity * 255.0f));
+  tintSetting.color.A = tintAlpha;
+  const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
+  const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 2.0f);
+  const float noiseOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseOpacity / 100.0f, 0.0f, 1.0f);
+  const float noiseDensity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseDensity / 100.0f, 0.01f, 1.0f);
+  try {
+    auto blurBrush = winrt::make<XamlBlurBrush>(
+        rectangle,
+        static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),
+        tintSetting.color,
+        std::optional<uint8_t>(tintAlpha),
+        winrt::hstring(tintSetting.themeResourceKey),
+        std::optional<float>(luminosityOpacity),
+        std::optional<float>(saturation),
+        noiseOpacity > 0.0f ? std::optional<float>(noiseOpacity) : std::nullopt,
+        std::optional<float>(noiseDensity),
+        fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
+        winrt::hstring(fallbackSetting.themeResourceKey));
+    rectangle.Fill(blurBrush);
+  } catch (winrt::hresult_error const& ex) {
+    Wh_Log(L"WindhawkBlur failed %08X: %s", ex.code(), ex.message().c_str());
+  } catch (...) {
+    Wh_Log(L"WindhawkBlur failed: %08X", winrt::to_hresult());
+  }
+}
 #include <regex>
 std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input) {
-  Wh_Log(L".");
-
   std::vector<std::wstring> result;
   if (!input.has_value() || input->empty()) {
-  Wh_Log(L".");
-
     return result;
   }
   std::wstringstream ss(*input);
   std::wstring item;
   while (std::getline(ss, item, L';')) {
-  Wh_Log(L".");
-
     size_t start = item.find_first_not_of(L" \t");
     size_t end = item.find_last_not_of(L" \t");
     if (start != std::wstring::npos && end != std::wstring::npos) {
-  Wh_Log(L".");
-
       std::wstring trimmed = item.substr(start, end - start + 1);
       if (!trimmed.empty()) {
-  Wh_Log(L".");
-
         result.push_back(trimmed);
       }
     }
@@ -4697,14 +4342,10 @@ std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input)
   return result;
 }
 bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pattern) {
-  Wh_Log(L".");
-
   try {
     std::wregex regexPattern(pattern, std::regex_constants::icase);
     return std::regex_search(haystack, regexPattern);
   } catch (const std::regex_error&) {
-  Wh_Log(L".");
-
     return false;
   }
 }
@@ -4720,15 +4361,11 @@ constexpr int kLowPriorityStyleDelayMs = 900;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 void ApplySettings(HWND hTaskbarWnd);
 int64_t DelayedApplyNowMs() {
-  Wh_Log(L".");
-
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::steady_clock::now().time_since_epoch())
       .count();
 }
 void ArmInitialExplorerStyleApplyDelay() {
-  Wh_Log(L".");
-
   g_initial_style_apply_completed = false;
   g_initial_taskbar_size_apply_done = false;
   g_initial_style_apply_not_before_ms =
@@ -4737,19 +4374,13 @@ void ArmInitialExplorerStyleApplyDelay() {
 }
 void DelayedApplyWorker();
 void EnsureDelayedApplyWorker() {
-  Wh_Log(L".");
-
   bool expected = false;
   if (!g_delayed_apply_worker_running.compare_exchange_strong(expected, true)) {
-  Wh_Log(L".");
-
     return;
   }
   std::thread(DelayedApplyWorker).detach();
 }
 bool InitializeDebounce() {
-  Wh_Log(L".");
-
   // Kept as a compatibility shim for older call sites. The old DispatcherTimer
   // debounce was removed because timer creation/stop could race Explorer/XAML
   // initialization and crash. Scheduling is now handled by DelayedApplyWorker.
@@ -4757,34 +4388,22 @@ bool InitializeDebounce() {
   return true;
 }
 void CleanupDebounce() {
-  Wh_Log(L".");
-
   g_already_requested_debounce_initializing = false;
   g_scheduled_low_priority_update = false;
   g_delayed_apply_due_ms = 0;
   g_delayed_apply_generation.fetch_add(1);
 }
 void DelayedApplyWorker() {
-  Wh_Log(L".");
-
   for (;;) {
-  Wh_Log(L".");
-
     if (g_unloading) {
-  Wh_Log(L".");
-
       break;
     }
     int64_t dueMs = g_delayed_apply_due_ms.load();
     if (dueMs <= 0) {
-  Wh_Log(L".");
-
       break;
     }
     int64_t nowMs = DelayedApplyNowMs();
     if (nowMs < dueMs) {
-  Wh_Log(L".");
-
       DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(250, std::max<int64_t>(1, dueMs - nowMs)));
       Sleep(sleepMs);
       continue;
@@ -4792,8 +4411,6 @@ void DelayedApplyWorker() {
     unsigned long long generation = g_delayed_apply_generation.load();
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
-  Wh_Log(L".");
-
       Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
       g_delayed_apply_generation.fetch_add(1);
       g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
@@ -4803,14 +4420,10 @@ void DelayedApplyWorker() {
     Wh_Log(L"Delayed apply triggered");
     if (!g_initial_style_apply_completed.load() &&
         !g_initial_taskbar_size_apply_done.exchange(true)) {
-  Wh_Log(L".");
-
       ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
     }
     ApplySettings(hTaskbarWnd);
     if (!g_initial_style_apply_completed.load() && !g_unloading) {
-  Wh_Log(L".");
-
       Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
       g_delayed_apply_generation.fetch_add(1);
       g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
@@ -4818,46 +4431,30 @@ void DelayedApplyWorker() {
     }
     int64_t expectedDueMs = dueMs;
     if (g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0)) {
-  Wh_Log(L".");
-
       if (g_delayed_apply_generation.load() == generation) {
-  Wh_Log(L".");
-
         break;
       }
     }
   }
   g_delayed_apply_worker_running = false;
   if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
-  Wh_Log(L".");
-
     EnsureDelayedApplyWorker();
   }
 }
 void ApplySettingsDebounced(int delayMs) {
-  Wh_Log(L".");
-
   if (g_unloading) {
-  Wh_Log(L".");
-
     return;
   }
   if (delayMs <= 0) {
-  Wh_Log(L".");
-
     delayMs = kLowPriorityStyleDelayMs;
   }
   if (delayMs < 1) {
-  Wh_Log(L".");
-
     delayMs = kDefaultStyleDebounceDelayMs;
   }
   int64_t nowMs = DelayedApplyNowMs();
   int64_t dueMs = nowMs + delayMs;
   int64_t initialNotBeforeMs = g_initial_style_apply_not_before_ms.load();
   if (!g_initial_style_apply_completed.load() && initialNotBeforeMs > dueMs) {
-  Wh_Log(L".");
-
     dueMs = initialNotBeforeMs;
   }
   g_delayed_apply_generation.fetch_add(1);
@@ -4866,38 +4463,26 @@ void ApplySettingsDebounced(int delayMs) {
   EnsureDelayedApplyWorker();
 }
 void ApplySettingsDebounced() {
-  Wh_Log(L".");
-
   ApplySettingsDebounced(kDefaultStyleDebounceDelayMs);
 }
 void ScheduleInitialExplorerStyleApply() {
-  Wh_Log(L".");
-
   ApplySettingsDebounced(kInitialExplorerStyleDelayMs);
 }
 bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
-  Wh_Log(L".");
-
   if (!element) return false;
   auto transform = element.TransformToVisual(nullptr);
   winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
   return rect.X < 0 || rect.Y < 0;
 }
 bool IsTaskbarWidgetsEnabled() {
-  Wh_Log(L".");
-
     DWORD value = 0;
     DWORD size = sizeof(value);
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
                       L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                       0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-  Wh_Log(L".");
-
         if (RegQueryValueExW(hKey, L"TaskbarDa", nullptr, nullptr,
                              reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
-  Wh_Log(L".");
-
             RegCloseKey(hKey);
             return value == 1;
         }
@@ -4906,11 +4491,7 @@ bool IsTaskbarWidgetsEnabled() {
     return false;
 }
 static float SnapToPhysicalPixel(float value, float rasterizationScale = 1.0f) {
-  Wh_Log(L".");
-
   if (rasterizationScale <= 0.0f) {
-  Wh_Log(L".");
-
     rasterizationScale = 1.0f;
   }
   float scaledValue = value * rasterizationScale;
@@ -4921,19 +4502,11 @@ static float SnapToPhysicalPixel(float value, float rasterizationScale = 1.0f) {
   return snappedScaledValue / rasterizationScale;
 }
 static float GetRasterizationScale(FrameworkElement const& element) {
-  Wh_Log(L".");
-
   if (element) {
-  Wh_Log(L".");
-
     auto xamlRoot = element.XamlRoot();
     if (xamlRoot) {
-  Wh_Log(L".");
-
       float rasterizationScale = static_cast<float>(xamlRoot.RasterizationScale());
       if (rasterizationScale > 0.0f) {
-  Wh_Log(L".");
-
         return rasterizationScale;
       }
     }
@@ -4943,47 +4516,31 @@ static float GetRasterizationScale(FrameworkElement const& element) {
 using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
 StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
 void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
-  Wh_Log(L".");
-
   StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
   Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
   if (g_lastRecordedStartMenuWidth != param1.Width) {
-  Wh_Log(L".");
-
     g_lastRecordedStartMenuWidth = static_cast<int>(param1.Width);
     Wh_SetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
   }
 }
 std::atomic<int64_t> g_update_flag_set_time_ms = 0;
-int64_t NowMs() {
-  Wh_Log(L".");
- return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+int64_t NowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 void ResetFlagAfterDelay() {
-  Wh_Log(L".");
-
   std::this_thread::sleep_for(std::chrono::milliseconds(1400));
   int64_t now = NowMs();
   int64_t set_time = g_update_flag_set_time_ms.load();
   if (g_scheduled_low_priority_update && (now - set_time >= 1400)) {
-  Wh_Log(L".");
-
     g_scheduled_low_priority_update = false;
   }
 }
 void ApplySettingsFromTaskbarThreadIfRequired() {
-  Wh_Log(L".");
-
   if (!g_scheduled_low_priority_update.exchange(true)) {
-  Wh_Log(L".");
-
     g_update_flag_set_time_ms = NowMs();
     Wh_Log(L"Scheduled low priority update");
     ApplySettingsDebounced(-1);
   }
 }
 void SetDividerForElement(FrameworkElement const& element, float const& panelHeight, bool dividerVisible, bool dividerShouldBeOnLeft = g_settings.userDefinedDividerLeftAligned) {
-  Wh_Log(L".");
-
   if (!element) return;
   if (panelHeight <= 0.0f) return;
   auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(element);
@@ -4994,8 +4551,6 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
   if (!shapeVisual) return;
   dividerVisible = dividerVisible && !g_unloading;
   if (dividerVisible) {
-  Wh_Log(L".");
-
     auto lineGeometry = compositor.CreateLineGeometry();
     if (!lineGeometry) return;
     auto lineShape = compositor.CreateSpriteShape(lineGeometry);
@@ -5019,29 +4574,15 @@ void SetDividerForElement(FrameworkElement const& element, float const& panelHei
   winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(element, shapeVisual);
 }
 void ChangeControlCenterIconSize(FrameworkElement const& systemTrayFrameGrid) {
-  Wh_Log(L".");
-
   if (!g_settings.userDefinedStyleTrayArea) return;
   if (auto ControlCenterButton = FindChildByName(systemTrayFrameGrid, L"ControlCenterButton")) {
-  Wh_Log(L".");
-
     if (auto innerGrid = FindChildByClassName(ControlCenterButton, L"Windows.UI.Xaml.Controls.Grid")) {
-  Wh_Log(L".");
-
       if (auto ContentPresenter = FindChildByName(innerGrid, L"ContentPresenter")) {
-  Wh_Log(L".");
-
         if (auto innerItemPresenter = FindChildByClassName(ContentPresenter, L"Windows.UI.Xaml.Controls.ItemsPresenter")) {
-  Wh_Log(L".");
-
           if (auto innerStackPanel = FindChildByClassName(innerItemPresenter, L"Windows.UI.Xaml.Controls.StackPanel")) {
-  Wh_Log(L".");
-
             auto userDefinedTrayIconSizeStr = std::to_wstring(g_settings.userDefinedTrayIconSize);
             int childCount = Media::VisualTreeHelper::GetChildrenCount(innerStackPanel);
             for (int i = 0; i < childCount; ++i) {
-  Wh_Log(L".");
-
               auto child = Media::VisualTreeHelper::GetChild(innerStackPanel, i).try_as<FrameworkElement>();
               if (!child) continue;
               auto SystemTrayIcon = FindChildByName(child, L"SystemTrayIcon");
@@ -5055,29 +4596,17 @@ void ChangeControlCenterIconSize(FrameworkElement const& systemTrayFrameGrid) {
               auto ContainerGridInner = FindChildByName(TextIconContent, L"ContainerGrid");
               if (!ContainerGridInner) continue;
               if (auto Layer = FindChildByName(ContainerGridInner, L"Underlay")) {
-  Wh_Log(L".");
-
                 if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
-  Wh_Log(L".");
-
                   SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
                 }
               }
               if (auto Layer = FindChildByName(ContainerGridInner, L"Base")) {
-  Wh_Log(L".");
-
                 if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
-  Wh_Log(L".");
-
                   SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
                 }
               }
               if (auto Layer = FindChildByName(ContainerGridInner, L"AccentOverlay")) {
-  Wh_Log(L".");
-
                 if (auto InnerTextBlock = FindChildByName(Layer, L"InnerTextBlock")) {
-  Wh_Log(L".");
-
                   SetElementPropertyFromString(InnerTextBlock, L"Windows.UI.Xaml.Controls.TextBlock", L"FontSize", userDefinedTrayIconSizeStr);
                 }
               }
@@ -5089,14 +4618,10 @@ void ChangeControlCenterIconSize(FrameworkElement const& systemTrayFrameGrid) {
   }
 }
 void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& panelHeight) {
-  Wh_Log(L".");
-
   if (!g_settings.userDefinedStyleTrayArea) return;
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   int childCount = Media::VisualTreeHelper::GetChildrenCount(stackPanel);
   for (int i = 0; i < childCount; ++i) {
-  Wh_Log(L".");
-
     auto child = Media::VisualTreeHelper::GetChild(stackPanel, i).try_as<FrameworkElement>();
     if (!child) continue;
     auto notifyItemIcon = FindChildByName(child, L"NotifyItemIcon");
@@ -5116,8 +4641,6 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
     auto imageCtrl = image.try_as<winrt::Windows::UI::Xaml::Controls::Image>();
     if (!imageCtrl) continue;
     if (g_settings.userDefinedStyleTrayArea) {
-  Wh_Log(L".");
-
       child.Width(g_settings.userDefinedTrayButtonSize);
       child.Height(g_settings.userDefinedTaskbarHeight);
       SetElementPropertyFromString(containerGrid, L"Windows.UI.Xaml.Controls.Grid", L"CornerRadius", userDefinedTaskButtonCornerRadius);
@@ -5127,19 +4650,13 @@ void ProcessStackPanelChildren(FrameworkElement const& stackPanel, float const& 
   }
 }
 void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
-  Wh_Log(L".");
-
   if (!element) return;
   using namespace winrt::Windows::UI::Xaml::Hosting;
   using namespace winrt::Windows::Foundation::Numerics;
   element.Opacity(g_unloading ? 1.0f : std::min(1.0f, static_cast<float>(g_settings.userDefinedTaskbarBorderOpacity / 255.0f)));
   element.Width(std::max(0.0, g_settings.userDefinedAppsDividerThickness * 0.99));
   if (auto visual = ElementCompositionPreview::GetElementVisual(element)) {
-  Wh_Log(L".");
-
     if (auto compositor = visual.Compositor()) {
-  Wh_Log(L".");
-
       visual.CenterPoint({0.0f, static_cast<float>(element.ActualHeight()) / 2.0f, 0.0f});
       visual.Scale({1.0f, g_unloading ? 1.0f : g_settings.userDefinedAppsDividerVerticalScale, 1.0f});
     }
@@ -5147,8 +4664,6 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
   PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
   PCWSTR originalHex = hex;
   if (!hex || *hex == L'\0') {
-  Wh_Log(L".");
-
     hex = L"#ffffff";
     originalHex = nullptr;
   }
@@ -5156,14 +4671,10 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
   std::wstring fillBrush = L"<SolidColorBrush Color=\"#" + std::wstring(hex) + L"\"/>";
   SetElementPropertyFromString(element, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", fillBrush.c_str(), true);
   if (originalHex) {
-  Wh_Log(L".");
-
     Wh_FreeStringSetting(originalHex);
   }
 }
 double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount, TaskbarState& state) {
-  Wh_Log(L".");
-
   if (!element) return 0.0;
   const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
@@ -5172,12 +4683,8 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
   childrenCount = 0;
   int childrenCountTentative = Media::VisualTreeHelper::GetChildrenCount(element);
   for (int i = 0; i < childrenCountTentative; i++) {
-  Wh_Log(L".");
-
     auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
     if (!child) {
-  Wh_Log(L".");
-
       Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentative);
       continue;
     }
@@ -5185,50 +4692,32 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
     auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
     // exclude "weird" rectangles (aka recycled views)
     if (rect.X < 0 || rect.Y < 0) {
-  Wh_Log(L".");
-
       continue;
     }
     auto className = winrt::get_class_name(child);
     SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
     if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className == L"Taskbar.OverflowToggleButton") {
-  Wh_Log(L".");
-
       child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       //   child.Width(g_settings.userDefinedTaskbarButtonSize);
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
       if (innerElementChild) {
-  Wh_Log(L".");
-
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
         // innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
       }
     }
     if (className == L"Taskbar.SearchBoxButton") {
-  Wh_Log(L".");
-
       child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
       if (innerElementChild) {
-  Wh_Log(L".");
-
         innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
       }
     } else if (className == L"Taskbar.ExperienceToggleButton") {
-  Wh_Log(L".");
-
       state.lastStartButtonXActual = rect.X - rect.Width;
     } else if (className == L"Taskbar.TaskListButton") {
-  Wh_Log(L".");
-
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListLabeledButtonPanel");
       if (innerElementChild) {
-  Wh_Log(L".");
-
         auto iconElementChild = FindChildByName(innerElementChild, L"Icon");
         if (iconElementChild) {
-  Wh_Log(L".");
-
           iconElementChild.Width(g_settings.userDefinedTaskbarIconSize);
           iconElementChild.Height(g_settings.userDefinedTaskbarIconSize);
           auto currentIconAppName = child.GetValue(winrt::Windows::UI::Xaml::Automation::AutomationProperties::NameProperty());
@@ -5236,14 +4725,8 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
           // Wh_Log(L"bbwi: %s", currentIconAppNameStr);
           SetDividerForElement(child, tbHeightFloat, false);
           if (!currentIconAppNameStr.empty()) {
-  Wh_Log(L".");
-
             for (const auto& pat : g_settings.userDefinedDividedAppNames) {
-  Wh_Log(L".");
-
               if (RegexMatchInsensitive(currentIconAppNameStr, pat)) {
-  Wh_Log(L".");
-
                 SetDividerForElement(child, tbHeightFloat, true);
                 break;
               }
@@ -5251,29 +4734,17 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
           }
         }
       }
-    } else if (className == L"Taskbar.AugmentedEntryPointButton") {
-  Wh_Log(L".");
-  // widget element
+    } else if (className == L"Taskbar.AugmentedEntryPointButton") {  // widget element
       child.Margin(Thickness{0, 0, 0, 0});
       auto ExperienceToggleButtonRootPanelElement = FindChildByName(child, L"ExperienceToggleButtonRootPanel");
       if (ExperienceToggleButtonRootPanelElement) {
-  Wh_Log(L".");
-
         ExperienceToggleButtonRootPanelElement.Margin(Thickness{0, 0, 0, 0});
       }
       continue;
-    } else if (className == L"Taskbar.OverflowToggleButton") {
-  Wh_Log(L".");
-  // overflow button
+    } else if (className == L"Taskbar.OverflowToggleButton") {  // overflow button
       if (auto OverflowToggleButtonRootPanel = FindChildByName(child, L"OverflowToggleButtonRootPanel")) {
-  Wh_Log(L".");
-
         if (auto RightOverflowButtonDivider = FindChildByName(OverflowToggleButtonRootPanel, L"RightOverflowButtonDivider")) {
-  Wh_Log(L".");
-
           if (g_settings.userDefinedTrayAreaDivider) {
-  Wh_Log(L".");
-
             RightOverflowButtonDivider.Opacity(0);
           } else {
             StyleNativeDividerElement(RightOverflowButtonDivider);
@@ -5282,32 +4753,16 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
       }
     }
     if (auto iconPanelElement = FindChildByName(child, L"IconPanel")) {
-  Wh_Log(L".");
-
       if (auto mostRecentlyUsedDivider = FindChildByName(iconPanelElement, L"MostRecentlyUsedDivider")) {
-  Wh_Log(L".");
-
         StyleNativeDividerElement(mostRecentlyUsedDivider);
       }
       if (auto progressIndicator = FindChildByName(iconPanelElement, L"ProgressIndicator")) {
-  Wh_Log(L".");
-
         if (auto layoutRoot = FindChildByName(progressIndicator, L"LayoutRoot")) {
-  Wh_Log(L".");
-
           if (auto progressBarRoot = FindChildByName(layoutRoot, L"ProgressBarRoot")) {
-  Wh_Log(L".");
-
             if (auto border = FindChildByClassName(progressBarRoot, L"Windows.UI.Xaml.Controls.Border")) {
-  Wh_Log(L".");
-
               if (auto grid = FindChildByClassName(border, L"Windows.UI.Xaml.Controls.Grid")) {
-  Wh_Log(L".");
-
                 grid.Height(3.8);
                 if (auto progressBarTrack = FindChildByName(grid, L"ProgressBarTrack")) {
-  Wh_Log(L".");
-
                   progressBarTrack.Opacity(0.5);
                 }
               }
@@ -5315,8 +4770,6 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
           }
         }
       } else if (auto runningIndicator = FindChildByName(iconPanelElement, L"RunningIndicator")) {
-  Wh_Log(L".");
-
         runningIndicator.Height(3.5);
         runningIndicator.Opacity(1);
       }
@@ -5327,14 +4780,8 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
   return totalWidth;
 }
 void UpdateGlobalSettings() {
-  Wh_Log(L".");
-
-  auto getInt = [&](PCWSTR key) {
-  Wh_Log(L".");
- return Wh_GetIntSetting(key); };
-  auto clamp = [](int v, int lo, int hi) {
-  Wh_Log(L".");
- return v < lo ? lo : v > hi ? hi : v; };
+  auto getInt = [&](PCWSTR key) { return Wh_GetIntSetting(key); };
+  auto clamp = [](int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; };
   // Booleans
   g_settings.userDefinedFlatTaskbarBottomCorners = (getInt(L"FlatTaskbarBottomCorners") != 0);
   g_settings.userDefinedFullWidthTaskbarBackground = (getInt(L"FullWidthTaskbarBackground") != 0) || g_unloading;
@@ -5371,6 +4818,20 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTaskbarBackgroundOpacity = bgOp;
   g_settings.userDefinedTaskbarBackgroundTint = clamp(abs(getInt(L"TaskbarBackgroundTint")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundLuminosity = clamp(abs(getInt(L"TaskbarBackgroundLuminosity")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundBlurAmount = clamp(abs(getInt(L"TaskbarBackgroundBlurAmount")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundTintSaturation = clamp(abs(getInt(L"TaskbarBackgroundTintSaturation")), 0, 200);
+  g_settings.userDefinedTaskbarBackgroundNoiseOpacity = clamp(abs(getInt(L"TaskbarBackgroundNoiseOpacity")), 0, 100);
+  g_settings.userDefinedTaskbarBackgroundNoiseDensity = clamp(abs(getInt(L"TaskbarBackgroundNoiseDensity")), 1, 100);
+  PCWSTR bgTintColor = Wh_GetStringSetting(L"TaskbarBackgroundTintColor");
+  g_settings.userDefinedTaskbarBackgroundTintColor = (bgTintColor && *bgTintColor) ? bgTintColor : L"{ThemeResource CardStrokeColorDefaultSolid}";
+  if (bgTintColor) {
+    Wh_FreeStringSetting(bgTintColor);
+  }
+  PCWSTR bgFallbackColor = Wh_GetStringSetting(L"TaskbarBackgroundFallbackColor");
+  g_settings.userDefinedTaskbarBackgroundFallbackColor = (bgFallbackColor && *bgFallbackColor) ? bgFallbackColor : L"{ThemeResource CardStrokeColorDefaultSolid}";
+  if (bgFallbackColor) {
+    Wh_FreeStringSetting(bgFallbackColor);
+  }
   // Border opacity: 0–255
   int bOp = clamp(abs(getInt(L"TaskbarBorderOpacity")), 0, 100);
   g_settings.userDefinedTaskbarBorderOpacity = uint8_t(round(bOp * 2.55f));
@@ -5382,24 +4843,18 @@ void UpdateGlobalSettings() {
   PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
   PCWSTR originalHex = hex;
   if (!hex || *hex == L'\0') {
-  Wh_Log(L".");
-
     hex = L"#ffffff";
     originalHex = nullptr;
   }
   if (*hex == L'#') ++hex;
   unsigned int r = 255, g = 255, b = 255;
   if (swscanf_s(hex, L"%02x%02x%02x", &r, &g, &b) != 3) {
-  Wh_Log(L".");
-
     r = g = b = 255;
   }
   g_settings.borderColorR = r;
   g_settings.borderColorG = g;
   g_settings.borderColorB = b;
   if (originalHex) {
-  Wh_Log(L".");
-
     Wh_FreeStringSetting(originalHex);
   }
   // String list
@@ -5408,8 +4863,6 @@ void UpdateGlobalSettings() {
   Wh_FreeStringSetting(dividerAppNames);
 }
 bool HasInvalidSettings() {
-  Wh_Log(L".");
-
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
   if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
@@ -5423,13 +4876,15 @@ bool HasInvalidSettings() {
   if (g_settings.userDefinedTaskbarBackgroundOpacity > 100) return true;
   if (g_settings.userDefinedTaskbarBackgroundTint > 100) return true;
   if (g_settings.userDefinedTaskbarBackgroundLuminosity > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundBlurAmount > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundTintSaturation > 200) return true;
+  if (g_settings.userDefinedTaskbarBackgroundNoiseOpacity > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundNoiseDensity < 1 || g_settings.userDefinedTaskbarBackgroundNoiseDensity > 100) return true;
   if (g_settings.userDefinedTaskbarBorderOpacity > 255) return true;
   if (g_settings.userDefinedTaskbarBorderThickness < 0.0 || g_settings.userDefinedTaskbarBorderThickness > 10.0) return true;
   return false;
 }
 void LogAllSettings() {
-  Wh_Log(L".");
-
   Wh_Log(L"setting %d %s", g_settings.userDefinedTrayTaskGap, L"userDefinedTrayTaskGap");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundHorizontalPadding, L"userDefinedTaskbarBackgroundHorizontalPadding");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarOffsetY, L"userDefinedTaskbarOffsetY");
@@ -5444,6 +4899,12 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundOpacity, L"userDefinedTaskbarBackgroundOpacity");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundTint, L"userDefinedTaskbarBackgroundTint");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundLuminosity, L"userDefinedTaskbarBackgroundLuminosity");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundBlurAmount, L"userDefinedTaskbarBackgroundBlurAmount");
+  Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundTintColor.c_str(), L"userDefinedTaskbarBackgroundTintColor");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundTintSaturation, L"userDefinedTaskbarBackgroundTintSaturation");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseOpacity, L"userDefinedTaskbarBackgroundNoiseOpacity");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseDensity, L"userDefinedTaskbarBackgroundNoiseDensity");
+  Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundFallbackColor.c_str(), L"userDefinedTaskbarBackgroundFallbackColor");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBorderOpacity, L"userDefinedTaskbarBorderOpacity");
   Wh_Log(L"setting %d %s", (int)(g_settings.userDefinedTaskbarBorderThickness * 100.0 / 10.0), L"userDefinedTaskbarBorderThickness (scaled)");
   Wh_Log(L"setting %d %s", g_settings.userDefinedFullWidthTaskbarBackground ? 1 : 0, L"userDefinedFullWidthTaskbarBackground");
@@ -5455,11 +4916,7 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
 }
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
-  Wh_Log(L".");
-
   if (!xamlRootContent) {
-  Wh_Log(L".");
-
     Wh_Log(L"xamlRootContent is null");
     return false;
   }
@@ -5468,8 +4925,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   g_scheduled_low_priority_update = false;
   auto now = std::chrono::steady_clock::now();
   if (!g_unloading && now - state.lastApplyStyleTime < std::chrono::milliseconds(200)) {
-  Wh_Log(L".");
-
     return true;
   }
   state.lastApplyStyleTime = now;
@@ -5480,85 +4935,61 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   };
   auto taskFrame = FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
   if (!taskFrame) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find Taskbar.TaskbarFrame");
     return false;
   }
   auto rootGridTaskBar = FindChildByName(taskFrame, L"RootGrid");
   if (!rootGridTaskBar) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find RootGrid in taskFrame");
     return false;
   }
   auto taskbarFrameRepeater = FindChildByName(rootGridTaskBar, L"TaskbarFrameRepeater");
   if (!taskbarFrameRepeater) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find TaskbarFrameRepeater in rootGridTaskBar");
     return false;
   }
   auto trayFrame = FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
   if (!trayFrame) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find SystemTray.SystemTrayFrame");
     return false;
   }
   auto systemTrayFrameGrid = FindChildByName(trayFrame, L"SystemTrayFrameGrid");
   if (!systemTrayFrameGrid) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find SystemTrayFrameGrid in trayFrame");
     return false;
   }
   auto showDesktopButton = FindChildByName(systemTrayFrameGrid, L"ShowDesktopStack");
   if (!showDesktopButton) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find ShowDesktopStack in systemTrayFrameGrid");
     return false;
   }
   auto taskbarBackground = FindChildByClassName(rootGridTaskBar, L"Taskbar.TaskbarBackground");
   if (!taskbarBackground) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find Taskbar.TaskbarBackground in rootGridTaskBar");
     return false;
   }
   auto backgroundFillParent = FindChildByClassName(taskbarBackground, L"Windows.UI.Xaml.Controls.Grid");
   if (!backgroundFillParent) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find backgroundFillParent in taskbarBackground");
     return false;
   }
   auto backgroundFillChild = FindChildByName(backgroundFillParent, L"BackgroundFill");
   if (!backgroundFillChild) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find BackgroundFill in backgroundFillParent");
     return false;
   }
   auto notificationAreaIcons = FindChildByName(systemTrayFrameGrid, L"NotificationAreaIcons");
   if (!notificationAreaIcons) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find NotificationAreaIcons in systemTrayFrameGrid");
     return false;
   }
   auto itemsPresenter = FindChildByClassName(notificationAreaIcons, L"Windows.UI.Xaml.Controls.ItemsPresenter");
   if (!itemsPresenter) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find ItemsPresenter in notificationAreaIcons");
     return false;
   }
   auto stackPanel = FindChildByClassName(itemsPresenter, L"Windows.UI.Xaml.Controls.StackPanel");
   if (!stackPanel) {
-  Wh_Log(L".");
-
     Wh_Log(L"Failed to find StackPanel in itemsPresenter");
     return false;
   }
@@ -5568,8 +4999,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   widgetPresent = widgetPresent && widgetMainView != nullptr;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
   if (widgetPresent && widgetElementWidth <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: widgetPresent && widgetElementWidth<=0");
     return false;
   }
@@ -5577,14 +5006,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto widgetElementVisibleWidth = widgetElementInnerChild ? widgetElementInnerChild.ActualWidth() : 0;
   auto widgetElementVisibleHeight = widgetElementInnerChild ? widgetElementInnerChild.ActualHeight() : 0;
   if (widgetElementInnerChild && widgetElementVisibleWidth <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: widgetElementInnerChild && widgetElementVisibleWidth<=0");
     return false;
   }
   if (widgetElementInnerChild && widgetElementVisibleHeight <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: widgetElementInnerChild && widgetElementVisibleHeight<=0");
     return false;
   }
@@ -5593,64 +5018,46 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   double rootWidth = xamlRootContent.ActualWidth();
   state.lastRootWidth = static_cast<float>(rootWidth);
   if (!g_unloading && rootWidth < 100) {
-  Wh_Log(L".");
-
     Wh_Log(L"root width is too small");
     return false;
   }
   int childrenCountTaskbar = 0;
   const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: childrenWidthTaskbarDbl <= 0");
     return false;
   }
   signed int rightMostEdgeTaskbar = static_cast<signed int>((rootWidth / 2.0) + (childrenWidthTaskbarDbl / 2.0));
   unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl);
   if (!g_unloading && childrenCountTaskbar < 1) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: childrenCountTaskbar < 1");
     return false;
   }
   if (!g_unloading && childrenWidthTaskbar <= 10) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: childrenWidthTaskbar <= 10");
     return false;
   }
   if (!g_unloading && rightMostEdgeTaskbar < 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: rightMostEdgeTaskbar < 0");
     return false;
   }
   bool rightMostEdgeChangedTaskbar = (state.lastTaskbarData.rightMostEdge != rightMostEdgeTaskbar);
   if (!isOverflowing && (rightMostEdgeChangedTaskbar || state.lastTaskbarData.rightMostEdge == 0.0)) {
-  Wh_Log(L".");
-
     state.lastTaskbarData.childrenCount = childrenCountTaskbar;
     state.lastTaskbarData.rightMostEdge = rightMostEdgeTaskbar;
     state.lastTaskbarData.childrenWidth = childrenWidthTaskbar;
   }
   trayFrame.Clip(nullptr);
   if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>().Value() == HorizontalAlignment::Center) {
-  Wh_Log(L".");
-
     trayFrame.SetValue(FrameworkElement::HorizontalAlignmentProperty(), winrt::box_value(HorizontalAlignment::Right));
   }
   int childrenCountTray = 0;
   double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray, state);
   if (!g_unloading && trayFrameWidthDbl <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: trayFrameWidthDbl <= 0");
     return false;
   }
   if (!g_unloading && childrenCountTray <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: childrenCountTray <= 0");
     return false;
   }
@@ -5658,21 +5065,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   int trayGapPlusExtras = g_settings.userDefinedTrayTaskGap + widgetElementVisibleWidth + (widgetPresent ? -6 + g_settings.userDefinedTrayTaskGap : 0);
   const unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthDbl + trayGapPlusExtras);
   if (!g_unloading && childrenCountTray == 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: childrenCountTray == 0");
     return false;
   }
   if (!g_unloading && trayFrameWidth <= 1) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: trayFrameWidth <= 1");
     return false;
   }
   float centeredTray = (rootWidth - trayFrameWidth) / 2.0f;
   if (!g_unloading && centeredTray <= 1) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: centeredTray <= 1");
     return false;
   }
@@ -5681,21 +5082,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   // tray animations
   auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
   if (!systemTrayFrameGridVisual) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: !SystemTrayFrameGridVisual");
     return false;
   }
   auto originalOffset = systemTrayFrameGridVisual.Offset();
   if (state.initOffsetX == -1) {
-  Wh_Log(L".");
-
     state.initOffsetX = originalOffset.x;
   }
   auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   if (!taskbarFrameRepeaterVisual) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: !taskbarFrameRepeaterVisual");
     return false;
   }
@@ -5703,21 +5098,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   targetTaskFrameOffsetX = snapPx(targetTaskFrameOffsetX);
   // 5 pixels tolerance
   if (!g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
-  Wh_Log(L".");
-
     Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
   if (childrenWidthTaskbar < 1) {
-  Wh_Log(L".");
-
     state.lastChildrenWidthTaskbar = 1;
   } else {
     state.lastChildrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbar);
   }
   if (trayFrameWidth < 1) {
-  Wh_Log(L".");
-
     state.lastTrayFrameWidth = 1;
   } else {
     state.lastTrayFrameWidth = static_cast<unsigned int>(trayFrameWidth);
@@ -5725,32 +5114,22 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   signed int userDefinedTaskbarOffsetY = (g_settings.userDefinedFlatTaskbarBottomCorners || g_settings.userDefinedFullWidthTaskbarBackground) ? 0 : g_settings.userDefinedTaskbarOffsetY;
   float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (g_settings.userDefinedTaskbarBackgroundHorizontalPadding * 2));
   if (targetWidth < 1) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: targetWidth<1");
     return false;
   }
   state.lastStartButtonXCalculated = (rootWidth - targetWidth) / 2.0f;
   auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY < 0 ? (userDefinedTaskbarOffsetY * 2) : 0));
   if (heightValue < g_settings.userDefinedTaskbarHeight / 2) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
   }
   if (g_invalidateDimensions) {
-  Wh_Log(L".");
-
     g_invalidateDimensions = false;
     if (g_settings.userDefinedTaskbarHeight <= 0) {
-  Wh_Log(L".");
-
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
     }
     if (heightValue <= 0) {
-  Wh_Log(L".");
-
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
     }
@@ -5764,11 +5143,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     taskbarFrameRepeater.MaxWidth(rootWidth);
   }
   if (auto taskbarFrameRepeaterVisualCompositor = taskbarFrameRepeaterVisual.Compositor()) {
-  Wh_Log(L".");
-
     if (!g_unloading) {
-  Wh_Log(L".");
-
       auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisualCompositor.CreateVector3KeyFrameAnimation();
       auto animationControllerTaskbarFrameRepeaterVisual = taskbarFrameRepeaterVisual.TryGetAnimationController(L"Offset");
       taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
@@ -5781,18 +5156,12 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto taskbarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   auto trayVisualCompositor = systemTrayFrameGridVisual.Compositor();
   if (trayVisualCompositor) {
-  Wh_Log(L".");
-
     if (!g_unloading) {
-  Wh_Log(L".");
-
       float targetOffsetXTray = static_cast<float>(newXOffsetTray - trayGapPlusExtras - (rootWidth - trayFrameWidth));
       targetOffsetXTray = snapPx(targetOffsetXTray);
       auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
       trayAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXTray, systemTrayFrameGridVisual.Offset().y, systemTrayFrameGridVisual.Offset().z});
       if (movingInwards) {
-  Wh_Log(L".");
-
         trayAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
       }
       systemTrayFrameGridVisual.StartAnimation(L"Offset", trayAnimation);
@@ -5801,37 +5170,23 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     }
   }
   if (widgetPresent && widgetMainView) {
-  Wh_Log(L".");
-
     if (widgetElement) {
-  Wh_Log(L".");
-
       auto widgetVisualParent = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetElement);
       if (widgetVisualParent && widgetVisualParent.Offset().x != 0.0f) {
-  Wh_Log(L".");
-
         widgetVisualParent.Offset({0.0f, widgetVisualParent.Offset().y, widgetVisualParent.Offset().z});
       }
     }
     auto widgetVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(widgetMainView);
     if (widgetVisual) {
-  Wh_Log(L".");
-
       if (!g_unloading) {
-  Wh_Log(L".");
-
         auto compositorWidget = widgetVisual.Compositor();
         if (compositorWidget) {
-  Wh_Log(L".");
-
           float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar - 8) + g_settings.userDefinedTrayTaskGap;
           targetOffsetXWidget = snapPx(targetOffsetXWidget);
           float targetOffsetYWidget = snapPx(static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)));
           auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
           widgetOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetOffsetXWidget, targetOffsetYWidget, taskbarVisual.Offset().z});
           if (movingInwards) {
-  Wh_Log(L".");
-
             widgetOffsetAnimation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(childrenCountTaskbar * 4)));
           }
           widgetVisual.StartAnimation(L"Offset", widgetOffsetAnimation);
@@ -5842,48 +5197,34 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     }
   }
   if (state.lastTargetWidth <= 10) {
-  Wh_Log(L".");
-
     state.lastTargetWidth = static_cast<float>(rootWidth);
     if (!g_unloading && state.lastTargetWidth <= 0) {
-  Wh_Log(L".");
-
       Wh_Log(L"Error: g_unloading && state.lastTargetWidth <= 0");
       return false;
     }
   }
   const float targetWidthRect = !g_settings.userDefinedFullWidthTaskbarBackground ? targetWidth : static_cast<float>(rootWidth);
   if (!g_unloading && targetWidthRect <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: targetWidthRect<=0");
     return false;
   }
   int rightMostEdgeTray = static_cast<int>((rootWidth - targetWidth) / 2 + targetWidth);
   if (state.lastRightMostEdgeTray != rightMostEdgeTray) {
-  Wh_Log(L".");
-
     state.lastRightMostEdgeTray = rightMostEdgeTray;
     Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), rightMostEdgeTray);
   }
   float leftMostEdgeTray = rightMostEdgeTray - trayFrameWidth;
   if (leftMostEdgeTray != state.lastLeftMostEdgeTray) {
-  Wh_Log(L".");
-
     state.lastLeftMostEdgeTray = leftMostEdgeTray;
     Wh_SetIntValue((L"lastLeftMostEdgeTray_" + monitorName).c_str(), static_cast<int>(leftMostEdgeTray));
   }
   const auto targetHeightPrelim = (!g_settings.userDefinedFullWidthTaskbarBackground ? g_settings.userDefinedTaskbarHeight : xamlRootContent.ActualHeight());
   if (!g_unloading && targetHeightPrelim <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: targetHeightPrelim<=0");
     return false;
   }
   const auto clipHeight = static_cast<float>(targetHeightPrelim + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? (targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius) : 0.0f));
   if (!g_unloading && clipHeight <= 0) {
-  Wh_Log(L".");
-
     Wh_Log(L"Error: clipHeight<=0");
     return false;
   }
@@ -5891,37 +5232,26 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   ChangeControlCenterIconSize(systemTrayFrameGrid);
   auto trayOverflowArrowNotifyIconStack = FindChildByName(systemTrayFrameGrid, L"NotifyIconStack");
   if (trayOverflowArrowNotifyIconStack) {
-  Wh_Log(L".");
-
     SetDividerForElement(trayOverflowArrowNotifyIconStack, clipHeight, g_settings.userDefinedTrayAreaDivider, true);
   } else {
     SetDividerForElement(stackPanel, clipHeight, g_settings.userDefinedTrayAreaDivider, true);
   }
   //  if (widgetPresent && widgetElementInnerChild) {
-  Wh_Log(L".");
-
   //    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
   //  }
   if (!taskbarBackground) return false;
   auto taskbarStroke = FindChildByName(backgroundFillParent, L"BackgroundStroke");
   if (taskbarStroke) {
-  Wh_Log(L".");
-
     taskbarStroke.Opacity(g_unloading ? 1.0 : 0.0);
   }
   auto screenEdgeStroke = FindChildByName(rootGridTaskBar, L"ScreenEdgeStroke");
   if (screenEdgeStroke) {
-  Wh_Log(L".");
-
     screenEdgeStroke.Opacity(g_unloading ? 1.0 : 0.0);
   }
-  auto userDefinedTaskbarBackgroundLuminosity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f);
-  auto userDefinedTaskbarBackgroundOpacity = std::to_wstring(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f);
-  auto userDefinedTaskbarBackgroundTint = std::to_wstring(g_settings.userDefinedTaskbarBackgroundTint / 100.0f);
-  if (g_settings.userDefinedCustomizeTaskbarBackground) {
-  Wh_Log(L".");
-
-    SetElementPropertyFromString(backgroundFillChild, L"Windows.UI.Xaml.Shapes.Rectangle", L"Fill", L"<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"" + userDefinedTaskbarBackgroundTint + L"\" TintLuminosityOpacity=\"" + userDefinedTaskbarBackgroundLuminosity + L"\" Opacity=\"" + userDefinedTaskbarBackgroundOpacity + L"\"/>", true);
+ if (g_unloading) {
+    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
+  } else if (g_settings.userDefinedCustomizeTaskbarBackground) {
+    ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
 //    For custom brush
 //    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
 //    float blurAmount = float(g_settings.userDefinedTaskbarBackgroundLuminosity);
@@ -5937,14 +5267,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto compositorTaskBackground = backgroundFillVisual.Compositor();
   // borders and corners
   if (!g_unloading) {
-  Wh_Log(L".");
-
     if (backgroundFillVisual) {
-  Wh_Log(L".");
-
       if (compositorTaskBackground) {
-  Wh_Log(L".");
-
         auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
         roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
         auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
@@ -5965,8 +5289,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         shapeVisualBorderControl.Shapes().Append(borderShape);
         winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisualBorderControl);
         if (!g_settings.userDefinedFullWidthTaskbarBackground) {
-  Wh_Log(L".");
-
           float offsetXRect = snapPx(static_cast<float>((rootWidth - targetWidth) / 2));
           float newOffsetYRect = snapPx(userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f);
           // size animation
@@ -6004,13 +5326,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     }
   } else {
     if (backgroundFillVisual) {
-  Wh_Log(L".");
-
       backgroundFillVisual.Clip(nullptr);
     }
     if (compositorTaskBackground) {
-  Wh_Log(L".");
-
       winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
     }
   }
@@ -6022,27 +5340,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   return true;
 }
 void ApplySettings(HWND hTaskbarWnd) {
-  Wh_Log(L".");
-
-  RunFromWindowThread(hTaskbarWnd, [](void* pParam) {
-  Wh_Log(L".");
- ApplySettingsFromTaskbarThread(); }, 0);
+  RunFromWindowThread(hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
 }
 void RefreshSettings() {
-  Wh_Log(L".");
-
   g_invalidateDimensions = true;
   Wh_ModSettingsChangedTBIconSize();
   Wh_ModSettingsChangedStartButtonPosition();
   UpdateGlobalSettings();
 }
 void ResetGlobalVars() {
-  Wh_Log(L".");
-
   g_invalidateDimensions = true;
   for (auto& [key, state] : g_taskbarStates) {
-  Wh_Log(L".");
-
     state.lastTaskbarData.childrenCount = 0;
     state.lastTaskbarData.rightMostEdge = 0;
     // state.lastTaskbarData.childrenWidth = 0;
@@ -6053,11 +5361,7 @@ void ResetGlobalVars() {
 }
 bool g_PartialMode = false;
 void Wh_ModSettingsChanged() {
-  Wh_Log(L".");
-
   if (g_PartialMode) {
-  Wh_Log(L".");
-
     return;
   }
   Wh_Log(L"Settings Changed");
@@ -6066,16 +5370,10 @@ void Wh_ModSettingsChanged() {
   ApplySettingsFromTaskbarThread();
 }
 bool IsExplorer() {
-  Wh_Log(L".");
-
   wchar_t processPath[MAX_PATH];
   if (GetModuleFileName(NULL, processPath, MAX_PATH)) {
-  Wh_Log(L".");
-
     const wchar_t* processName = wcsrchr(processPath, L'\\');
     if (processName && _wcsicmp(processName + 1, L"explorer.exe") == 0) {
-  Wh_Log(L".");
-
       return true;
     }
   }
@@ -6084,18 +5382,12 @@ bool IsExplorer() {
 using SetWindowPos_t = BOOL(WINAPI*)(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
 SetWindowPos_t SetWindowPos_Original = nullptr;
 std::wstring GetProcessExeName(DWORD processId) {
-  Wh_Log(L".");
-
   std::wstring result = L"<unknown>";
   HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
   if (hProcess) {
-  Wh_Log(L".");
-
     WCHAR path[MAX_PATH];
     DWORD size = ARRAYSIZE(path);
     if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-  Wh_Log(L".");
-
       std::wstring fullPath = path;
       size_t pos = fullPath.find_last_of(L"\\/");
       result = (pos != std::wstring::npos) ? fullPath.substr(pos + 1) : fullPath;
@@ -6105,13 +5397,9 @@ std::wstring GetProcessExeName(DWORD processId) {
   return result;
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-  Wh_Log(L".");
-
   DWORD processId = 0;
   bool userDefinedMoveFlyoutControlCenter = Wh_GetIntSetting(L"MoveFlyoutControlCenter");
   if (!hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
-  Wh_Log(L".");
-
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
   }
   WCHAR className[256] = L"<unknown>";
@@ -6119,13 +5407,9 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   std::wstring windowClassName = className;
   std::wstring processFileName = GetProcessExeName(processId);
   if (true) {
-  Wh_Log(L".");
-
     Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X", processId, processFileName.c_str(), windowClassName.c_str(), hWnd, X, Y, cx, cy, uFlags);
   }
   if (!g_unloading && userDefinedMoveFlyoutControlCenter && _wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
-  Wh_Log(L".");
-
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),
@@ -6134,8 +5418,6 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
     auto monitorName = GetMonitorName(monitor);
     int lastRecordedTrayRightMostEdgeForMonitor = Wh_GetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), -1);
     if (lastRecordedTrayRightMostEdgeForMonitor > 0) {
-  Wh_Log(L".");
-
       UINT monitorDpiX = 96;
       UINT monitorDpiY = 96;
       GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
@@ -6149,20 +5431,12 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 BOOL Wh_ModInit() {
-  Wh_Log(L".");
-
   Wh_Log(L"======================================================");
   HMODULE moduleUser32 = LoadLibraryW(L"user32.dll");
   if (moduleUser32) {
-  Wh_Log(L".");
-
     auto pSetWindowPos = (SetWindowPos_t)GetProcAddress(moduleUser32, "SetWindowPos");
     if (pSetWindowPos) {
-  Wh_Log(L".");
-
       if (WindhawkUtils::Wh_SetFunctionHookT(pSetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original)) {
-  Wh_Log(L".");
-
         Wh_Log(L"Successfully hooked SetWindowPos");
       } else {
         Wh_Log(L"Failed to hook SetWindowPos");
@@ -6174,14 +5448,10 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Failed to load user32.dll");
   }
   if (!IsExplorer()) {
-  Wh_Log(L".");
-
     g_PartialMode = true;
     Wh_Log(L"Not explorer.exe; setting g_PartialMode to true");
     HMODULE moduleStartDocked = GetModuleHandle(L"StartDocked.dll");
     if (moduleStartDocked) {
-  Wh_Log(L".");
-
       WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
       return WindhawkUtils::HookSymbols(moduleStartDocked, hook, ARRAYSIZE(hook));
     }
@@ -6190,25 +5460,17 @@ BOOL Wh_ModInit() {
   g_unloading = false;
   ArmInitialExplorerStyleApplyDelay();
   if (!Wh_ModInitTBIconSize()) {
-  Wh_Log(L".");
-
     Wh_Log(L"Wh_ModInitTBIconSize failed");
     return FALSE;
   }
   if (!Wh_ModInitStartButtonPosition()) {
-  Wh_Log(L".");
-
     Wh_Log(L"Wh_ModInitStartButtonPosition failed");
     return FALSE;
   }
   return TRUE;
 }
 void Wh_ModAfterInit() {
-  Wh_Log(L".");
-
   if (g_PartialMode) {
-  Wh_Log(L".");
-
     g_lastRecordedStartMenuWidth = Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
     return;
   }
@@ -6220,11 +5482,7 @@ void Wh_ModAfterInit() {
   ScheduleInitialExplorerStyleApply();
 }
 void Wh_ModBeforeUninit() {
-  Wh_Log(L".");
-
   if (g_PartialMode) {
-  Wh_Log(L".");
-
     return;
   }
   g_unloading = true;
@@ -6233,17 +5491,11 @@ void Wh_ModBeforeUninit() {
   RefreshSettings();
   HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
   if (hTaskbarWnd) {
-  Wh_Log(L".");
-
     ApplySettings(hTaskbarWnd);
   }
 }
 void Wh_ModUninit() {
-  Wh_Log(L".");
-
   if (g_PartialMode) {
-  Wh_Log(L".");
-
     return;
   }
   Wh_ModUninitTBIconSize();

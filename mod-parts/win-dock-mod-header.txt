@@ -10,7 +10,7 @@
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions {compiler_options}
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols -DWINVER=0x0A00 -lversion
 // @architecture    x86-64
 // ==/WindhawkMod==
 
