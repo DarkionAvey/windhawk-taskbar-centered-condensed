@@ -74,8 +74,24 @@ typedef enum MONITOR_DPI_TYPE {
   float lastStartButtonXActual=0.0f;
   float lastRootWidth=0.0f;
   float lastTargetTaskFrameOffsetX=0.0f;
+  bool hasLastTargetTaskFrameOffsetX{false};
+  float lastTargetTrayOffsetX{0.0f};
+  bool hasLastTargetTrayOffsetX{false};
+  float lastTargetWidgetOffsetX{0.0f};
+  float lastTargetWidgetOffsetY{0.0f};
+  bool hasLastTargetWidgetOffset{false};
   float lastLeftMostEdgeTray{0};
   int lastRightMostEdgeTray{0};
+  float lastBackgroundShapeTargetWidth{0.0f};
+  float lastBackgroundShapeTargetOffsetX{0.0f};
+  float lastBackgroundShapeTargetOffsetY{0.0f};
+  float backgroundAnimationFromWidth{0.0f};
+  float backgroundAnimationToWidth{0.0f};
+  float backgroundAnimationFromOffsetX{0.0f};
+  float backgroundAnimationToOffsetX{0.0f};
+  float backgroundAnimationFromOffsetY{0.0f};
+  float backgroundAnimationToOffsetY{0.0f};
+  int64_t backgroundAnimationStartMs{0};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
         struct {
@@ -116,6 +132,9 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
         void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+void ApplySettingsFromTaskbarThreadImmediately();
+void ApplySettingsFromTaskbarThreadGeometryChanged();
+extern std::atomic<int> g_high_priority_dispatch_passes;
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;
@@ -859,6 +878,7 @@ void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
     g_inSystemTrayController_UpdateFrameSize = true;
     SystemTrayController_UpdateFrameSize_Original(pThis);
     g_inSystemTrayController_UpdateFrameSize = false;
+ApplySettingsFromTaskbarThreadGeometryChanged();
 }
 using TaskbarFrame_MaxHeight_double_t = void(WINAPI*)(void* pThis,
                                                       double value);
@@ -928,6 +948,14 @@ LONG GetTaskbarFrameOffset() {
 void TaskbarController_OnGroupingModeChanged_InitOffsets() {
     GetTaskbarFrameOffset();
 }
+using TaskbarController_OnGroupingModeChanged_t = void(WINAPI*)(void* pThis);
+TaskbarController_OnGroupingModeChanged_t
+    TaskbarController_OnGroupingModeChanged_Hook_Original;
+void WINAPI TaskbarController_OnGroupingModeChanged_Hook(void* pThis) {
+    Wh_Log(L"TaskbarController::OnGroupingModeChanged Hook");
+    TaskbarController_OnGroupingModeChanged_Hook_Original(pThis);
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+}
 using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
 TaskbarController_UpdateFrameHeight_t
     TaskbarController_UpdateFrameHeight_Original;
@@ -978,7 +1006,7 @@ SystemTraySecondaryController_UpdateFrameSize_t
 void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
     g_inSystemTrayController_UpdateFrameSize = true;
     SystemTraySecondaryController_UpdateFrameSize_Original(pThis);
-    g_inSystemTrayController_UpdateFrameSize = false;
+    g_inSystemTrayController_UpdateFrameSize = false;ApplySettingsFromTaskbarThreadGeometryChanged();
 }
 using SystemTrayFrame_Height_t = void(WINAPI*)(void* pThis, double value);
 SystemTrayFrame_Height_t SystemTrayFrame_Height_Original;
@@ -1888,7 +1916,11 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
             &SystemTrayController_UpdateFrameSize_Original);
     }
     if (TaskbarController_OnGroupingModeChanged_Original) {
-        TaskbarController_OnGroupingModeChanged_InitOffsets();
+        TaskbarController_OnGroupingModeChanged_InitOffsets();WindhawkUtils::Wh_SetFunctionHookT(
+            reinterpret_cast<TaskbarController_OnGroupingModeChanged_t>(
+                TaskbarController_OnGroupingModeChanged_Original),
+            TaskbarController_OnGroupingModeChanged_Hook,
+            &TaskbarController_OnGroupingModeChanged_Hook_Original);
     }
     if (TaskListButton_UpdateIconColumnDefinition_Original) {
         TaskListButton_UpdateIconColumnDefinition_InitOffsets();

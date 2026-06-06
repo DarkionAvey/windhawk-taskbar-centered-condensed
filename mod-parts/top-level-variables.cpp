@@ -1,6 +1,9 @@
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
+void ApplySettingsFromTaskbarThreadImmediately();
+void ApplySettingsFromTaskbarThreadGeometryChanged();
+extern std::atomic<int> g_high_priority_dispatch_passes;
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;

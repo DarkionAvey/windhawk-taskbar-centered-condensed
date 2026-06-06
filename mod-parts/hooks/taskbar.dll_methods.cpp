@@ -1,3 +1,15 @@
+bool IsTaskbarGeometryMessage(UINT msg) {
+  switch (msg) {
+    case WM_SIZE:
+    case WM_WINDOWPOSCHANGED:
+    case WM_SETTINGCHANGE:
+    case WM_DISPLAYCHANGE:
+    case WM_DPICHANGED:
+      return true;
+    default:
+      return false;
+  }
+}
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
@@ -13,28 +25,38 @@ void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
 TrayUI_WndProc_t TrayUI_WndProc_Original;
 LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag) {
-  ApplySettingsFromTaskbarThreadIfRequired();
-  return TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
+  LRESULT ret = TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
+  if (IsTaskbarGeometryMessage(Msg)) {
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+  } else {
+    ApplySettingsFromTaskbarThreadIfRequired();
+  }
+  return ret;
 }
 using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
 LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-  ApplySettingsFromTaskbarThreadIfRequired();
-  return CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+  LRESULT ret = CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+  if (IsTaskbarGeometryMessage(Msg)) {
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+  } else {
+    ApplySettingsFromTaskbarThreadIfRequired();
+  }
+  return ret;
 }
 using CTaskBand__ProcessWindowDestroyed_t = void(WINAPI*)(void* pThis, void* pHwnd);
 CTaskBand__ProcessWindowDestroyed_t CTaskBand__ProcessWindowDestroyed_Original;
 void WINAPI CTaskBand__ProcessWindowDestroyed_Hook(void* pThis, void* pHwnd) {
   Wh_Log(L"CTaskBand::CTaskBand__ProcessWindowDestroyed_Hook Hook");
   CTaskBand__ProcessWindowDestroyed_Original(pThis, pHwnd);
-  ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadImmediately();
 }
 using CTaskBand__InsertItem_t = long(WINAPI*)(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2);
 CTaskBand__InsertItem_t CTaskBand__InsertItem_Original;
 long WINAPI CTaskBand__InsertItem_Hook(void* pThis, void* pHwnd, void** ppTaskItem, void* pHwnd1, void* pHwnd2) {
   Wh_Log(L"CTaskBand::_InsertItem Hook");
   auto original_call = CTaskBand__InsertItem_Original(pThis, pHwnd, ppTaskItem, pHwnd1, pHwnd2);
-  ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadImmediately();
   return original_call;
 }
 using CTaskBand__UpdateAllIcons_t = void(WINAPI*)(void* pThis);
@@ -49,7 +71,7 @@ CTaskBand__TaskOrderChanged_t CTaskBand__TaskOrderChanged_Original;
 void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int param) {
   Wh_Log(L"CTaskBand::TaskOrderChanged Hook");
   CTaskBand__TaskOrderChanged_Original(pThis, pTaskGroup, param);
-  ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadImmediately();
 }
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
@@ -60,20 +82,35 @@ __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int 
 using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskBand__WndProc_t CTaskBand__WndProc_Original;
 __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  ApplySettingsFromTaskbarThreadIfRequired();
-  return CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  __int64 ret = CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  if (IsTaskbarGeometryMessage(msg)) {
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+  } else {
+    ApplySettingsFromTaskbarThreadIfRequired();
+  }
+  return ret;
 }
 using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
 __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  ApplySettingsFromTaskbarThreadIfRequired();
-  return CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  __int64 ret = CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  if (IsTaskbarGeometryMessage(msg)) {
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+  } else {
+    ApplySettingsFromTaskbarThreadIfRequired();
+  }
+  return ret;
 }
 using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
 __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
-  ApplySettingsFromTaskbarThreadIfRequired();
-  return CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  __int64 ret = CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam);
+  if (IsTaskbarGeometryMessage(msg)) {
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+  } else {
+    ApplySettingsFromTaskbarThreadIfRequired();
+  }
+  return ret;
 }
 using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
@@ -95,9 +132,8 @@ CTaskBand_RemoveIcon_WithArgs_t CTaskBand_RemoveIcon_WithArgs_Original;
 void WINAPI CTaskBand_RemoveIcon_WithArgs_Hook(void* pThis, ITaskItem* param1) {
   Wh_Log(L"Method called: CTaskBand_RemoveIcon");
   CTaskBand_RemoveIcon_WithArgs_Original(pThis, param1);
-  ApplySettingsFromTaskbarThreadIfRequired();
+  ApplySettingsFromTaskbarThreadImmediately();
 }
-
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis, int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
 HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis, int* alignment) {

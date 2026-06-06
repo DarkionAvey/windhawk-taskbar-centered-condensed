@@ -753,6 +753,7 @@ class TaskbarIconSizeMod(URLProcessor):
 
         return (
             patch.replace_literal('Wh_GetIntSetting(L"IconSize")', 'Wh_GetIntSetting(L"TaskbarIconSize")')
+            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;","\nApplySettingsFromTaskbarThreadGeometryChanged();",in_function="void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis)")
             .replace_literal('Wh_GetIntSetting(L"TaskbarButtonWidth")', 'Wh_GetIntSetting(L"TaskbarButtonSize")')
             .replace_literal("STDAPI GetDpiForMonitor", injected_dpi_prefix, count=1,
                              label="insert shared taskbar helpers before GetDpiForMonitor")
@@ -760,7 +761,20 @@ class TaskbarIconSizeMod(URLProcessor):
                              'Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");',
                              in_function="void Wh_ModAfterInitTBIconSize()")
             .insert_before_literal("#include <winrt/Windows.Foundation.h>\n#include <winrt/Windows.UI.Xaml.Automation.h>","#include <initguid.h>\n",)
-
+.insert_after_literal("TaskbarController_OnGroupingModeChanged_InitOffsets();","""WindhawkUtils::Wh_SetFunctionHookT(
+            reinterpret_cast<TaskbarController_OnGroupingModeChanged_t>(
+                TaskbarController_OnGroupingModeChanged_Original),
+            TaskbarController_OnGroupingModeChanged_Hook,
+            &TaskbarController_OnGroupingModeChanged_Hook_Original);""", in_function="bool HookTaskbarViewDllSymbols(HMODULE module, bool hookSystemTraySymbolsInline)")
+            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;","ApplySettingsFromTaskbarThreadGeometryChanged();",in_function="void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis)")
+            .insert_before_regex(re.escape(r"using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);"),"""using TaskbarController_OnGroupingModeChanged_t = void(WINAPI*)(void* pThis);
+TaskbarController_OnGroupingModeChanged_t
+    TaskbarController_OnGroupingModeChanged_Hook_Original;
+void WINAPI TaskbarController_OnGroupingModeChanged_Hook(void* pThis) {
+    Wh_Log(L"TaskbarController::OnGroupingModeChanged Hook");
+    TaskbarController_OnGroupingModeChanged_Hook_Original(pThis);
+    ApplySettingsFromTaskbarThreadGeometryChanged();
+}\n""")
             .replace_literal(
                 ' = Wh_GetIntSetting(L"TaskbarHeight");',
                 ' = Wh_GetIntSetting(L"TaskbarHeight") + ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground"))?0:(abs(Wh_GetIntSetting(L"TaskbarOffsetY"))*2));',
@@ -1038,9 +1052,16 @@ void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor){
             if (dispatcher.HasThreadAccess()) {
                 applyOnDispatcher();
             } else if (!g_unloading){
-                dispatcher.TryRunAsync(
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
-                    applyOnDispatcher);
+                auto priority = winrt::Windows::UI::Core::CoreDispatcherPriority::Low;
+                int highPriorityPasses = g_high_priority_dispatch_passes.load();
+                while (highPriorityPasses > 0) {
+                    if (g_high_priority_dispatch_passes.compare_exchange_weak(
+                            highPriorityPasses, highPriorityPasses - 1)) {
+                        priority = winrt::Windows::UI::Core::CoreDispatcherPriority::High;
+                        break;
+                    }
+                }
+                dispatcher.TryRunAsync(priority, applyOnDispatcher);
             }
 
   ''',

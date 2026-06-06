@@ -80,7 +80,7 @@
 
 - TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
   $name: Background tint color
-  $description: WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $description: WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}. Use {ThemeResource SystemBaseHighColor} if you want white color when Windows is in dark mode, or black in light mode.
   $type: string
 
 - TaskbarBackgroundTintSaturation: 100
