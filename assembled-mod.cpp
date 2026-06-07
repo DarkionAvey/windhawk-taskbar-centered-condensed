@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.61
+// @version         1.5.116
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -58,7 +58,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
 | `TaskbarHeight` | Taskbar height | Set the height of the taskbar (Default is 74) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons (Default is 42) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42 | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Set the size (width and height) of taskbar buttons (Default is 74) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
 | `TrayTaskGap` | Tray task gap | Adjust the space between the task area and the tray area (Default is 10) | Non-negative integer |
@@ -75,8 +75,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundBlurAmount` | Background blur amount | WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30 | Non-negative integer |
 | `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}. Use {ThemeResource SystemBaseHighColor} if you want white color when Windows is in dark mode, or black in light mode. | Text |
 | `TaskbarBackgroundTintSaturation` | Background saturation | WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500 | Non-negative integer |
-| `TaskbarBackgroundNoiseOpacity` | Background noise opacity | WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0 | Non-negative integer |
-| `TaskbarBackgroundNoiseDensity` | Background noise density | WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100 | Non-negative integer |
+| `TaskbarBackgroundInversion` | Background inversion | Inverts the blurred background behind the taskbar. 0 = off, 100 = fully inverted. Low values add subtle opposite-background contrast. Default is 0 | Non-negative integer |
 | `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20) | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |
@@ -102,7 +101,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
   $description: Set the height of the taskbar (Default is 74)
 - TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Set the width and height of taskbar icons (Default is 42)
+  $description: Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42
 - TaskbarButtonSize: 74
   $name: Taskbar button size
   $description: Set the size (width and height) of taskbar buttons (Default is 74)
@@ -151,12 +150,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarBackgroundTintSaturation: 100
   $name: Background saturation
   $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500
-- TaskbarBackgroundNoiseOpacity: 0
-  $name: Background noise opacity
-  $description: WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0
-- TaskbarBackgroundNoiseDensity: 100
-  $name: Background noise density
-  $description: WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100
+- TaskbarBackgroundInversion: 0
+  $name: Background inversion
+  $description: Inverts the blurred background behind the taskbar. 0 = off, 100 = fully inverted. Low values add subtle opposite-background contrast. Default is 0
 - TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
   $name: Background fallback color
   $description: Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
@@ -258,6 +254,46 @@ int g_taskbarHeight;
 std::atomic<DWORD> g_shellIconLoaderV2_LoadAsyncIcon__ResumeCoro_ThreadId;
 bool g_inSystemTrayController_UpdateFrameSize;
 bool g_taskbarButtonWidthCustomized;
+constexpr int kDefaultTaskbarHeight = 74;
+constexpr int kDefaultTaskbarIconSize = 42;
+constexpr int kDefaultTaskbarButtonSize = 74;
+constexpr int kDefaultTaskbarOffsetY = 6;
+constexpr int kDefaultTrayIconSize = 15;
+constexpr int kDefaultTrayButtonSize = 30;
+constexpr int kSystemSmallTaskbarIconSize = 16;
+constexpr int kSystemMediumTaskbarIconSize = 24;
+constexpr int kSystemSmallTaskbarButtonSize = 32;
+constexpr int kSystemMediumTaskbarButtonSize = 44;
+constexpr int kMinTaskbarHeight = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarHeight = 200;
+constexpr int kMinTaskbarButtonSize = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarButtonSize = 300;
+constexpr int kMinTaskbarIconSize = 8;
+constexpr int kMaxTaskbarIconSize = 300;
+constexpr int kMinTrayIconSize = 15;
+constexpr int kMinTrayButtonSize = 20;
+constexpr double kLayoutToleranceDip = 0.5;
+constexpr int kWorkerShutdownPollMs = 10;
+constexpr int kDelayedApplyWorkerShutdownTimeoutMs = 5000;
+constexpr int kAnimationFollowupWorkerShutdownTimeoutMs = 2000;
+constexpr int kTaskbarMeasurePollIntervalMs = 100;
+constexpr int kTaskbarMeasureOverrideTimeoutMs = 10000;
+constexpr int kHookDrainPollIntervalMs = 100;
+constexpr int kHookDrainTimeoutMs = 10000;
+bool WaitForConditionWithTimeout(std::function<bool()> condition,
+                                 int timeoutMs,
+                                 int pollIntervalMs);
+int ClampInt(int value, int minValue, int maxValue) {
+  return value < minValue ? minValue : (value > maxValue ? maxValue : value);
+}
+int ReadPositiveIntSettingOrDefault(const wchar_t* key, int defaultValue) {
+  int value = Wh_GetIntSetting(key);
+  return value > 0 ? value : defaultValue;
+}
+int GetMaxTaskbarIconSizeForLayout(int taskbarHeight, int taskbarButtonSize) {
+  int maxIconSize = std::min(kMaxTaskbarIconSize, std::min(taskbarHeight, taskbarButtonSize));
+  return std::max(kMinTaskbarIconSize, maxIconSize);
+}
 bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 double* double_48_value_Original;
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
@@ -323,8 +359,7 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int userDefinedTaskbarBackgroundBlurAmount;
   std::wstring userDefinedTaskbarBackgroundTintColor;
   unsigned int userDefinedTaskbarBackgroundTintSaturation;
-  unsigned int userDefinedTaskbarBackgroundNoiseOpacity;
-  unsigned int userDefinedTaskbarBackgroundNoiseDensity;
+  unsigned int userDefinedTaskbarBackgroundInversion;
   std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
   double userDefinedTaskbarBorderThickness;
@@ -346,10 +381,11 @@ void ApplySettingsFromTaskbarThreadIfRequired();
 void ApplySettingsFromTaskbarThreadImmediately();
 void ApplySettingsFromTaskbarThreadGeometryChanged();
 extern std::atomic<int> g_high_priority_dispatch_passes;
+void RequestTaskbarButtonSizeRelayout();
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;
-int g_lastRecordedStartMenuWidth=670;
+int g_lastRecordedStartMenuWidth=0;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 #include <Windows.h>
@@ -383,9 +419,20 @@ int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
 int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
     int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
     if (taskbarHeight <= 0) {
-        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : 44;
+        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : kSystemMediumTaskbarButtonSize;
     }
     return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
+}
+int GetFlyoutInnerPaddingPx(float dpiScale) {
+    if (dpiScale <= 0.0f) {
+        dpiScale = 1.0f;
+    }
+    constexpr int kMaxFlyoutInnerPaddingDip = 32;
+    const float logicalPadding =
+        std::min<float>(kMaxFlyoutInnerPaddingDip,
+                        static_cast<float>(g_settings.userDefinedTaskbarBackgroundHorizontalPadding) +
+                            (g_settings.userDefinedTaskbarCornerRadius * 0.5f));
+    return std::max(0, static_cast<int>((logicalPadding * dpiScale) + 0.5f));
 }
 bool IsVerticalTaskbar();
 bool TryCalculateFlyoutYAboveTaskbar(const MONITORINFO& monitorInfo,
@@ -1495,9 +1542,12 @@ void WINAPI LaunchListItemViewModel_IconHeight_Hook(void* pThis,
 }
 using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 ExperienceToggleButton_UpdateButtonPadding_t
-    ExperienceToggleButton_UpdateButtonPadding_Original;
+    ExperienceToggleButton_UpdateButtonPadding_Original;double GetEffectiveTaskbarButtonTargetWidth();
+bool EnsureElementTaskbarButtonWidth(FrameworkElement const& element,
+                                     double targetWidth,
+                                     bool allowHardWidth);
 void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
-    ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
+ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
         return;
     }
@@ -1513,44 +1563,30 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     if (!panelElement) {
         return;
     }
-    double defaultWidthExtra = -4;
     auto className = winrt::get_class_name(toggleButtonElement);
-    if (className == L"Taskbar.ExperienceToggleButton") {
-        auto automationId = Automation::AutomationProperties::GetAutomationId(
-            toggleButtonElement);
-        if (automationId == L"StartButton") {
-            defaultWidthExtra = -3;
-        }
-    } else if (className == L"Taskbar.SearchBoxButton") {
-        if (panelElement.Margin() != Thickness{}) {
-            return;
-        }
-    } else {
+    if (className != L"Taskbar.ExperienceToggleButton" &&
+        className != L"Taskbar.SearchBoxButton") {
         return;
     }
-    double buttonWidth = panelElement.Width();
-    if (!(buttonWidth > 0)) {
+    if (className == L"Taskbar.SearchBoxButton" && panelElement.Margin() != Thickness{}) {
         return;
     }
-    auto buttonPadding = panelElement.Padding();
-    double defaultWidth = g_smallIconSize ? 32 : 44;
-    double overrideWidth =
-        g_unloading ? defaultWidth
-                    : (g_smallIconSize ? g_settings_tbiconsize.taskbarButtonWidthSmall
-                                       : g_settings_tbiconsize.taskbarButtonWidth);
-    double newWidth = overrideWidth + buttonPadding.Left + buttonPadding.Right +
-                      defaultWidthExtra;
-    if (newWidth != buttonWidth) {
-        Wh_Log(L"Updating MediumTaskbarButtonExtent for %s: %f->%f",
-               className.c_str(), buttonWidth, newWidth);
-        panelElement.Width(newWidth);
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    const bool allowHardWidth =
+        className != L"Taskbar.SearchBoxButton" ||
+        !FindChildByName(panelElement, L"SearchBoxTextBlock");
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, allowHardWidth);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, allowHardWidth) || changed;
+    if (changed) {
+        Wh_Log(L"Updating taskbar button width for %s to %f", className.c_str(), targetWidth);
+        panelElement.UpdateLayout();
     }
 }
 using SearchButtonBase_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 SearchButtonBase_UpdateButtonPadding_t
     SearchButtonBase_UpdateButtonPadding_Original;
 void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
-    SearchButtonBase_UpdateButtonPadding_Original(pThis);
+SearchButtonBase_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
         return;
     }
@@ -1569,22 +1605,12 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
     if (FindChildByName(panelElement, L"SearchBoxTextBlock")) {
         return;
     }
-    double buttonWidth = panelElement.Width();
-    if (!(buttonWidth > 0)) {
-        return;
-    }
-    auto buttonPadding = panelElement.Padding();
-    double defaultWidth = g_smallIconSize ? 32 : 44;
-    double overrideWidth =
-        g_unloading ? defaultWidth
-                    : (g_smallIconSize ? g_settings_tbiconsize.taskbarButtonWidthSmall
-                                       : g_settings_tbiconsize.taskbarButtonWidth);
-    double newWidth =
-        overrideWidth + buttonPadding.Left + buttonPadding.Right - 4;
-    if (newWidth != buttonWidth) {
-        Wh_Log(L"Updating MediumTaskbarButtonExtent: %f->%f", buttonWidth,
-               newWidth);
-        panelElement.Width(newWidth);
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, true);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, true) || changed;
+    if (changed) {
+        Wh_Log(L"Updating search button width to %f", targetWidth);
+        panelElement.UpdateLayout();
     }
 }
 using AugmentedEntryPointButton_UpdateButtonPadding_t =
@@ -1749,22 +1775,25 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
     return ret;
 }
 void LoadSettingsTBIconSize() {
-  g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
-  g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
-  if (g_settings_tbiconsize.taskbarHeight <= 0) g_settings_tbiconsize.taskbarHeight = 78;
-  g_settings_tbiconsize.taskbarHeight = abs(g_settings_tbiconsize.taskbarHeight);
-  if (g_settings_tbiconsize.taskbarHeight > 200) g_settings_tbiconsize.taskbarHeight = 200;
-  if (g_settings_tbiconsize.taskbarHeight < 44) g_settings_tbiconsize.taskbarHeight = 44;
-  int TaskbarOffsetY = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (TaskbarOffsetY < 0) TaskbarOffsetY = 6;
-  int heightExpansion = ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground")) ? 0 : (abs(TaskbarOffsetY) * 2));
-  g_settings_tbiconsize.taskbarHeight = g_settings_tbiconsize.taskbarHeight + heightExpansion;
-  int value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 0) value = 74;
-  g_settings_tbiconsize.taskbarButtonWidth = value;
+  const int requestedHeight = ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight);
+  int taskbarHeight = ClampInt(abs(requestedHeight), kMinTaskbarHeight, kMaxTaskbarHeight);
+  const int requestedOffsetY = ReadPositiveIntSettingOrDefault(L"TaskbarOffsetY", kDefaultTaskbarOffsetY);
+  const int taskbarOffsetY = abs(requestedOffsetY);
+  const int heightExpansion =
+      ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") ||
+        Wh_GetIntSetting(L"FullWidthTaskbarBackground"))
+           ? 0
+           : (taskbarOffsetY * 2));
+  g_settings_tbiconsize.taskbarHeight =
+      ClampInt(taskbarHeight + heightExpansion, kMinTaskbarHeight, kMaxTaskbarHeight + (kDefaultTaskbarOffsetY * 2));
+  const int requestedButtonSize = ReadPositiveIntSettingOrDefault(L"TaskbarButtonSize", kDefaultTaskbarButtonSize);
+  const int taskbarButtonSize = ClampInt(abs(requestedButtonSize), kMinTaskbarButtonSize, kMaxTaskbarButtonSize);
+  g_settings_tbiconsize.taskbarButtonWidth = taskbarButtonSize;
+  g_settings_tbiconsize.taskbarButtonWidthSmall = taskbarButtonSize;
+  const int requestedIconSize = ReadPositiveIntSettingOrDefault(L"TaskbarIconSize", kDefaultTaskbarIconSize);
+  const int maxIconSize = GetMaxTaskbarIconSizeForLayout(g_settings_tbiconsize.taskbarHeight, taskbarButtonSize);
+  g_settings_tbiconsize.iconSize = ClampInt(abs(requestedIconSize), kMinTaskbarIconSize, maxIconSize);
+  g_settings_tbiconsize.iconSizeSmall = std::min(g_settings_tbiconsize.iconSize, kSystemSmallTaskbarIconSize);
 }
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -1823,12 +1852,10 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
         }
         SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE,
                     0);
-        for (int i = 0; i < 100; i++) {
-            if (!g_pendingMeasureOverride) {
-                break;
-            }
-            Sleep(100);
-        }
+        WaitForConditionWithTimeout(
+            [] { return !g_pendingMeasureOverride.load(); },
+            kTaskbarMeasureOverrideTimeoutMs,
+            kTaskbarMeasurePollIntervalMs);
     }
     g_pendingMeasureOverride = true;
     g_taskbarHeight = taskbarHeight;
@@ -1840,12 +1867,10 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     }
     SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
     if (!IsVerticalTaskbar()) {
-        for (int i = 0; i < 100; i++) {
-            if (!g_pendingMeasureOverride) {
-                break;
-            }
-            Sleep(100);
-        }
+        WaitForConditionWithTimeout(
+            [] { return !g_pendingMeasureOverride.load(); },
+            kTaskbarMeasureOverrideTimeoutMs,
+            kTaskbarMeasurePollIntervalMs);
     } else {
         g_pendingMeasureOverride = false;
     }
@@ -2408,15 +2433,25 @@ void Wh_ModAfterInitTBIconSize() {
 }
 void Wh_ModBeforeUninitTBIconSize() {
     g_unloading = true;
-    ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : 48);
+    ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : kSystemMediumTaskbarButtonSize);
 }
 void Wh_ModUninitTBIconSize() {
-    while (g_hookCallCounter > 0) {
-        Sleep(100);
+    if (!WaitForConditionWithTimeout(
+            [] { return g_hookCallCounter.load() <= 0; },
+            kHookDrainTimeoutMs,
+            kHookDrainPollIntervalMs)) {
+        Wh_Log(L"Timed out waiting for taskbar icon size hooks to drain");
     }
 }
 void Wh_ModSettingsChangedTBIconSize() {
-    LoadSettingsTBIconSize();
+const int oldTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidth;
+    const int oldSmallTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidthSmall;
+LoadSettingsTBIconSize();
+if (!g_unloading &&
+        ((oldTaskbarButtonWidth > 0 && oldTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidth) ||
+         (oldSmallTaskbarButtonWidth > 0 && oldSmallTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidthSmall))) {
+        RequestTaskbarButtonSizeRelayout();
+    }
     ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3273,14 +3308,22 @@ float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
 int taskbarAlignedY = y;
 bool hasTaskbarAlignedY = TryCalculateFlyoutYAboveTaskbar(monitorInfo, cy, dpiScaleY, taskbarAlignedY);
 Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
+const int flyoutInnerPaddingPx = GetFlyoutInnerPaddingPx(dpiScale);
 if (target == DwmTarget::StartMenu) {
-  g_lastRecordedStartMenuWidth = static_cast<int>(Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth) * dpiScale);
+  const int recordedStartMenuWidthDip = Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
+  if (recordedStartMenuWidthDip > 0) {
+    g_lastRecordedStartMenuWidth = recordedStartMenuWidthDip;
+  }
+  const int startMenuWidthPx =
+      (g_lastRecordedStartMenuWidth > 0)
+          ? static_cast<int>((g_lastRecordedStartMenuWidth * dpiScale) + 0.5f)
+          : cx;
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_startMenuWnd = hwnd;
     g_startMenuOriginalWidth = cx;
-    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (g_settings.userDefinedAlignFlyoutInner ? g_lastRecordedStartMenuWidth / 2.0f : 0.0f));
-    x = std::min(0, std::max(static_cast<int>(((-absRootWidth + g_lastRecordedStartMenuWidth) / 2.0f) + (12 * dpiScale)), x));
-    if (hasTaskbarAlignedY) {
+    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (g_settings.userDefinedAlignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
+    x = std::min(0, std::max(static_cast<int>(((-absRootWidth + startMenuWidthPx) / 2.0f) + flyoutInnerPaddingPx), x));
+     if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
     }
   } else {
@@ -3295,7 +3338,7 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_searchMenuWnd = hwnd;
     g_searchMenuOriginalX = x;
-    x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner ? (12 * dpiScale) : (cx / 2.0f)));
+    x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
     if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
@@ -3311,7 +3354,7 @@ if (target == DwmTarget::StartMenu) {
     return original();
   }
   if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - (12 * dpiScale)) : (cx / 2.0f)));
+    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
   } else {
     x = static_cast<int>(absRootWidth - cx);
@@ -3392,8 +3435,7 @@ void ApplyStyle() {
         ApplyStyleClassicStartMenu(content, monitor);
     } else if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
         ApplyStyleClassicStartMenu(content, monitor);
-    }
-     else {
+    } else {
         Wh_Log(L"Error: Unsupported Start menu content class name");
     }
     g_inApplyStyle = false;
@@ -3697,7 +3739,9 @@ BOOL Wh_ModSettingsChangedStartButtonPosition() {
 #include <winstring.h>
 #include <string_view>
 #include <vector>
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <winrt/Windows.Graphics.Imaging.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Storage.h>
@@ -3798,8 +3842,6 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
 #include <d2d1_1.h>
 #include <d2d1effects.h>
 #include <list>
-#include <mutex>
-#include <random>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.System.Power.h>
 #include <winrt/Windows.UI.ViewManagement.h>
@@ -3908,38 +3950,6 @@ struct FloodEffect : winrt::implements<FloodEffect, wge::IGraphicsEffect, wge::I
   winrt::hstring Name() { return m_name; }
   void Name(winrt::hstring value) { m_name = std::move(value); }
 };
-struct BorderEffect : winrt::implements<BorderEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
-  wge::IGraphicsEffectSource Source{nullptr};
-  D2D1_BORDER_EDGE_MODE ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
-  D2D1_BORDER_EDGE_MODE ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
-  winrt::hstring m_name = L"BorderEffect";
-  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1Border; return S_OK; }
-  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-    if (!index || !mapping) return E_INVALIDARG;
-    const std::wstring_view n(name);
-    if (n == L"ExtendX") { *index = D2D1_BORDER_PROP_EDGE_MODE_X; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
-    if (n == L"ExtendY") { *index = D2D1_BORDER_PROP_EDGE_MODE_Y; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
-    return E_INVALIDARG;
-  }
-  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 2; return S_OK; }
-  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-    if (!value) return E_INVALIDARG;
-    switch (index) {
-      case D2D1_BORDER_PROP_EDGE_MODE_X: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendX)).as<wf::IPropertyValue>(), value); break;
-      case D2D1_BORDER_PROP_EDGE_MODE_Y: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendY)).as<wf::IPropertyValue>(), value); break;
-      default: return E_BOUNDS;
-    }
-    return S_OK;
-  } catch (...) { return winrt::to_hresult(); }
-  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
-    if (!source) return E_INVALIDARG;
-    if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
-    return E_BOUNDS;
-  }
-  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
-  winrt::hstring Name() { return m_name; }
-  void Name(winrt::hstring value) { m_name = std::move(value); }
-};
 struct GaussianBlurEffect : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
   wge::IGraphicsEffectSource Source{nullptr};
   float BlurAmount = 30.0f;
@@ -4010,51 +4020,6 @@ struct ColorMatrixEffect : winrt::implements<ColorMatrixEffect, wge::IGraphicsEf
   winrt::hstring Name() { return m_name; }
   void Name(winrt::hstring value) { m_name = std::move(value); }
 };
-winrt::Windows::Storage::Streams::IRandomAccessStream CreateWindhawkBlurNoiseStream(float density) {
-  thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-  thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream cachedStream{nullptr};
-  if (density == cachedDensity && cachedStream) {
-    return cachedStream.CloneStream();
-  }
-  constexpr int kSize = 256;
-  constexpr DWORD kBpp = 32;
-  constexpr DWORD rowSize = kSize * (kBpp / 8);
-  constexpr DWORD dataSize = rowSize * kSize;
-  BITMAPFILEHEADER fileHeader{0x4D42, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dataSize, 0, 0, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)};
-  BITMAPINFOHEADER infoHeader{};
-  infoHeader.biSize = sizeof(BITMAPINFOHEADER);
-  infoHeader.biWidth = kSize;
-  infoHeader.biHeight = kSize;
-  infoHeader.biPlanes = 1;
-  infoHeader.biBitCount = kBpp;
-  infoHeader.biSizeImage = dataSize;
-  std::vector<uint8_t> pixels(dataSize);
-  const float safeDensity = std::clamp(density, 0.001f, 1.0f);
-  const float exponent = 1.0f / safeDensity;
-  uint8_t lut[256];
-  for (int i = 0; i < 256; i++) {
-    lut[i] = static_cast<uint8_t>(std::pow(i / 255.0f, exponent) * 255.0f);
-  }
-  std::mt19937 rng(0);
-  std::uniform_int_distribution<int> dist(0, 255);
-  for (size_t i = 0; i < pixels.size(); i += 4) {
-    const uint8_t gray = lut[dist(rng)];
-    pixels[i] = gray;
-    pixels[i + 1] = gray;
-    pixels[i + 2] = gray;
-    pixels[i + 3] = 255;
-  }
-  winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-  winrt::Windows::Storage::Streams::DataWriter writer(stream);
-  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&fileHeader), reinterpret_cast<uint8_t const*>(&fileHeader) + sizeof(fileHeader)));
-  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&infoHeader), reinterpret_cast<uint8_t const*>(&infoHeader) + sizeof(infoHeader)));
-  writer.WriteBytes(pixels);
-  writer.StoreAsync().get();
-  writer.DetachStream();
-  cachedStream = stream;
-  cachedDensity = density;
-  return cachedStream.CloneStream();
-}
 class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
  public:
   XamlBlurBrush(UIElement element,
@@ -4064,8 +4029,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
                 winrt::hstring tintThemeResourceKey,
                 std::optional<float> tintLuminosityOpacity,
                 std::optional<float> tintSaturation,
-                std::optional<float> noiseOpacity,
-                std::optional<float> noiseDensity,
+                std::optional<float> inversionAmount,
                 std::optional<winrt::Windows::UI::Color> fallbackColor,
                 winrt::hstring fallbackThemeResourceKey)
       : m_compositor(wuxh::ElementCompositionPreview::GetElementVisual(element).Compositor()),
@@ -4075,8 +4039,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         m_tintThemeResourceKey(std::move(tintThemeResourceKey)),
         m_tintLuminosityOpacity(tintLuminosityOpacity),
         m_tintSaturation(tintSaturation),
-        m_noiseOpacity(noiseOpacity),
-        m_noiseDensity(noiseDensity),
+        m_inversionAmount(inversionAmount),
         m_fallbackColor(fallbackColor),
         m_fallbackThemeResourceKey(std::move(fallbackThemeResourceKey)) {
     auto fe = element.try_as<FrameworkElement>();
@@ -4316,29 +4279,20 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
       lumMatrix->Name(L"LuminosityBlend");
       topOfStack = *lumMatrix;
     }
-    wuc::CompositionSurfaceBrush noiseBrush{nullptr};
-    if (m_noiseOpacity && *m_noiseOpacity > 0.0f) {
-      float density = m_noiseDensity.value_or(1.0f);
-      auto stream = CreateWindhawkBlurNoiseStream(density);
-      auto surface = Media::LoadedImageSurface::StartLoadFromStream(stream);
-      noiseBrush = m_compositor.CreateSurfaceBrush(surface);
-      noiseBrush.Stretch(wuc::CompositionStretch::None);
-      auto borderEffect = winrt::make_self<BorderEffect>();
-      borderEffect->Source = wuc::CompositionEffectSourceParameter(L"NoiseSource");
-      float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
-      auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
-      opacityEffect->Source = *borderEffect;
-      opacityEffect->Matrix[0] = nOp;
-      opacityEffect->Matrix[5] = nOp;
-      opacityEffect->Matrix[10] = nOp;
-      opacityEffect->Matrix[15] = nOp;
-      opacityEffect->Name(L"NoiseOpacityEffect");
-      auto noiseComposite = winrt::make_self<CompositeEffect>();
-      noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-      noiseComposite->Sources.push_back(topOfStack);
-      noiseComposite->Sources.push_back(*opacityEffect);
-      noiseComposite->Name(L"NoiseComposite");
-      topOfStack = *noiseComposite;
+    if (m_inversionAmount && *m_inversionAmount > 0.0f) {
+      float inv = std::clamp(*m_inversionAmount, 0.0f, 1.0f);
+      float scale = 1.0f - (2.0f * inv);
+      auto inversionMatrix = winrt::make_self<ColorMatrixEffect>();
+      inversionMatrix->Source = topOfStack;
+      auto& m = inversionMatrix->Matrix;
+      m[0] = scale; m[1] = 0.0f;  m[2] = 0.0f;  m[3] = 0.0f;
+      m[4] = 0.0f;  m[5] = scale; m[6] = 0.0f;  m[7] = 0.0f;
+      m[8] = 0.0f;  m[9] = 0.0f;  m[10] = scale; m[11] = 0.0f;
+      m[12] = 0.0f; m[13] = 0.0f; m[14] = 0.0f; m[15] = 1.0f;
+      m[16] = inv;  m[17] = inv;  m[18] = inv;  m[19] = 0.0f;
+      inversionMatrix->ClampOutput = true;
+      inversionMatrix->Name(L"InversionEffect");
+      topOfStack = *inversionMatrix;
     }
     auto floodEffect = winrt::make_self<FloodEffect>();
     floodEffect->Color = m_tint;
@@ -4350,7 +4304,6 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
     auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
     auto brush = factory.CreateBrush();
     brush.SetSourceParameter(L"backdrop", backdropBrush);
-    if (noiseBrush) brush.SetSourceParameter(L"NoiseSource", noiseBrush);
     return brush;
   }
   wuc::Compositor m_compositor{nullptr};
@@ -4360,8 +4313,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
   winrt::hstring m_tintThemeResourceKey;
   std::optional<float> m_tintLuminosityOpacity;
   std::optional<float> m_tintSaturation;
-  std::optional<float> m_noiseOpacity;
-  std::optional<float> m_noiseDensity;
+  std::optional<float> m_inversionAmount;
   std::optional<winrt::Windows::UI::Color> m_fallbackColor;
   winrt::hstring m_fallbackThemeResourceKey;
   Media::SolidColorBrush m_proxyBrush{nullptr};
@@ -4455,8 +4407,7 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
   tintSetting.color.A = tintAlpha;
   const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
   const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
-  const float noiseOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseOpacity / 100.0f, 0.0f, 1.0f);
-  const float noiseDensity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseDensity / 100.0f, 0.01f, 1.0f);
+  const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
   try {
     auto oldFill = rectangle.Fill();
     rectangle.Fill(Media::Brush{nullptr});
@@ -4469,8 +4420,7 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
         winrt::hstring(tintSetting.themeResourceKey),
         std::optional<float>(luminosityOpacity),
         std::optional<float>(saturation),
-        noiseOpacity > 0.0f ? std::optional<float>(noiseOpacity) : std::nullopt,
-        std::optional<float>(noiseDensity),
+        inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
         fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
         winrt::hstring(fallbackSetting.themeResourceKey));
     rectangle.Fill(blurBrush);
@@ -4521,11 +4471,28 @@ std::atomic<int> g_reset_animation_target_passes = 0;
 std::atomic<int64_t> g_last_geometry_critical_apply_ms = 0;
 std::atomic<bool> g_animation_followup_worker_running = false;
 std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
-constexpr int kInitialExplorerStyleDelayMs = 2500;
-constexpr int kLowPriorityStyleDelayMs = 900;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
-constexpr int kGeometryCriticalApplyMinIntervalMs = 80;
+constexpr int kLowPriorityStyleDelayMs =
+    kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
+constexpr int kExplorerStartupSettleAnimationWindows = 6;
+constexpr int kInitialExplorerStyleDelayMs =
+    kLowPriorityStyleDelayMs + kDefaultStyleDebounceDelayMs +
+    (kTaskbarIslandAnimationDurationMs * kExplorerStartupSettleAnimationWindows);
+constexpr int kGeometryCriticalApplyMinIntervalMs = kDefaultStyleDebounceDelayMs / 2;
+constexpr int kDelayedWorkerMaxSleepMs = kTaskbarIslandAnimationDurationMs;
+constexpr int kInitialExplorerStyleRetryDelayMs = kTaskbarIslandAnimationDurationMs * 2;
+constexpr int kButtonSizeLowPrioritySuppressionMs = kTaskbarIslandAnimationDurationMs;
+constexpr int kGeometryCriticalLowPrioritySuppressionMs =
+    (kTaskbarIslandAnimationDurationMs * 2) + kDefaultStyleDebounceDelayMs;
+constexpr int kScheduledLowPriorityFlagTtlMs =
+    kLowPriorityStyleDelayMs + kDefaultStyleDebounceDelayMs + kTaskbarIslandAnimationDurationMs;
+constexpr double kMinimumTrustedRefreshHz = 24.0;
+constexpr double kMaximumTrustedRefreshHz = 1000.0;
+constexpr int kDefaultFrameIntervalMs = 16;
+constexpr int kMinimumFrameIntervalMs = 1;
+constexpr int kMaximumFrameIntervalMs = 42;
+constexpr int kAnimationFollowupGraceFrames = 2;
 template <typename TAnimation>
 void ConfigureTaskbarIslandAnimation(TAnimation const& animation) {
   animation.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(kTaskbarIslandAnimationDurationMs)));
@@ -4568,6 +4535,62 @@ int64_t DelayedApplyNowMs() {
              std::chrono::steady_clock::now().time_since_epoch())
       .count();
 }
+int GetCompositionFrameIntervalMs(HWND hwnd) {
+  DWM_TIMING_INFO timing{};
+  timing.cbSize = sizeof(timing);
+  if (SUCCEEDED(DwmGetCompositionTimingInfo(hwnd, &timing)) &&
+      timing.rateRefresh.uiNumerator > 0 &&
+      timing.rateRefresh.uiDenominator > 0) {
+    const double detectedRefreshHz =
+        static_cast<double>(timing.rateRefresh.uiNumerator) /
+        static_cast<double>(timing.rateRefresh.uiDenominator);
+    const double clampedRefreshHz = std::clamp(detectedRefreshHz,
+                                               kMinimumTrustedRefreshHz,
+                                               kMaximumTrustedRefreshHz);
+    return ClampInt(static_cast<int>((1000.0 / clampedRefreshHz) + 0.5),
+                    kMinimumFrameIntervalMs,
+                    kMaximumFrameIntervalMs);
+  }
+  return kDefaultFrameIntervalMs;
+}
+int GetTaskbarIslandFollowupPassCount(HWND hwnd) {
+  const int frameIntervalMs = GetCompositionFrameIntervalMs(hwnd);
+  const int followupWindowMs =
+      kTaskbarIslandAnimationDurationMs +
+      (frameIntervalMs * kAnimationFollowupGraceFrames);
+  return std::max(1, (followupWindowMs + frameIntervalMs - 1) / frameIntervalMs);
+}
+void ArmStyleApplyPasses(int passCount, bool resetAnimationTargets = false) {
+  passCount = std::max(1, passCount);
+  g_force_style_apply_passes.store(passCount);
+  g_high_priority_dispatch_passes.store(passCount);
+  if (resetAnimationTargets) {
+    g_reset_animation_target_passes.store(passCount);
+  }
+}
+void ArmStyleFollowupPasses(HWND hwnd, bool resetAnimationTargets = false) {
+  ArmStyleApplyPasses(GetTaskbarIslandFollowupPassCount(hwnd), resetAnimationTargets);
+}
+void ArmSingleStyleApplyPass(bool resetAnimationTargets = false) {
+  ArmStyleApplyPasses(1, resetAnimationTargets);
+}
+bool WaitForConditionWithTimeout(std::function<bool()> condition,
+                                 int timeoutMs,
+                                 int pollIntervalMs) {
+  const int64_t startMs = DelayedApplyNowMs();
+  while (!condition()) {
+    if (g_unloading && timeoutMs > 0) {
+      // During unload we still wait briefly for workers/hooks to exit, but never
+      // spin forever inside code that may be unloaded by recompilation.
+    }
+    const int64_t elapsedMs = DelayedApplyNowMs() - startMs;
+    if (elapsedMs >= timeoutMs) {
+      return false;
+    }
+    Sleep(static_cast<DWORD>(std::max(1, pollIntervalMs)));
+  }
+  return true;
+}
 void QueueTaskbarAnimationFollowup(HWND hTaskbarWnd) {
   if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
     return;
@@ -4576,19 +4599,41 @@ void QueueTaskbarAnimationFollowup(HWND hTaskbarWnd) {
   if (!g_animation_followup_worker_running.compare_exchange_strong(expected, true)) {
     return;
   }
-  std::thread([hTaskbarWnd]() {
-    const DWORD followupDelaysMs[] = {16, 16, 18, 25, 40, 55, 80, 100};
-    for (DWORD delayMs : followupDelaysMs) {
-      Sleep(delayMs);
+   std::thread([hTaskbarWnd]() {
+    const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
+    const int followupWindowMs =
+        kTaskbarIslandAnimationDurationMs +
+        (frameIntervalMs * kAnimationFollowupGraceFrames);
+    int elapsedMs = 0;
+    while (elapsedMs < followupWindowMs) {
+      Sleep(static_cast<DWORD>(frameIntervalMs));
+      elapsedMs += frameIntervalMs;
       if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
         break;
       }
-      g_force_style_apply_passes.store(8);
-      g_high_priority_dispatch_passes.store(8);
+      ArmSingleStyleApplyPass();
       ApplySettings(hTaskbarWnd);
     }
     g_animation_followup_worker_running = false;
   }).detach();
+}
+void RequestTaskbarButtonSizeRelayout() {
+  if (g_unloading) {
+    return;
+  }
+  // Taskbar buttons are virtualized/recycled. Instead of forcing an arbitrary
+  // number of relayout passes, mark button widths as customized and kick one
+  // immediate style pass. Every realized/recycled button is validated in the
+  // normal taskbar child loop and fixed only if its width is wrong.
+  g_taskbarButtonWidthCustomized = true;
+  ArmSingleStyleApplyPass(true);
+  g_scheduled_low_priority_update = false;
+  g_suppress_low_priority_apply_until_ms =
+      DelayedApplyNowMs() + kButtonSizeLowPrioritySuppressionMs;
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+  if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
+    ApplySettings(hTaskbarWnd);
+  }
 }
 void ArmInitialExplorerStyleApplyDelay() {
   g_initial_style_apply_completed = false;
@@ -4621,15 +4666,17 @@ void CleanupDebounce() {
   // force it to observe cancellation and wait until it has left mod code.
   // Otherwise a recompilation can unload this DLL while the sleeping worker
   // later resumes inside DelayedApplyWorker from the old image.
-  for (int i = 0; g_delayed_apply_worker_running.load() && i < 500; ++i) {
-    Sleep(10);
-  }
+    WaitForConditionWithTimeout(
+      [] { return !g_delayed_apply_worker_running.load(); },
+      kDelayedApplyWorkerShutdownTimeoutMs,
+      kWorkerShutdownPollMs);
   if (g_delayed_apply_worker_running.load()) {
     Wh_Log(L"Delayed apply worker did not exit before unload");
   }
-  for (int i = 0; g_animation_followup_worker_running.load() && i < 200; ++i) {
-    Sleep(10);
-  }
+  WaitForConditionWithTimeout(
+      [] { return !g_animation_followup_worker_running.load(); },
+      kAnimationFollowupWorkerShutdownTimeoutMs,
+      kWorkerShutdownPollMs);
   if (g_animation_followup_worker_running.load()) {
     Wh_Log(L"Animation follow-up worker did not exit before unload");
   }
@@ -4646,7 +4693,7 @@ void DelayedApplyWorker() {
     }
     int64_t nowMs = DelayedApplyNowMs();
     if (nowMs < dueMs) {
-      DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(250, std::max<int64_t>(1, dueMs - nowMs)));
+      DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(kDelayedWorkerMaxSleepMs, std::max<int64_t>(1, dueMs - nowMs)));
       Sleep(sleepMs);
       continue;
     }
@@ -4655,20 +4702,14 @@ void DelayedApplyWorker() {
     if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
       Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
       g_delayed_apply_generation.fetch_add(1);
-      g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
       continue;
     }
     g_scheduled_low_priority_update = false;
     Wh_Log(L"Delayed apply triggered");
        const bool initialStyleApply = !g_initial_style_apply_completed.load();
     if (initialStyleApply) {
-      // The taskbar XAML tree can reset Composition visual properties during
-      // Explorer startup after an earlier sizing pass. Forget cached animation
-      // targets so the first real styling pass always starts the offset/shape
-      // animations instead of assuming they were already applied.
-      g_reset_animation_target_passes.store(8);
-      g_force_style_apply_passes.store(8);
-      g_high_priority_dispatch_passes.store(8);
+           ArmStyleFollowupPasses(hTaskbarWnd, true);
     }
     if (!g_initial_style_apply_completed.load() &&
         !g_initial_taskbar_size_apply_done.exchange(true)) {
@@ -4678,7 +4719,7 @@ void DelayedApplyWorker() {
     if (!g_initial_style_apply_completed.load() && !g_unloading) {
       Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
       g_delayed_apply_generation.fetch_add(1);
-      g_delayed_apply_due_ms = DelayedApplyNowMs() + 500;
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
       continue;
     }
     int64_t expectedDueMs = dueMs;
@@ -4734,10 +4775,10 @@ void ApplySettingsFromTaskbarThreadImmediately() {
   g_scheduled_low_priority_update = false;
   g_delayed_apply_due_ms = 0;
   g_delayed_apply_generation.fetch_add(1);
-  g_force_style_apply_passes.store(8);
-  g_high_priority_dispatch_passes.store(8);
-  g_suppress_low_priority_apply_until_ms = DelayedApplyNowMs() + 650;
   HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+  ArmStyleFollowupPasses(hTaskbarWnd);
+  g_suppress_low_priority_apply_until_ms =
+      DelayedApplyNowMs() + kGeometryCriticalLowPrioritySuppressionMs;
   if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
     Wh_Log(L"Immediate apply skipped: taskbar window is not ready");
     return;
@@ -4756,39 +4797,39 @@ void ApplySettingsFromTaskbarThreadGeometryChanged() {
     ApplySettingsDebounced(1);
     return;
   }
-  // Layout-only taskbar changes, such as grouping-mode changes and tray width
-  // changes, used to fall through the old 900 ms low-priority debounce. Treat
-  // them as animation-critical, but rate-limit the direct kick so noisy WndProc
-  // traffic does not constantly restart the follow-up worker.
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
   int64_t lastMs = g_last_geometry_critical_apply_ms.load();
   while (nowMs - lastMs >= kGeometryCriticalApplyMinIntervalMs) {
     if (g_last_geometry_critical_apply_ms.compare_exchange_weak(lastMs, nowMs)) {
       g_scheduled_low_priority_update = false;
-      g_force_style_apply_passes.store(8);
-      g_high_priority_dispatch_passes.store(8);
-      g_suppress_low_priority_apply_until_ms = nowMs + 650;
+      ArmStyleFollowupPasses(hTaskbarWnd);
+      g_suppress_low_priority_apply_until_ms =
+          nowMs + kGeometryCriticalLowPrioritySuppressionMs;
       ApplySettingsDebounced(1);
-      HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
       if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
         QueueTaskbarAnimationFollowup(hTaskbarWnd);
       }
       return;
     }
   }
-  // A recent geometry-critical apply is already pending/running. Keep the next
-  // few dispatcher passes forced and high-priority so the follow-up burst catches
-  // the changed measured widths as soon as XAML reports them.
-  g_force_style_apply_passes.store(8);
-  g_high_priority_dispatch_passes.store(8);
+  ArmStyleFollowupPasses(hTaskbarWnd);
 }
 void ScheduleInitialExplorerStyleApply() {
   ApplySettingsDebounced(kInitialExplorerStyleDelayMs);
 }
 bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
-  if (!element) return false;
-  auto transform = element.TransformToVisual(nullptr);
-  winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
-  return rect.X < 0 || rect.Y < 0;
+  if (!element) return true;
+  try {
+    auto transform = element.TransformToVisual(nullptr);
+    winrt::Windows::Foundation::Rect rect = transform.TransformBounds(
+        winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
+    return rect.Width <= 0.0 || rect.Height <= 0.0 || rect.X < -kLayoutToleranceDip || rect.Y < -kLayoutToleranceDip;
+  } catch (...) {
+    // Overflow/recycled taskbar elements can briefly be disconnected from the
+    // visual tree while Explorer is rebuilding the task list. Treat them as
+    // invalid instead of letting a transient XAML exception take down Explorer.
+    return true;
+  }
 }
 bool IsTaskbarWidgetsEnabled() {
     DWORD value = 0;
@@ -4834,18 +4875,19 @@ StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSi
 void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
   StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
   Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
-  if (g_lastRecordedStartMenuWidth != param1.Width) {
-    g_lastRecordedStartMenuWidth = static_cast<int>(param1.Width);
+  const int measuredStartMenuWidth = static_cast<int>(param1.Width + 0.5f);
+  if (measuredStartMenuWidth > 0 && g_lastRecordedStartMenuWidth != measuredStartMenuWidth) {
+    g_lastRecordedStartMenuWidth = measuredStartMenuWidth;
     Wh_SetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
   }
 }
 std::atomic<int64_t> g_update_flag_set_time_ms = 0;
 int64_t NowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 void ResetFlagAfterDelay() {
-  std::this_thread::sleep_for(std::chrono::milliseconds(1400));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kScheduledLowPriorityFlagTtlMs));
   int64_t now = NowMs();
   int64_t set_time = g_update_flag_set_time_ms.load();
-  if (g_scheduled_low_priority_update && (now - set_time >= 1400)) {
+  if (g_scheduled_low_priority_update && (now - set_time >= kScheduledLowPriorityFlagTtlMs)) {
     g_scheduled_low_priority_update = false;
   }
 }
@@ -4993,12 +5035,126 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
     Wh_FreeStringSetting(originalHex);
   }
 }
-double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount, TaskbarState& state) {
-  if (!element) return 0.0;
+void InvalidateTaskbarButtonLayoutElement(FrameworkElement const& element) {
+  if (!element) {
+    return;
+  }
+  try {
+    element.InvalidateMeasure();
+    element.InvalidateArrange();
+  } catch (...) {
+  }
+}
+double GetEffectiveTaskbarButtonTargetWidth() {
+  const double defaultWidth = g_smallIconSize
+                                  ? kSystemSmallTaskbarButtonSize
+                                  : kSystemMediumTaskbarButtonSize;
+  return g_unloading
+             ? defaultWidth
+             : static_cast<double>(g_smallIconSize
+                                       ? g_settings_tbiconsize.taskbarButtonWidthSmall
+                                       : g_settings_tbiconsize.taskbarButtonWidth);
+}
+bool IsExpectedTaskbarButtonDimension(double value, double expected) {
+  if (!std::isfinite(value) || value <= 0.0) {
+    return false;
+  }
+  return std::abs(value - expected) <= kLayoutToleranceDip;
+}
+bool EnsureElementTaskbarButtonWidth(FrameworkElement const& element,
+                                     double targetWidth,
+                                     bool allowHardWidth) {
+  if (!element) {
+    return false;
+  }
+  bool changed = false;
+  try {
+    if (!IsExpectedTaskbarButtonDimension(element.MinWidth(), targetWidth)) {
+      element.MinWidth(targetWidth);
+      changed = true;
+    }
+    if (allowHardWidth) {
+      if (!IsExpectedTaskbarButtonDimension(element.MaxWidth(), targetWidth)) {
+        element.MaxWidth(targetWidth);
+        changed = true;
+      }
+      const double currentWidth = element.Width();
+      const double actualWidth = element.ActualWidth();
+      const bool explicitWidthWrong =
+          !std::isfinite(currentWidth) ||
+          !IsExpectedTaskbarButtonDimension(currentWidth, targetWidth);
+      const bool actualWidthWrong =
+          actualWidth > 0.0 &&
+          !IsExpectedTaskbarButtonDimension(actualWidth, targetWidth);
+      if (explicitWidthWrong || actualWidthWrong) {
+        element.Width(targetWidth);
+        changed = true;
+      }
+    }
+    if (changed) {
+      InvalidateTaskbarButtonLayoutElement(element);
+    }
+  } catch (...) {
+  }
+  return changed;
+}
+bool ApplyTaskbarButtonSizeToElement(FrameworkElement const& child,
+                                     winrt::hstring const& className) {
+  if (!child) {
+    return false;
+  }
+  const bool isTaskbarButton =
+      className == L"Taskbar.TaskListButton" ||
+      className == L"Taskbar.ExperienceToggleButton" ||
+      className == L"Taskbar.OverflowToggleButton" ||
+      className == L"Taskbar.SearchBoxButton";
+  if (!isTaskbarButton) {
+    return false;
+  }
+  const double targetWidth = static_cast<double>(g_settings.userDefinedTaskbarButtonSize);
+  const bool allowHardWidth =
+      className != L"Taskbar.SearchBoxButton" ||
+      !FindChildByName(child, L"SearchBoxTextBlock");
+  bool changed = EnsureElementTaskbarButtonWidth(child, targetWidth, allowHardWidth);
+  FrameworkElement innerElementChild = nullptr;
+  if (className == L"Taskbar.SearchBoxButton") {
+    innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
+    if (!innerElementChild) {
+      innerElementChild = FindChildByName(child, L"SearchBoxButtonRootPanel");
+    }
+  } else if (className == L"Taskbar.TaskListButton") {
+    innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListLabeledButtonPanel");
+    if (!innerElementChild) {
+      innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
+    }
+  } else if (className == L"Taskbar.ExperienceToggleButton") {
+    innerElementChild = FindChildByName(child, L"ExperienceToggleButtonRootPanel");
+  } else if (className == L"Taskbar.OverflowToggleButton") {
+    innerElementChild = FindChildByName(child, L"OverflowToggleButtonRootPanel");
+  } else {
+    innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
+  }
+  if (innerElementChild) {
+    changed = EnsureElementTaskbarButtonWidth(innerElementChild, targetWidth, allowHardWidth) || changed;
+  }
+  return changed;
+}
+double CalculateValidChildrenWidth(FrameworkElement element,
+                                   int& childrenCount,
+                                   TaskbarState& state,
+                                   double* leftMostEdge = nullptr,
+                                   double* rightMostEdge = nullptr) {
+  if (!element) {
+    if (leftMostEdge) *leftMostEdge = 0.0;
+    if (rightMostEdge) *rightMostEdge = 0.0;
+    return 0.0;
+  }
   const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
   auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
   auto userDefinedTaskbarIconSize = std::to_wstring(g_settings.userDefinedTaskbarIconSize);
   double totalWidth = 0.0;
+  double minEdge = std::numeric_limits<double>::infinity();
+  double maxEdge = -std::numeric_limits<double>::infinity();
   childrenCount = 0;
   int childrenCountTentative = Media::VisualTreeHelper::GetChildrenCount(element);
   for (int i = 0; i < childrenCountTentative; i++) {
@@ -5007,29 +5163,31 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
       Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentative);
       continue;
     }
-    auto transform = child.TransformToVisual(element);
-    auto rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
-    // exclude "weird" rectangles (aka recycled views)
-    if (rect.X < 0 || rect.Y < 0) {
+    auto className = winrt::get_class_name(child);
+    const bool taskbarButtonSizeChanged = ApplyTaskbarButtonSizeToElement(child, className);
+    winrt::Windows::Foundation::Rect rect{};
+    try {
+      if (taskbarButtonSizeChanged) {
+        child.UpdateLayout();
+      }
+      auto transform = child.TransformToVisual(element);
+      rect = transform.TransformBounds(
+          winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
+    } catch (...) {
+      // A taskbar child can be present in the tree while being recycled during
+      // overflow transitions. Skip the transient child for this pass.
       continue;
     }
-    auto className = winrt::get_class_name(child);
-    SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
-    if (className == L"Taskbar.TaskListButton" || className == L"Taskbar.ExperienceToggleButton" || className == L"Taskbar.OverflowToggleButton") {
-      child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      //   child.Width(g_settings.userDefinedTaskbarButtonSize);
-      auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
-      if (innerElementChild) {
-        innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-        // innerElementChild.Width(g_settings.userDefinedTaskbarButtonSize);
-      }
+    // Exclude recycled/transient rectangles, but don't assume that the valid
+    // task button group is centered inside TaskbarFrameRepeater. Near overflow,
+    // Explorer intentionally lays it out off-center before the overflow button
+    // appears, so we measure the real bounds below and translate from them.
+    if (rect.Width <= 0.0 || rect.Height <= 0.0 || rect.X < -kLayoutToleranceDip || rect.Y < -kLayoutToleranceDip) {
+      continue;
     }
+    SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
     if (className == L"Taskbar.SearchBoxButton") {
-      child.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListButtonPanel");
-      if (innerElementChild) {
-        innerElementChild.MinWidth(g_settings.userDefinedTaskbarButtonSize);
-      }
+      // Search only needs the common sizing helper above.
     } else if (className == L"Taskbar.ExperienceToggleButton") {
       state.lastStartButtonXActual = rect.X - rect.Width;
     } else if (className == L"Taskbar.TaskListButton") {
@@ -5094,7 +5252,16 @@ double CalculateValidChildrenWidth(FrameworkElement element, int& childrenCount,
       }
     }
     totalWidth += rect.Width;
+     minEdge = std::min(static_cast<double>(minEdge),static_cast<double>( rect.X));
+    maxEdge = std::max(static_cast<double>(maxEdge), static_cast<double>(rect.X + rect.Width));
     childrenCount++;
+  }
+  if (childrenCount > 0 && minEdge != std::numeric_limits<double>::infinity()) {
+    if (leftMostEdge) *leftMostEdge = minEdge;
+    if (rightMostEdge) *rightMostEdge = maxEdge;
+  } else {
+    if (leftMostEdge) *leftMostEdge = 0.0;
+    if (rightMostEdge) *rightMostEdge = 0.0;
   }
   return totalWidth;
 }
@@ -5120,12 +5287,23 @@ void UpdateGlobalSettings() {
   int offsetY = abs(getInt(L"TaskbarOffsetY"));
   g_settings.userDefinedTaskbarOffsetY = (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners) ? 0 : -offsetY;
   // Height & Sizes
-  int h = clamp(abs(getInt(L"TaskbarHeight")), 44, 200);
-  g_settings.userDefinedTaskbarHeight = g_unloading ? 44 : h;
-  g_settings.userDefinedTaskbarIconSize = g_unloading ? 24 : std::max(24, getInt(L"TaskbarIconSize"));
-  g_settings.userDefinedTrayIconSize = std::max(15, getInt(L"TrayIconSize"));
-  g_settings.userDefinedTaskbarButtonSize = g_unloading ? 44 : std::max(44, getInt(L"TaskbarButtonSize"));
-  g_settings.userDefinedTrayButtonSize = std::max(20, getInt(L"TrayButtonSize"));
+  int h = ClampInt(abs(ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight)),
+                   kMinTaskbarHeight,
+                   kMaxTaskbarHeight);
+  g_settings.userDefinedTaskbarHeight = g_unloading ? kSystemMediumTaskbarButtonSize : h;
+  int taskbarButtonSize = ClampInt(abs(ReadPositiveIntSettingOrDefault(L"TaskbarButtonSize", kDefaultTaskbarButtonSize)),
+                                   kMinTaskbarButtonSize,
+                                   kMaxTaskbarButtonSize);
+  g_settings.userDefinedTaskbarButtonSize = g_unloading ? kSystemMediumTaskbarButtonSize : taskbarButtonSize;
+  const int maxTaskbarIconSize =
+      GetMaxTaskbarIconSizeForLayout(static_cast<int>(g_settings.userDefinedTaskbarHeight),
+                                     static_cast<int>(g_settings.userDefinedTaskbarButtonSize));
+  int taskbarIconSize = ClampInt(abs(ReadPositiveIntSettingOrDefault(L"TaskbarIconSize", kDefaultTaskbarIconSize)),
+                                 kMinTaskbarIconSize,
+                                 maxTaskbarIconSize);
+  g_settings.userDefinedTaskbarIconSize = g_unloading ? kSystemMediumTaskbarIconSize : taskbarIconSize;
+  g_settings.userDefinedTrayIconSize = std::max(kMinTrayIconSize, getInt(L"TrayIconSize"));
+  g_settings.userDefinedTrayButtonSize = std::max(kMinTrayButtonSize, getInt(L"TrayButtonSize"));
   // Corner radii
   float tcr = float(fmax(0.0f, getInt(L"TaskbarCornerRadius")));
   tcr = fmin(tcr, g_settings.userDefinedTaskbarHeight / 2.0f);
@@ -5139,8 +5317,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTaskbarBackgroundLuminosity = clamp(abs(getInt(L"TaskbarBackgroundLuminosity")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundBlurAmount = clamp(abs(getInt(L"TaskbarBackgroundBlurAmount")), 0, 100);
   g_settings.userDefinedTaskbarBackgroundTintSaturation = clamp(abs(getInt(L"TaskbarBackgroundTintSaturation")), 0, 500);
-  g_settings.userDefinedTaskbarBackgroundNoiseOpacity = clamp(abs(getInt(L"TaskbarBackgroundNoiseOpacity")), 0, 100);
-  g_settings.userDefinedTaskbarBackgroundNoiseDensity = clamp(abs(getInt(L"TaskbarBackgroundNoiseDensity")), 1, 100);
+  g_settings.userDefinedTaskbarBackgroundInversion = clamp(abs(getInt(L"TaskbarBackgroundInversion")), 0, 100);
   PCWSTR bgTintColor = Wh_GetStringSetting(L"TaskbarBackgroundTintColor");
   g_settings.userDefinedTaskbarBackgroundTintColor = (bgTintColor && *bgTintColor) ? bgTintColor : L"{ThemeResource CardStrokeColorDefaultSolid}";
   if (bgTintColor) {
@@ -5185,7 +5362,7 @@ bool HasInvalidSettings() {
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
   if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
-  if (g_settings.userDefinedTaskbarHeight < 44 || g_settings.userDefinedTaskbarHeight > 200) return true;
+  if (g_settings.userDefinedTaskbarHeight < kMinTaskbarHeight || g_settings.userDefinedTaskbarHeight > kMaxTaskbarHeight) return true;
   if (g_settings.userDefinedTaskbarIconSize <= 0) return true;
   if (g_settings.userDefinedTrayIconSize <= 0) return true;
   if (g_settings.userDefinedTaskbarButtonSize <= 0) return true;
@@ -5196,9 +5373,8 @@ bool HasInvalidSettings() {
   if (g_settings.userDefinedTaskbarBackgroundTint > 100) return true;
   if (g_settings.userDefinedTaskbarBackgroundLuminosity > 100) return true;
   if (g_settings.userDefinedTaskbarBackgroundBlurAmount > 100) return true;
-  if (g_settings.userDefinedTaskbarBackgroundTintSaturation > 200) return true;
-  if (g_settings.userDefinedTaskbarBackgroundNoiseOpacity > 100) return true;
-  if (g_settings.userDefinedTaskbarBackgroundNoiseDensity < 1 || g_settings.userDefinedTaskbarBackgroundNoiseDensity > 100) return true;
+  if (g_settings.userDefinedTaskbarBackgroundTintSaturation > 500) return true;
+  if (g_settings.userDefinedTaskbarBackgroundInversion > 100) return true;
   if (g_settings.userDefinedTaskbarBorderOpacity > 255) return true;
   if (g_settings.userDefinedTaskbarBorderThickness < 0.0 || g_settings.userDefinedTaskbarBorderThickness > 10.0) return true;
   return false;
@@ -5221,8 +5397,7 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundBlurAmount, L"userDefinedTaskbarBackgroundBlurAmount");
   Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundTintColor.c_str(), L"userDefinedTaskbarBackgroundTintColor");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundTintSaturation, L"userDefinedTaskbarBackgroundTintSaturation");
-  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseOpacity, L"userDefinedTaskbarBackgroundNoiseOpacity");
-  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundNoiseDensity, L"userDefinedTaskbarBackgroundNoiseDensity");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundInversion, L"userDefinedTaskbarBackgroundInversion");
   Wh_Log(L"setting %s %s", g_settings.userDefinedTaskbarBackgroundFallbackColor.c_str(), L"userDefinedTaskbarBackgroundFallbackColor");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBorderOpacity, L"userDefinedTaskbarBorderOpacity");
   Wh_Log(L"setting %d %s", (int)(g_settings.userDefinedTaskbarBorderThickness * 100.0 / 10.0), L"userDefinedTaskbarBorderThickness (scaled)");
@@ -5356,24 +5531,41 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   bool isOverflowing = overflowButton != nullptr && !IsWeirdFrameworkElement(overflowButton);
   double rootWidth = xamlRootContent.ActualWidth();
   state.lastRootWidth = static_cast<float>(rootWidth);
-  if (!g_unloading && rootWidth < 100) {
+  const double minimumRootWidth =
+      std::max<double>(1.0, static_cast<double>(g_settings.userDefinedTaskbarButtonSize));
+  if (!g_unloading && rootWidth < minimumRootWidth) {
     Wh_Log(L"root width is too small");
     return false;
   }
   int childrenCountTaskbar = 0;
-  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(taskbarFrameRepeater, childrenCountTaskbar, state);
+  double taskbarLeftEdge = 0.0;
+  double taskbarRightEdge = 0.0;
+  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(
+      taskbarFrameRepeater, childrenCountTaskbar, state, &taskbarLeftEdge, &taskbarRightEdge);
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
     Wh_Log(L"Error: childrenWidthTaskbarDbl <= 0");
     return false;
   }
-  signed int rightMostEdgeTaskbar = static_cast<signed int>((rootWidth / 2.0) + (childrenWidthTaskbarDbl / 2.0));
-  unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl);
+  double actualTaskbarBoundsWidthDbl = taskbarRightEdge - taskbarLeftEdge;
+  if (actualTaskbarBoundsWidthDbl <= 0.0) {
+    actualTaskbarBoundsWidthDbl = childrenWidthTaskbarDbl;
+    taskbarLeftEdge = (rootWidth - actualTaskbarBoundsWidthDbl) / 2.0;
+    taskbarRightEdge = taskbarLeftEdge + actualTaskbarBoundsWidthDbl;
+  }
+  // Use the sum of valid child widths as the logical task width. The measured
+  // min/max bounds are still useful as an anchor near overflow, but during
+  // insert/remove animations they can include temporary gaps from recycled
+  // views and make the island width overshoot.
+  unsigned int childrenWidthTaskbar = static_cast<unsigned int>(childrenWidthTaskbarDbl + 0.5);
+  signed int rightMostEdgeTaskbar = static_cast<signed int>(taskbarRightEdge + 0.5);
   if (!g_unloading && childrenCountTaskbar < 1) {
     Wh_Log(L"Error: childrenCountTaskbar < 1");
     return false;
   }
-  if (!g_unloading && childrenWidthTaskbar <= 10) {
-    Wh_Log(L"Error: childrenWidthTaskbar <= 10");
+  const unsigned int minimumTaskbarChildrenWidth =
+      static_cast<unsigned int>(std::max<double>(1.0, g_settings.userDefinedTaskbarButtonSize * 0.25));
+  if (!g_unloading && childrenWidthTaskbar <= minimumTaskbarChildrenWidth) {
+    Wh_Log(L"Error: childrenWidthTaskbar is too small");
     return false;
   }
   if (!g_unloading && rightMostEdgeTaskbar < 0) {
@@ -5381,7 +5573,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   bool rightMostEdgeChangedTaskbar = (state.lastTaskbarData.rightMostEdge != rightMostEdgeTaskbar);
-  if (!isOverflowing && (rightMostEdgeChangedTaskbar || state.lastTaskbarData.rightMostEdge == 0.0)) {
+  if (isOverflowing != state.wasOverflowing) {
+    ResetAnimationTargetCache(state);
+    forceStyleApply = true;
+  }
+  if (rightMostEdgeChangedTaskbar || state.lastTaskbarData.rightMostEdge == 0.0 || isOverflowing) {
     state.lastTaskbarData.childrenCount = childrenCountTaskbar;
     state.lastTaskbarData.rightMostEdge = rightMostEdgeTaskbar;
     state.lastTaskbarData.childrenWidth = childrenWidthTaskbar;
@@ -5414,13 +5610,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: trayFrameWidth <= 1");
     return false;
   }
-  float centeredTray = (rootWidth - trayFrameWidth) / 2.0f;
-  if (!g_unloading && centeredTray <= 1) {
-    Wh_Log(L"Error: centeredTray <= 1");
-    return false;
-  }
-  float newXOffsetTray = centeredTray + (childrenWidthTaskbar / 2.0f) + trayGapPlusExtras;
-  newXOffsetTray = snapPx(newXOffsetTray);
+  const float targetContentWidth = static_cast<float>(childrenWidthTaskbar + trayFrameWidth);
+  const float targetContentLeft = snapPx(static_cast<float>((rootWidth - targetContentWidth) / 2.0f));
+  const float targetTrayLogicalLeft = snapPx(targetContentLeft + static_cast<float>(childrenWidthTaskbar));
+  float targetOffsetXTray = snapPx(targetTrayLogicalLeft - static_cast<float>(rootWidth - trayFrameWidth));
   // tray animations
   auto systemTrayFrameGridVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(systemTrayFrameGrid);
   if (!systemTrayFrameGridVisual) {
@@ -5431,16 +5624,45 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (state.initOffsetX == -1) {
     state.initOffsetX = originalOffset.x;
   }
+  auto rootGridTaskBarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(rootGridTaskBar);
+  if (!rootGridTaskBarVisual) {
+    Wh_Log(L"Error: !rootGridTaskBarVisual");
+    return false;
+  }
   auto taskbarFrameRepeaterVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
   if (!taskbarFrameRepeaterVisual) {
     Wh_Log(L"Error: !taskbarFrameRepeaterVisual");
     return false;
   }
-  float targetTaskFrameOffsetX = newXOffsetTray - rightMostEdgeTaskbar - trayGapPlusExtras;
-  targetTaskFrameOffsetX = snapPx(targetTaskFrameOffsetX);
-  // 5 pixels tolerance
-  if (!forceStyleApply && !g_invalidateDimensions && !g_unloading && abs(newXOffsetTray - systemTrayFrameGridVisual.Offset().x) <= 5 && childrenWidthTaskbar == state.lastChildrenWidthTaskbar && trayFrameWidth == state.lastTrayFrameWidth && abs(targetTaskFrameOffsetX - taskbarFrameRepeaterVisual.Offset().x) <= 5) {
-    Wh_Log(L"newXOffsetTray is within 5 pixels of systemTrayFrameGridVisual offset %f, childrenWidthTaskbar and trayFrameWidth didn't change: %d, %d", systemTrayFrameGridVisual.Offset().x, childrenWidthTaskbar, state.lastTrayFrameWidth);
+  const float visualOffsetTolerance =
+      std::max<float>(static_cast<float>(kLayoutToleranceDip),
+                      2.0f / GetRasterizationScale(xamlRootContent));
+  // Move the stable RootGrid instead of TaskbarFrameRepeater. The repeater is
+  // virtualized and can expose transient/recycled child offsets during insert
+  // and remove animations, which makes compositor Offset animations overshoot.
+  // RootGrid remains the authoritative visual transform; the repeater itself is
+  // kept at zero offset below.
+  const double predictedCenteredTaskbarLeft =
+      (rootWidth - static_cast<double>(childrenWidthTaskbar)) / 2.0;
+  const double taskbarEdgeClampTolerance =
+      std::max<double>(visualOffsetTolerance,
+                       static_cast<double>(g_settings.userDefinedTaskbarButtonSize) * 0.25);
+  const bool taskbarLayoutIsEdgeClamped =
+      isOverflowing ||
+      taskbarLeftEdge <= taskbarEdgeClampTolerance ||
+      taskbarRightEdge >= rootWidth - taskbarEdgeClampTolerance ||
+      predictedCenteredTaskbarLeft <= taskbarEdgeClampTolerance;
+  const double taskbarAnchorLeft =
+      taskbarLayoutIsEdgeClamped ? taskbarLeftEdge : predictedCenteredTaskbarLeft;
+  float targetTaskRootOffsetX = snapPx(targetContentLeft - static_cast<float>(taskbarAnchorLeft));
+  float centeredTaskbarRightEdge = targetTrayLogicalLeft;
+  if (!forceStyleApply && !g_invalidateDimensions && !g_unloading &&
+      std::abs(targetOffsetXTray - systemTrayFrameGridVisual.Offset().x) <= visualOffsetTolerance &&
+      childrenWidthTaskbar == state.lastChildrenWidthTaskbar &&
+      trayFrameWidth == state.lastTrayFrameWidth &&
+      std::abs(targetTaskRootOffsetX - rootGridTaskBarVisual.Offset().x) <= visualOffsetTolerance &&
+      std::abs(taskbarFrameRepeaterVisual.Offset().x) <= visualOffsetTolerance) {
+    Wh_Log(L"taskbar root/tray offsets are within tolerance %f; widths didn't change: %d, %d", visualOffsetTolerance, childrenWidthTaskbar, state.lastTrayFrameWidth);
     return true;
   }
   if (childrenWidthTaskbar < 1) {
@@ -5455,12 +5677,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
   const bool invalidateDimensionsThisPass = g_invalidateDimensions;
   signed int userDefinedTaskbarOffsetY = (g_settings.userDefinedFlatTaskbarBottomCorners || g_settings.userDefinedFullWidthTaskbarBackground) ? 0 : g_settings.userDefinedTaskbarOffsetY;
-  float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (g_settings.userDefinedTaskbarBackgroundHorizontalPadding * 2));
+  const float taskbarBackgroundPadding = static_cast<float>(g_settings.userDefinedTaskbarBackgroundHorizontalPadding);
+  float targetWidth = g_unloading ? rootWidth : (childrenWidthTaskbar + trayFrameWidth + (taskbarBackgroundPadding * 2.0f));
   if (targetWidth < 1) {
     Wh_Log(L"Error: targetWidth<1");
     return false;
   }
-  state.lastStartButtonXCalculated = (rootWidth - targetWidth) / 2.0f;
+  const float targetBackgroundLeftScreen = snapPx(targetContentLeft - taskbarBackgroundPadding);
+  const float targetBackgroundRightScreen = snapPx(targetBackgroundLeftScreen + targetWidth);
+  state.lastStartButtonXCalculated = targetBackgroundLeftScreen;
   auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY < 0 ? (userDefinedTaskbarOffsetY * 2) : 0));
   if (heightValue < g_settings.userDefinedTaskbarHeight / 2) {
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
@@ -5485,35 +5710,45 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     taskbarFrameRepeater.Width(rootWidth);
     taskbarFrameRepeater.MaxWidth(rootWidth);
   }
-  if (auto taskbarFrameRepeaterVisualCompositor = taskbarFrameRepeaterVisual.Compositor()) {
+  // Any previous version of the mod may have left a horizontal Offset
+  // animation on the repeater. Clear only X so RootGrid owns task-area X
+  // motion, but preserve the repeater's native Y offset. Windows/XAML can use
+  // that Y component to vertically align the task buttons with the tray.
+  if (std::abs(taskbarFrameRepeaterVisual.Offset().x) > visualOffsetTolerance) {
+    auto repeaterOffset = taskbarFrameRepeaterVisual.Offset();
+    taskbarFrameRepeaterVisual.StopAnimation(L"Offset");
+    taskbarFrameRepeaterVisual.Offset({0.0f, repeaterOffset.y, repeaterOffset.z});
+  }
+  if (auto taskRootVisualCompositor = rootGridTaskBarVisual.Compositor()) {
     if (!g_unloading) {
-      const bool taskFrameOffsetChanged =
+      const bool taskRootOffsetChanged =
           invalidateDimensionsThisPass ||
           !state.hasLastTargetTaskFrameOffsetX ||
-          std::abs(state.lastTargetTaskFrameOffsetX - targetTaskFrameOffsetX) > 0.5f;
-      if (taskFrameOffsetChanged) {
-        auto taskbarFrameRepeaterVisualAnimation = taskbarFrameRepeaterVisualCompositor.CreateVector3KeyFrameAnimation();
-        ConfigureTaskbarIslandAnimation(taskbarFrameRepeaterVisualAnimation);
-        taskbarFrameRepeaterVisualAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskFrameOffsetX, taskbarFrameRepeaterVisual.Offset().y, taskbarFrameRepeaterVisual.Offset().z});
-        taskbarFrameRepeaterVisual.StartAnimation(L"Offset", taskbarFrameRepeaterVisualAnimation);
-        state.lastTargetTaskFrameOffsetX = targetTaskFrameOffsetX;
+          std::abs(state.lastTargetTaskFrameOffsetX - targetTaskRootOffsetX) > visualOffsetTolerance;
+      if (taskRootOffsetChanged) {
+        auto taskRootOffsetAnimation = taskRootVisualCompositor.CreateVector3KeyFrameAnimation();
+        ConfigureTaskbarIslandAnimation(taskRootOffsetAnimation);
+        taskRootOffsetAnimation.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3{targetTaskRootOffsetX, rootGridTaskBarVisual.Offset().y, rootGridTaskBarVisual.Offset().z});
+        rootGridTaskBarVisual.StartAnimation(L"Offset", taskRootOffsetAnimation);
+        state.lastTargetTaskFrameOffsetX = targetTaskRootOffsetX;
         state.hasLastTargetTaskFrameOffsetX = true;
       }
     } else {
-      taskbarFrameRepeaterVisual.Offset({0.0f, 0.0f, 0.0f});
+      rootGridTaskBarVisual.StopAnimation(L"Offset");
+      rootGridTaskBarVisual.Offset({0.0f, 0.0f, rootGridTaskBarVisual.Offset().z});
+      taskbarFrameRepeaterVisual.StopAnimation(L"Offset");
+      taskbarFrameRepeaterVisual.Offset({0.0f, 0.0f, taskbarFrameRepeaterVisual.Offset().z});
       state.hasLastTargetTaskFrameOffsetX = false;
     }
   }
-  auto taskbarVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(taskbarFrameRepeater);
+  auto taskbarVisual = rootGridTaskBarVisual;
   auto trayVisualCompositor = systemTrayFrameGridVisual.Compositor();
     if (trayVisualCompositor) {
     if (!g_unloading) {
-      float targetOffsetXTray = static_cast<float>(newXOffsetTray - trayGapPlusExtras - (rootWidth - trayFrameWidth));
-      targetOffsetXTray = snapPx(targetOffsetXTray);
       const bool trayOffsetChanged =
           invalidateDimensionsThisPass ||
           !state.hasLastTargetTrayOffsetX ||
-          std::abs(state.lastTargetTrayOffsetX - targetOffsetXTray) > 0.5f;
+          std::abs(state.lastTargetTrayOffsetX - targetOffsetXTray) > visualOffsetTolerance;
       if (trayOffsetChanged) {
         auto trayAnimation = trayVisualCompositor.CreateVector3KeyFrameAnimation();
         ConfigureTaskbarIslandAnimation(trayAnimation);
@@ -5539,14 +5774,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       if (!g_unloading) {
         auto compositorWidget = widgetVisual.Compositor();
         if (compositorWidget) {
-          float targetOffsetXWidget = static_cast<float>(rightMostEdgeTaskbar - 8) + g_settings.userDefinedTrayTaskGap;
+          // Widget visual is inside the RootGrid-shifted subtree, so its local
+          // target must exclude the RootGrid compositor offset. Its screen
+          // position still lands after the centered task buttons.
+          float targetOffsetXWidget = centeredTaskbarRightEdge - targetTaskRootOffsetX - 8.0f + g_settings.userDefinedTrayTaskGap;
           targetOffsetXWidget = snapPx(targetOffsetXWidget);
           float targetOffsetYWidget = snapPx(static_cast<float>(abs(g_settings.userDefinedTaskbarHeight - widgetElementVisibleHeight)));
           const bool widgetOffsetChanged =
               invalidateDimensionsThisPass ||
               !state.hasLastTargetWidgetOffset ||
-              std::abs(state.lastTargetWidgetOffsetX - targetOffsetXWidget) > 0.5f ||
-              std::abs(state.lastTargetWidgetOffsetY - targetOffsetYWidget) > 0.5f;
+              std::abs(state.lastTargetWidgetOffsetX - targetOffsetXWidget) > visualOffsetTolerance ||
+              std::abs(state.lastTargetWidgetOffsetY - targetOffsetYWidget) > visualOffsetTolerance;
           if (widgetOffsetChanged) {
             auto widgetOffsetAnimation = compositorWidget.CreateVector3KeyFrameAnimation();
             ConfigureTaskbarIslandAnimation(widgetOffsetAnimation);
@@ -5563,7 +5801,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       }
     }
   }
-  if (state.lastTargetWidth <= 10) {
+  if (state.lastTargetWidth <= static_cast<float>(minimumTaskbarChildrenWidth)) {
     state.lastTargetWidth = static_cast<float>(rootWidth);
     if (!g_unloading && state.lastTargetWidth <= 0) {
       Wh_Log(L"Error: g_unloading && state.lastTargetWidth <= 0");
@@ -5575,12 +5813,12 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: targetWidthRect<=0");
     return false;
   }
-  int rightMostEdgeTray = static_cast<int>((rootWidth - targetWidth) / 2 + targetWidth);
+  int rightMostEdgeTray = static_cast<int>(targetBackgroundRightScreen + 0.5f);
   if (state.lastRightMostEdgeTray != rightMostEdgeTray) {
     state.lastRightMostEdgeTray = rightMostEdgeTray;
     Wh_SetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), rightMostEdgeTray);
   }
-  float leftMostEdgeTray = rightMostEdgeTray - trayFrameWidth;
+  float leftMostEdgeTray = targetBackgroundRightScreen - trayFrameWidth;
   if (leftMostEdgeTray != state.lastLeftMostEdgeTray) {
     state.lastLeftMostEdgeTray = leftMostEdgeTray;
     Wh_SetIntValue((L"lastLeftMostEdgeTray_" + monitorName).c_str(), static_cast<int>(leftMostEdgeTray));
@@ -5637,13 +5875,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     if (backgroundFillVisual) {
       if (compositorTaskBackground) {
         const float userDefinedTaskbarBorderThicknessFloat = static_cast<float>(g_settings.userDefinedTaskbarBorderThickness);
-        const float offsetXRect = snapPx(static_cast<float>((rootWidth - targetWidth) / 2));
+        // BackgroundFill belongs to RootGrid, and RootGrid is now translated.
+        // Convert the desired screen-space island left into RootGrid-local
+        // coordinates so the island background and task/tray content stay in
+        // the same coordinate system.
+        const float offsetXRect = snapPx(targetBackgroundLeftScreen - targetTaskRootOffsetX);
         const float newOffsetYRect = snapPx(userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f);
         const bool backgroundShapeTargetChanged =
             invalidateDimensionsThisPass ||
-            std::abs(state.lastBackgroundShapeTargetWidth - targetWidthRect) > 0.5f ||
-            std::abs(state.lastBackgroundShapeTargetOffsetX - offsetXRect) > 0.5f ||
-            std::abs(state.lastBackgroundShapeTargetOffsetY - newOffsetYRect) > 0.5f;
+            std::abs(state.lastBackgroundShapeTargetWidth - targetWidthRect) > visualOffsetTolerance ||
+            std::abs(state.lastBackgroundShapeTargetOffsetX - offsetXRect) > visualOffsetTolerance ||
+            std::abs(state.lastBackgroundShapeTargetOffsetY - newOffsetYRect) > visualOffsetTolerance;
         if (backgroundShapeTargetChanged || g_settings.userDefinedFullWidthTaskbarBackground || state.lastBackgroundShapeTargetWidth <= 0.0f) {
           auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
           roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
@@ -5663,7 +5905,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
               animationStartWidth = EstimateAnimationValue(state.backgroundAnimationFromWidth, state.backgroundAnimationToWidth, state.backgroundAnimationStartMs, animationNowMs);
               animationStartOffsetX = EstimateAnimationValue(state.backgroundAnimationFromOffsetX, state.backgroundAnimationToOffsetX, state.backgroundAnimationStartMs, animationNowMs);
               animationStartOffsetY = EstimateAnimationValue(state.backgroundAnimationFromOffsetY, state.backgroundAnimationToOffsetY, state.backgroundAnimationStartMs, animationNowMs);
-            } else if (state.lastTargetWidth > 10.0f && std::abs(state.lastTargetWidth - rootWidth) > 5.0f) {
+            } else if (state.lastTargetWidth > static_cast<float>(minimumTaskbarChildrenWidth) && std::abs(state.lastTargetWidth - rootWidth) > visualOffsetTolerance) {
               animationStartWidth = state.lastTargetWidth;
               animationStartOffsetX = state.lastTargetOffsetX == 0.0f ? offsetXRect : snapPx(state.lastTargetOffsetX);
               animationStartOffsetY = snapPx(state.lastTargetOffsetY);
@@ -5748,9 +5990,14 @@ void ApplySettings(HWND hTaskbarWnd) {
 }
 void RefreshSettings() {
   g_invalidateDimensions = true;
+  const unsigned int oldTaskbarButtonSize = g_settings.userDefinedTaskbarButtonSize;
   Wh_ModSettingsChangedTBIconSize();
   Wh_ModSettingsChangedStartButtonPosition();
   UpdateGlobalSettings();
+  if (!g_unloading && oldTaskbarButtonSize > 0 &&
+      oldTaskbarButtonSize != g_settings.userDefinedTaskbarButtonSize) {
+    RequestTaskbarButtonSizeRelayout();
+  }
 }
 void ResetGlobalVars() {
   g_invalidateDimensions = true;
@@ -5826,7 +6073,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
       UINT monitorDpiY = 96;
       GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
       float dpiScale = monitorDpiX / 96.0f;
-      X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale + (12 * dpiScale) - (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
+      const int flyoutInnerPaddingPx = GetFlyoutInnerPaddingPx(dpiScale);
+      X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale + flyoutInnerPaddingPx - (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
       Wh_Log(L"[SetWindowPos] New X %d", X);
     } else {
       Wh_Log(L"[SetWindowPos] No reference state for monitor %s", monitorName.c_str());

@@ -6,8 +6,6 @@
 #include <d2d1_1.h>
 #include <d2d1effects.h>
 #include <list>
-#include <mutex>
-#include <random>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.System.Power.h>
 #include <winrt/Windows.UI.ViewManagement.h>
@@ -124,39 +122,6 @@ struct FloodEffect : winrt::implements<FloodEffect, wge::IGraphicsEffect, wge::I
   void Name(winrt::hstring value) { m_name = std::move(value); }
 };
 
-struct BorderEffect : winrt::implements<BorderEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
-  wge::IGraphicsEffectSource Source{nullptr};
-  D2D1_BORDER_EDGE_MODE ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
-  D2D1_BORDER_EDGE_MODE ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
-  winrt::hstring m_name = L"BorderEffect";
-  HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override { if (!id) return E_INVALIDARG; *id = CLSID_D2D1Border; return S_OK; }
-  HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-    if (!index || !mapping) return E_INVALIDARG;
-    const std::wstring_view n(name);
-    if (n == L"ExtendX") { *index = D2D1_BORDER_PROP_EDGE_MODE_X; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
-    if (n == L"ExtendY") { *index = D2D1_BORDER_PROP_EDGE_MODE_Y; *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT; return S_OK; }
-    return E_INVALIDARG;
-  }
-  HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 2; return S_OK; }
-  HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-    if (!value) return E_INVALIDARG;
-    switch (index) {
-      case D2D1_BORDER_PROP_EDGE_MODE_X: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendX)).as<wf::IPropertyValue>(), value); break;
-      case D2D1_BORDER_PROP_EDGE_MODE_Y: CopyWindhawkBlurPropertyValueToAbi(wf::PropertyValue::CreateUInt32(static_cast<UINT32>(ExtendY)).as<wf::IPropertyValue>(), value); break;
-      default: return E_BOUNDS;
-    }
-    return S_OK;
-  } catch (...) { return winrt::to_hresult(); }
-  HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override {
-    if (!source) return E_INVALIDARG;
-    if (index == 0 && Source) { winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source)); return S_OK; }
-    return E_BOUNDS;
-  }
-  HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override { if (!count) return E_INVALIDARG; *count = 1; return S_OK; }
-  winrt::hstring Name() { return m_name; }
-  void Name(winrt::hstring value) { m_name = std::move(value); }
-};
-
 struct GaussianBlurEffect : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop> {
   wge::IGraphicsEffectSource Source{nullptr};
   float BlurAmount = 30.0f;
@@ -229,54 +194,6 @@ struct ColorMatrixEffect : winrt::implements<ColorMatrixEffect, wge::IGraphicsEf
   void Name(winrt::hstring value) { m_name = std::move(value); }
 };
 
-winrt::Windows::Storage::Streams::IRandomAccessStream CreateWindhawkBlurNoiseStream(float density) {
-  thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-  thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream cachedStream{nullptr};
-  if (density == cachedDensity && cachedStream) {
-    return cachedStream.CloneStream();
-  }
-
-  constexpr int kSize = 256;
-  constexpr DWORD kBpp = 32;
-  constexpr DWORD rowSize = kSize * (kBpp / 8);
-  constexpr DWORD dataSize = rowSize * kSize;
-  BITMAPFILEHEADER fileHeader{0x4D42, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dataSize, 0, 0, sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)};
-  BITMAPINFOHEADER infoHeader{};
-  infoHeader.biSize = sizeof(BITMAPINFOHEADER);
-  infoHeader.biWidth = kSize;
-  infoHeader.biHeight = kSize;
-  infoHeader.biPlanes = 1;
-  infoHeader.biBitCount = kBpp;
-  infoHeader.biSizeImage = dataSize;
-
-  std::vector<uint8_t> pixels(dataSize);
-  const float safeDensity = std::clamp(density, 0.001f, 1.0f);
-  const float exponent = 1.0f / safeDensity;
-  uint8_t lut[256];
-  for (int i = 0; i < 256; i++) {
-    lut[i] = static_cast<uint8_t>(std::pow(i / 255.0f, exponent) * 255.0f);
-  }
-  std::mt19937 rng(0);
-  std::uniform_int_distribution<int> dist(0, 255);
-  for (size_t i = 0; i < pixels.size(); i += 4) {
-    const uint8_t gray = lut[dist(rng)];
-    pixels[i] = gray;
-    pixels[i + 1] = gray;
-    pixels[i + 2] = gray;
-    pixels[i + 3] = 255;
-  }
-
-  winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-  winrt::Windows::Storage::Streams::DataWriter writer(stream);
-  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&fileHeader), reinterpret_cast<uint8_t const*>(&fileHeader) + sizeof(fileHeader)));
-  writer.WriteBytes(winrt::array_view<uint8_t const>(reinterpret_cast<uint8_t const*>(&infoHeader), reinterpret_cast<uint8_t const*>(&infoHeader) + sizeof(infoHeader)));
-  writer.WriteBytes(pixels);
-  writer.StoreAsync().get();
-  writer.DetachStream();
-  cachedStream = stream;
-  cachedDensity = density;
-  return cachedStream.CloneStream();
-}
 
 class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
  public:
@@ -287,8 +204,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
                 winrt::hstring tintThemeResourceKey,
                 std::optional<float> tintLuminosityOpacity,
                 std::optional<float> tintSaturation,
-                std::optional<float> noiseOpacity,
-                std::optional<float> noiseDensity,
+                std::optional<float> inversionAmount,
                 std::optional<winrt::Windows::UI::Color> fallbackColor,
                 winrt::hstring fallbackThemeResourceKey)
       : m_compositor(wuxh::ElementCompositionPreview::GetElementVisual(element).Compositor()),
@@ -298,8 +214,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
         m_tintThemeResourceKey(std::move(tintThemeResourceKey)),
         m_tintLuminosityOpacity(tintLuminosityOpacity),
         m_tintSaturation(tintSaturation),
-        m_noiseOpacity(noiseOpacity),
-        m_noiseDensity(noiseDensity),
+        m_inversionAmount(inversionAmount),
         m_fallbackColor(fallbackColor),
         m_fallbackThemeResourceKey(std::move(fallbackThemeResourceKey)) {
     auto fe = element.try_as<FrameworkElement>();
@@ -556,31 +471,20 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
       topOfStack = *lumMatrix;
     }
 
-    wuc::CompositionSurfaceBrush noiseBrush{nullptr};
-    if (m_noiseOpacity && *m_noiseOpacity > 0.0f) {
-      float density = m_noiseDensity.value_or(1.0f);
-      auto stream = CreateWindhawkBlurNoiseStream(density);
-      auto surface = Media::LoadedImageSurface::StartLoadFromStream(stream);
-      noiseBrush = m_compositor.CreateSurfaceBrush(surface);
-      noiseBrush.Stretch(wuc::CompositionStretch::None);
-
-      auto borderEffect = winrt::make_self<BorderEffect>();
-      borderEffect->Source = wuc::CompositionEffectSourceParameter(L"NoiseSource");
-      float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
-      auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
-      opacityEffect->Source = *borderEffect;
-      opacityEffect->Matrix[0] = nOp;
-      opacityEffect->Matrix[5] = nOp;
-      opacityEffect->Matrix[10] = nOp;
-      opacityEffect->Matrix[15] = nOp;
-      opacityEffect->Name(L"NoiseOpacityEffect");
-
-      auto noiseComposite = winrt::make_self<CompositeEffect>();
-      noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-      noiseComposite->Sources.push_back(topOfStack);
-      noiseComposite->Sources.push_back(*opacityEffect);
-      noiseComposite->Name(L"NoiseComposite");
-      topOfStack = *noiseComposite;
+    if (m_inversionAmount && *m_inversionAmount > 0.0f) {
+      float inv = std::clamp(*m_inversionAmount, 0.0f, 1.0f);
+      float scale = 1.0f - (2.0f * inv);
+      auto inversionMatrix = winrt::make_self<ColorMatrixEffect>();
+      inversionMatrix->Source = topOfStack;
+      auto& m = inversionMatrix->Matrix;
+      m[0] = scale; m[1] = 0.0f;  m[2] = 0.0f;  m[3] = 0.0f;
+      m[4] = 0.0f;  m[5] = scale; m[6] = 0.0f;  m[7] = 0.0f;
+      m[8] = 0.0f;  m[9] = 0.0f;  m[10] = scale; m[11] = 0.0f;
+      m[12] = 0.0f; m[13] = 0.0f; m[14] = 0.0f; m[15] = 1.0f;
+      m[16] = inv;  m[17] = inv;  m[18] = inv;  m[19] = 0.0f;
+      inversionMatrix->ClampOutput = true;
+      inversionMatrix->Name(L"InversionEffect");
+      topOfStack = *inversionMatrix;
     }
 
     auto floodEffect = winrt::make_self<FloodEffect>();
@@ -595,7 +499,6 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
     auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
     auto brush = factory.CreateBrush();
     brush.SetSourceParameter(L"backdrop", backdropBrush);
-    if (noiseBrush) brush.SetSourceParameter(L"NoiseSource", noiseBrush);
     return brush;
   }
 
@@ -606,8 +509,7 @@ class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
   winrt::hstring m_tintThemeResourceKey;
   std::optional<float> m_tintLuminosityOpacity;
   std::optional<float> m_tintSaturation;
-  std::optional<float> m_noiseOpacity;
-  std::optional<float> m_noiseDensity;
+  std::optional<float> m_inversionAmount;
   std::optional<winrt::Windows::UI::Color> m_fallbackColor;
   winrt::hstring m_fallbackThemeResourceKey;
   Media::SolidColorBrush m_proxyBrush{nullptr};
@@ -711,8 +613,7 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
 
   const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
   const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
-  const float noiseOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseOpacity / 100.0f, 0.0f, 1.0f);
-  const float noiseDensity = std::clamp(g_settings.userDefinedTaskbarBackgroundNoiseDensity / 100.0f, 0.01f, 1.0f);
+  const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
 
   try {
     auto oldFill = rectangle.Fill();
@@ -727,8 +628,7 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
         winrt::hstring(tintSetting.themeResourceKey),
         std::optional<float>(luminosityOpacity),
         std::optional<float>(saturation),
-        noiseOpacity > 0.0f ? std::optional<float>(noiseOpacity) : std::nullopt,
-        std::optional<float>(noiseDensity),
+        inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
         fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
         winrt::hstring(fallbackSetting.themeResourceKey));
     rectangle.Fill(blurBrush);

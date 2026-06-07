@@ -47,6 +47,46 @@ int g_taskbarHeight;
 std::atomic<DWORD> g_shellIconLoaderV2_LoadAsyncIcon__ResumeCoro_ThreadId;
 bool g_inSystemTrayController_UpdateFrameSize;
 bool g_taskbarButtonWidthCustomized;
+constexpr int kDefaultTaskbarHeight = 74;
+constexpr int kDefaultTaskbarIconSize = 42;
+constexpr int kDefaultTaskbarButtonSize = 74;
+constexpr int kDefaultTaskbarOffsetY = 6;
+constexpr int kDefaultTrayIconSize = 15;
+constexpr int kDefaultTrayButtonSize = 30;
+constexpr int kSystemSmallTaskbarIconSize = 16;
+constexpr int kSystemMediumTaskbarIconSize = 24;
+constexpr int kSystemSmallTaskbarButtonSize = 32;
+constexpr int kSystemMediumTaskbarButtonSize = 44;
+constexpr int kMinTaskbarHeight = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarHeight = 200;
+constexpr int kMinTaskbarButtonSize = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarButtonSize = 300;
+constexpr int kMinTaskbarIconSize = 8;
+constexpr int kMaxTaskbarIconSize = 300;
+constexpr int kMinTrayIconSize = 15;
+constexpr int kMinTrayButtonSize = 20;
+constexpr double kLayoutToleranceDip = 0.5;
+constexpr int kWorkerShutdownPollMs = 10;
+constexpr int kDelayedApplyWorkerShutdownTimeoutMs = 5000;
+constexpr int kAnimationFollowupWorkerShutdownTimeoutMs = 2000;
+constexpr int kTaskbarMeasurePollIntervalMs = 100;
+constexpr int kTaskbarMeasureOverrideTimeoutMs = 10000;
+constexpr int kHookDrainPollIntervalMs = 100;
+constexpr int kHookDrainTimeoutMs = 10000;
+bool WaitForConditionWithTimeout(std::function<bool()> condition,
+                                 int timeoutMs,
+                                 int pollIntervalMs);
+int ClampInt(int value, int minValue, int maxValue) {
+  return value < minValue ? minValue : (value > maxValue ? maxValue : value);
+}
+int ReadPositiveIntSettingOrDefault(const wchar_t* key, int defaultValue) {
+  int value = Wh_GetIntSetting(key);
+  return value > 0 ? value : defaultValue;
+}
+int GetMaxTaskbarIconSizeForLayout(int taskbarHeight, int taskbarButtonSize) {
+  int maxIconSize = std::min(kMaxTaskbarIconSize, std::min(taskbarHeight, taskbarButtonSize));
+  return std::max(kMinTaskbarIconSize, maxIconSize);
+}
 bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 double* double_48_value_Original;
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
@@ -112,8 +152,7 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int userDefinedTaskbarBackgroundBlurAmount;
   std::wstring userDefinedTaskbarBackgroundTintColor;
   unsigned int userDefinedTaskbarBackgroundTintSaturation;
-  unsigned int userDefinedTaskbarBackgroundNoiseOpacity;
-  unsigned int userDefinedTaskbarBackgroundNoiseDensity;
+  unsigned int userDefinedTaskbarBackgroundInversion;
   std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
   double userDefinedTaskbarBorderThickness;
@@ -135,10 +174,11 @@ void ApplySettingsFromTaskbarThreadIfRequired();
 void ApplySettingsFromTaskbarThreadImmediately();
 void ApplySettingsFromTaskbarThreadGeometryChanged();
 extern std::atomic<int> g_high_priority_dispatch_passes;
+void RequestTaskbarButtonSizeRelayout();
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
 bool g_invalidateDimensions =true;
-int g_lastRecordedStartMenuWidth=670;
+int g_lastRecordedStartMenuWidth=0;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
 #include <Windows.h>
@@ -172,9 +212,20 @@ int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
 int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
     int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
     if (taskbarHeight <= 0) {
-        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : 44;
+        taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : kSystemMediumTaskbarButtonSize;
     }
     return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
+}
+int GetFlyoutInnerPaddingPx(float dpiScale) {
+    if (dpiScale <= 0.0f) {
+        dpiScale = 1.0f;
+    }
+    constexpr int kMaxFlyoutInnerPaddingDip = 32;
+    const float logicalPadding =
+        std::min<float>(kMaxFlyoutInnerPaddingDip,
+                        static_cast<float>(g_settings.userDefinedTaskbarBackgroundHorizontalPadding) +
+                            (g_settings.userDefinedTaskbarCornerRadius * 0.5f));
+    return std::max(0, static_cast<int>((logicalPadding * dpiScale) + 0.5f));
 }
 bool IsVerticalTaskbar();
 bool TryCalculateFlyoutYAboveTaskbar(const MONITORINFO& monitorInfo,
@@ -1284,9 +1335,12 @@ void WINAPI LaunchListItemViewModel_IconHeight_Hook(void* pThis,
 }
 using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 ExperienceToggleButton_UpdateButtonPadding_t
-    ExperienceToggleButton_UpdateButtonPadding_Original;
+    ExperienceToggleButton_UpdateButtonPadding_Original;double GetEffectiveTaskbarButtonTargetWidth();
+bool EnsureElementTaskbarButtonWidth(FrameworkElement const& element,
+                                     double targetWidth,
+                                     bool allowHardWidth);
 void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
-    ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
+ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
         return;
     }
@@ -1302,44 +1356,30 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     if (!panelElement) {
         return;
     }
-    double defaultWidthExtra = -4;
     auto className = winrt::get_class_name(toggleButtonElement);
-    if (className == L"Taskbar.ExperienceToggleButton") {
-        auto automationId = Automation::AutomationProperties::GetAutomationId(
-            toggleButtonElement);
-        if (automationId == L"StartButton") {
-            defaultWidthExtra = -3;
-        }
-    } else if (className == L"Taskbar.SearchBoxButton") {
-        if (panelElement.Margin() != Thickness{}) {
-            return;
-        }
-    } else {
+    if (className != L"Taskbar.ExperienceToggleButton" &&
+        className != L"Taskbar.SearchBoxButton") {
         return;
     }
-    double buttonWidth = panelElement.Width();
-    if (!(buttonWidth > 0)) {
+    if (className == L"Taskbar.SearchBoxButton" && panelElement.Margin() != Thickness{}) {
         return;
     }
-    auto buttonPadding = panelElement.Padding();
-    double defaultWidth = g_smallIconSize ? 32 : 44;
-    double overrideWidth =
-        g_unloading ? defaultWidth
-                    : (g_smallIconSize ? g_settings_tbiconsize.taskbarButtonWidthSmall
-                                       : g_settings_tbiconsize.taskbarButtonWidth);
-    double newWidth = overrideWidth + buttonPadding.Left + buttonPadding.Right +
-                      defaultWidthExtra;
-    if (newWidth != buttonWidth) {
-        Wh_Log(L"Updating MediumTaskbarButtonExtent for %s: %f->%f",
-               className.c_str(), buttonWidth, newWidth);
-        panelElement.Width(newWidth);
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    const bool allowHardWidth =
+        className != L"Taskbar.SearchBoxButton" ||
+        !FindChildByName(panelElement, L"SearchBoxTextBlock");
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, allowHardWidth);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, allowHardWidth) || changed;
+    if (changed) {
+        Wh_Log(L"Updating taskbar button width for %s to %f", className.c_str(), targetWidth);
+        panelElement.UpdateLayout();
     }
 }
 using SearchButtonBase_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 SearchButtonBase_UpdateButtonPadding_t
     SearchButtonBase_UpdateButtonPadding_Original;
 void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
-    SearchButtonBase_UpdateButtonPadding_Original(pThis);
+SearchButtonBase_UpdateButtonPadding_Original(pThis);
     if (g_hasDynamicIconScaling && g_unloading) {
         return;
     }
@@ -1358,22 +1398,12 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
     if (FindChildByName(panelElement, L"SearchBoxTextBlock")) {
         return;
     }
-    double buttonWidth = panelElement.Width();
-    if (!(buttonWidth > 0)) {
-        return;
-    }
-    auto buttonPadding = panelElement.Padding();
-    double defaultWidth = g_smallIconSize ? 32 : 44;
-    double overrideWidth =
-        g_unloading ? defaultWidth
-                    : (g_smallIconSize ? g_settings_tbiconsize.taskbarButtonWidthSmall
-                                       : g_settings_tbiconsize.taskbarButtonWidth);
-    double newWidth =
-        overrideWidth + buttonPadding.Left + buttonPadding.Right - 4;
-    if (newWidth != buttonWidth) {
-        Wh_Log(L"Updating MediumTaskbarButtonExtent: %f->%f", buttonWidth,
-               newWidth);
-        panelElement.Width(newWidth);
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, true);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, true) || changed;
+    if (changed) {
+        Wh_Log(L"Updating search button width to %f", targetWidth);
+        panelElement.UpdateLayout();
     }
 }
 using AugmentedEntryPointButton_UpdateButtonPadding_t =
@@ -1538,22 +1568,25 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
     return ret;
 }
 void LoadSettingsTBIconSize() {
-  g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
-  g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
-  if (g_settings_tbiconsize.taskbarHeight <= 0) g_settings_tbiconsize.taskbarHeight = 78;
-  g_settings_tbiconsize.taskbarHeight = abs(g_settings_tbiconsize.taskbarHeight);
-  if (g_settings_tbiconsize.taskbarHeight > 200) g_settings_tbiconsize.taskbarHeight = 200;
-  if (g_settings_tbiconsize.taskbarHeight < 44) g_settings_tbiconsize.taskbarHeight = 44;
-  int TaskbarOffsetY = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (TaskbarOffsetY < 0) TaskbarOffsetY = 6;
-  int heightExpansion = ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground")) ? 0 : (abs(TaskbarOffsetY) * 2));
-  g_settings_tbiconsize.taskbarHeight = g_settings_tbiconsize.taskbarHeight + heightExpansion;
-  int value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 0) value = 74;
-  g_settings_tbiconsize.taskbarButtonWidth = value;
+  const int requestedHeight = ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight);
+  int taskbarHeight = ClampInt(abs(requestedHeight), kMinTaskbarHeight, kMaxTaskbarHeight);
+  const int requestedOffsetY = ReadPositiveIntSettingOrDefault(L"TaskbarOffsetY", kDefaultTaskbarOffsetY);
+  const int taskbarOffsetY = abs(requestedOffsetY);
+  const int heightExpansion =
+      ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") ||
+        Wh_GetIntSetting(L"FullWidthTaskbarBackground"))
+           ? 0
+           : (taskbarOffsetY * 2));
+  g_settings_tbiconsize.taskbarHeight =
+      ClampInt(taskbarHeight + heightExpansion, kMinTaskbarHeight, kMaxTaskbarHeight + (kDefaultTaskbarOffsetY * 2));
+  const int requestedButtonSize = ReadPositiveIntSettingOrDefault(L"TaskbarButtonSize", kDefaultTaskbarButtonSize);
+  const int taskbarButtonSize = ClampInt(abs(requestedButtonSize), kMinTaskbarButtonSize, kMaxTaskbarButtonSize);
+  g_settings_tbiconsize.taskbarButtonWidth = taskbarButtonSize;
+  g_settings_tbiconsize.taskbarButtonWidthSmall = taskbarButtonSize;
+  const int requestedIconSize = ReadPositiveIntSettingOrDefault(L"TaskbarIconSize", kDefaultTaskbarIconSize);
+  const int maxIconSize = GetMaxTaskbarIconSizeForLayout(g_settings_tbiconsize.taskbarHeight, taskbarButtonSize);
+  g_settings_tbiconsize.iconSize = ClampInt(abs(requestedIconSize), kMinTaskbarIconSize, maxIconSize);
+  g_settings_tbiconsize.iconSizeSmall = std::min(g_settings_tbiconsize.iconSize, kSystemSmallTaskbarIconSize);
 }
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -1612,12 +1645,10 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
         }
         SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE,
                     0);
-        for (int i = 0; i < 100; i++) {
-            if (!g_pendingMeasureOverride) {
-                break;
-            }
-            Sleep(100);
-        }
+        WaitForConditionWithTimeout(
+            [] { return !g_pendingMeasureOverride.load(); },
+            kTaskbarMeasureOverrideTimeoutMs,
+            kTaskbarMeasurePollIntervalMs);
     }
     g_pendingMeasureOverride = true;
     g_taskbarHeight = taskbarHeight;
@@ -1629,12 +1660,10 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
     }
     SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
     if (!IsVerticalTaskbar()) {
-        for (int i = 0; i < 100; i++) {
-            if (!g_pendingMeasureOverride) {
-                break;
-            }
-            Sleep(100);
-        }
+        WaitForConditionWithTimeout(
+            [] { return !g_pendingMeasureOverride.load(); },
+            kTaskbarMeasureOverrideTimeoutMs,
+            kTaskbarMeasurePollIntervalMs);
     } else {
         g_pendingMeasureOverride = false;
     }
@@ -2197,14 +2226,24 @@ void Wh_ModAfterInitTBIconSize() {
 }
 void Wh_ModBeforeUninitTBIconSize() {
     g_unloading = true;
-    ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : 48);
+    ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : kSystemMediumTaskbarButtonSize);
 }
 void Wh_ModUninitTBIconSize() {
-    while (g_hookCallCounter > 0) {
-        Sleep(100);
+    if (!WaitForConditionWithTimeout(
+            [] { return g_hookCallCounter.load() <= 0; },
+            kHookDrainTimeoutMs,
+            kHookDrainPollIntervalMs)) {
+        Wh_Log(L"Timed out waiting for taskbar icon size hooks to drain");
     }
 }
 void Wh_ModSettingsChangedTBIconSize() {
-    LoadSettingsTBIconSize();
+const int oldTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidth;
+    const int oldSmallTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidthSmall;
+LoadSettingsTBIconSize();
+if (!g_unloading &&
+        ((oldTaskbarButtonWidth > 0 && oldTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidth) ||
+         (oldSmallTaskbarButtonWidth > 0 && oldSmallTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidthSmall))) {
+        RequestTaskbarButtonSizeRelayout();
+    }
     ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
 }

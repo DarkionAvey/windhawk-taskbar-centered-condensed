@@ -753,21 +753,170 @@ class TaskbarIconSizeMod(URLProcessor):
 
         return (
             patch.replace_literal('Wh_GetIntSetting(L"IconSize")', 'Wh_GetIntSetting(L"TaskbarIconSize")')
-            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;","\nApplySettingsFromTaskbarThreadGeometryChanged();",in_function="void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis)")
+            .insert_after_regex(
+                r"ExperienceToggleButton_UpdateButtonPadding_t[\s\n]+ExperienceToggleButton_UpdateButtonPadding_Original;", """double GetEffectiveTaskbarButtonTargetWidth();
+bool EnsureElementTaskbarButtonWidth(FrameworkElement const& element,
+                                     double targetWidth,
+                                     bool allowHardWidth);""")
+            .replace_function_body("void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis)", """    ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
+    if (g_hasDynamicIconScaling && g_unloading) {
+        return;
+    }
+    FrameworkElement toggleButtonElement = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(toggleButtonElement));
+    if (!toggleButtonElement) {
+        return;
+    }
+    auto panelElement =
+        FindChildByName(toggleButtonElement, L"ExperienceToggleButtonRootPanel")
+            .try_as<Controls::Grid>();
+    if (!panelElement) {
+        return;
+    }
+    auto className = winrt::get_class_name(toggleButtonElement);
+    if (className != L"Taskbar.ExperienceToggleButton" &&
+        className != L"Taskbar.SearchBoxButton") {
+        return;
+    }
+    if (className == L"Taskbar.SearchBoxButton" && panelElement.Margin() != Thickness{}) {
+        return;
+    }
+
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    const bool allowHardWidth =
+        className != L"Taskbar.SearchBoxButton" ||
+        !FindChildByName(panelElement, L"SearchBoxTextBlock");
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, allowHardWidth);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, allowHardWidth) || changed;
+    if (changed) {
+        Wh_Log(L"Updating taskbar button width for %s to %f", className.c_str(), targetWidth);
+        panelElement.UpdateLayout();
+    }""").replace_function_body("void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis)", """SearchButtonBase_UpdateButtonPadding_Original(pThis);
+    if (g_hasDynamicIconScaling && g_unloading) {
+        return;
+    }
+    FrameworkElement toggleButtonElement = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(toggleButtonElement));
+    if (!toggleButtonElement) {
+        return;
+    }
+    auto panelElement =
+        FindChildByName(toggleButtonElement, L"SearchBoxButtonRootPanel")
+            .try_as<Controls::Grid>();
+    if (!panelElement) {
+        return;
+    }
+    // Expanded search boxes are allowed to be wider. Icon-only search buttons
+    // can safely use the same measured target as the other taskbar buttons.
+    if (FindChildByName(panelElement, L"SearchBoxTextBlock")) {
+        return;
+    }
+    const double targetWidth = GetEffectiveTaskbarButtonTargetWidth();
+    bool changed = EnsureElementTaskbarButtonWidth(toggleButtonElement, targetWidth, true);
+    changed = EnsureElementTaskbarButtonWidth(panelElement, targetWidth, true) || changed;
+    if (changed) {
+        Wh_Log(L"Updating search button width to %f", targetWidth);
+        panelElement.UpdateLayout();
+    }""").replace_regex(
+                r'''
+    for\s*\(\s*int\s+i\s*=\s*0\s*;\s*
+    i\s*<\s*100\s*;\s*
+    i\+\+\s*\)\s*
+    \{\s*
+    if\s*\(\s*!\s*g_pendingMeasureOverride\s*\)\s*
+    \{\s*
+    break\s*;\s*
+    \}\s*
+    Sleep\s*\(\s*100\s*\)\s*;\s*
+    \}
+    ''', """WaitForConditionWithTimeout(
+            [] { return !g_pendingMeasureOverride.load(); },
+            kTaskbarMeasureOverrideTimeoutMs,
+            kTaskbarMeasurePollIntervalMs);""", flags=re.VERBOSE)
+            .replace_literal("ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : 48);",
+                             "ApplySettingsTBIconSize(g_originalTaskbarHeight ? g_originalTaskbarHeight : kSystemMediumTaskbarButtonSize);",
+                             in_function="void Wh_ModBeforeUninitTBIconSize()")
+            .replace_regex(r'''
+    while\s*\(\s*
+    g_hookCallCounter\s*>\s*0
+    \s*\)\s*
+    \{\s*
+    Sleep\s*\(\s*100\s*\)\s*;
+    \s*\}
+    ''', """if (!WaitForConditionWithTimeout(
+            [] { return g_hookCallCounter.load() <= 0; },
+            kHookDrainTimeoutMs,
+            kHookDrainPollIntervalMs)) {
+        Wh_Log(L"Timed out waiting for taskbar icon size hooks to drain");
+    }""", in_function="void Wh_ModUninitTBIconSize()",
+                           flags=re.VERBOSE)
+            .insert_after_literal("bool g_taskbarButtonWidthCustomized;", """\n
+constexpr int kDefaultTaskbarHeight = 74;
+constexpr int kDefaultTaskbarIconSize = 42;
+constexpr int kDefaultTaskbarButtonSize = 74;
+constexpr int kDefaultTaskbarOffsetY = 6;
+constexpr int kDefaultTrayIconSize = 15;
+constexpr int kDefaultTrayButtonSize = 30;
+constexpr int kSystemSmallTaskbarIconSize = 16;
+constexpr int kSystemMediumTaskbarIconSize = 24;
+constexpr int kSystemSmallTaskbarButtonSize = 32;
+constexpr int kSystemMediumTaskbarButtonSize = 44;
+constexpr int kMinTaskbarHeight = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarHeight = 200;
+constexpr int kMinTaskbarButtonSize = kSystemMediumTaskbarButtonSize;
+constexpr int kMaxTaskbarButtonSize = 300;
+constexpr int kMinTaskbarIconSize = 8;
+constexpr int kMaxTaskbarIconSize = 300;
+constexpr int kMinTrayIconSize = 15;
+constexpr int kMinTrayButtonSize = 20;
+constexpr double kLayoutToleranceDip = 0.5;
+constexpr int kWorkerShutdownPollMs = 10;
+constexpr int kDelayedApplyWorkerShutdownTimeoutMs = 5000;
+constexpr int kAnimationFollowupWorkerShutdownTimeoutMs = 2000;
+constexpr int kTaskbarMeasurePollIntervalMs = 100;
+constexpr int kTaskbarMeasureOverrideTimeoutMs = 10000;
+constexpr int kHookDrainPollIntervalMs = 100;
+constexpr int kHookDrainTimeoutMs = 10000;
+bool WaitForConditionWithTimeout(std::function<bool()> condition,
+                                 int timeoutMs,
+                                 int pollIntervalMs);
+
+int ClampInt(int value, int minValue, int maxValue) {
+  return value < minValue ? minValue : (value > maxValue ? maxValue : value);
+}
+int ReadPositiveIntSettingOrDefault(const wchar_t* key, int defaultValue) {
+  int value = Wh_GetIntSetting(key);
+  return value > 0 ? value : defaultValue;
+}
+int GetMaxTaskbarIconSizeForLayout(int taskbarHeight, int taskbarButtonSize) {
+  int maxIconSize = std::min(kMaxTaskbarIconSize, std::min(taskbarHeight, taskbarButtonSize));
+  return std::max(kMinTaskbarIconSize, maxIconSize);
+}\n""")
+            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;",
+                                  "\nApplySettingsFromTaskbarThreadGeometryChanged();",
+                                  in_function="void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis)")
             .replace_literal('Wh_GetIntSetting(L"TaskbarButtonWidth")', 'Wh_GetIntSetting(L"TaskbarButtonSize")')
             .replace_literal("STDAPI GetDpiForMonitor", injected_dpi_prefix, count=1,
                              label="insert shared taskbar helpers before GetDpiForMonitor")
             .replace_literal("ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);",
                              'Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");',
                              in_function="void Wh_ModAfterInitTBIconSize()")
-            .insert_before_literal("#include <winrt/Windows.Foundation.h>\n#include <winrt/Windows.UI.Xaml.Automation.h>","#include <initguid.h>\n",)
-.insert_after_literal("TaskbarController_OnGroupingModeChanged_InitOffsets();","""WindhawkUtils::Wh_SetFunctionHookT(
+            .insert_before_literal(
+                "#include <winrt/Windows.Foundation.h>\n#include <winrt/Windows.UI.Xaml.Automation.h>",
+                "#include <initguid.h>\n", )
+            .insert_after_literal("TaskbarController_OnGroupingModeChanged_InitOffsets();", """WindhawkUtils::Wh_SetFunctionHookT(
             reinterpret_cast<TaskbarController_OnGroupingModeChanged_t>(
                 TaskbarController_OnGroupingModeChanged_Original),
             TaskbarController_OnGroupingModeChanged_Hook,
-            &TaskbarController_OnGroupingModeChanged_Hook_Original);""", in_function="bool HookTaskbarViewDllSymbols(HMODULE module, bool hookSystemTraySymbolsInline)")
-            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;","ApplySettingsFromTaskbarThreadGeometryChanged();",in_function="void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis)")
-            .insert_before_regex(re.escape(r"using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);"),"""using TaskbarController_OnGroupingModeChanged_t = void(WINAPI*)(void* pThis);
+            &TaskbarController_OnGroupingModeChanged_Hook_Original);""",
+                                  in_function="bool HookTaskbarViewDllSymbols(HMODULE module, bool hookSystemTraySymbolsInline)")
+            .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;",
+                                  "ApplySettingsFromTaskbarThreadGeometryChanged();",
+                                  in_function="void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis)")
+            .insert_before_regex(
+                re.escape(r"using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);"), """using TaskbarController_OnGroupingModeChanged_t = void(WINAPI*)(void* pThis);
 TaskbarController_OnGroupingModeChanged_t
     TaskbarController_OnGroupingModeChanged_Hook_Original;
 void WINAPI TaskbarController_OnGroupingModeChanged_Hook(void* pThis) {
@@ -791,27 +940,42 @@ void WINAPI TaskbarController_OnGroupingModeChanged_Hook(void* pThis) {
                 "void LoadSettingsTBIconSize()",
                 r'''
 void LoadSettingsTBIconSize() {
-  g_settings_tbiconsize.iconSize = Wh_GetIntSetting(L"TaskbarIconSize");
-  if (g_settings_tbiconsize.iconSize <= 0) g_settings_tbiconsize.iconSize = 44;
-  g_settings_tbiconsize.iconSize=g_settings_tbiconsize.iconSize;
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
+  const int requestedHeight = ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight);
+  int taskbarHeight = ClampInt(abs(requestedHeight), kMinTaskbarHeight, kMaxTaskbarHeight);
 
-  g_settings_tbiconsize.taskbarHeight = Wh_GetIntSetting(L"TaskbarHeight");
-  if (g_settings_tbiconsize.taskbarHeight <= 0) g_settings_tbiconsize.taskbarHeight = 78;
-  g_settings_tbiconsize.taskbarHeight = abs(g_settings_tbiconsize.taskbarHeight);
-  if (g_settings_tbiconsize.taskbarHeight > 200) g_settings_tbiconsize.taskbarHeight = 200;
-  if (g_settings_tbiconsize.taskbarHeight < 44) g_settings_tbiconsize.taskbarHeight = 44;
-  int TaskbarOffsetY = abs(Wh_GetIntSetting(L"TaskbarOffsetY"));
-  if (TaskbarOffsetY < 0) TaskbarOffsetY = 6;
-  int heightExpansion = ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") || Wh_GetIntSetting(L"FullWidthTaskbarBackground")) ? 0 : (abs(TaskbarOffsetY) * 2));
-  g_settings_tbiconsize.taskbarHeight = g_settings_tbiconsize.taskbarHeight + heightExpansion;
-  int value = Wh_GetIntSetting(L"TaskbarButtonSize");
-  if (value <= 0) value = 74;
-  g_settings_tbiconsize.taskbarButtonWidth = value;
+  const int requestedOffsetY = ReadPositiveIntSettingOrDefault(L"TaskbarOffsetY", kDefaultTaskbarOffsetY);
+  const int taskbarOffsetY = abs(requestedOffsetY);
+  const int heightExpansion =
+      ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") ||
+        Wh_GetIntSetting(L"FullWidthTaskbarBackground"))
+           ? 0
+           : (taskbarOffsetY * 2));
+  g_settings_tbiconsize.taskbarHeight =
+      ClampInt(taskbarHeight + heightExpansion, kMinTaskbarHeight, kMaxTaskbarHeight + (kDefaultTaskbarOffsetY * 2));
+
+  const int requestedButtonSize = ReadPositiveIntSettingOrDefault(L"TaskbarButtonSize", kDefaultTaskbarButtonSize);
+  const int taskbarButtonSize = ClampInt(abs(requestedButtonSize), kMinTaskbarButtonSize, kMaxTaskbarButtonSize);
+  g_settings_tbiconsize.taskbarButtonWidth = taskbarButtonSize;
+  g_settings_tbiconsize.taskbarButtonWidthSmall = taskbarButtonSize;
+
+  const int requestedIconSize = ReadPositiveIntSettingOrDefault(L"TaskbarIconSize", kDefaultTaskbarIconSize);
+  const int maxIconSize = GetMaxTaskbarIconSizeForLayout(g_settings_tbiconsize.taskbarHeight, taskbarButtonSize);
+  g_settings_tbiconsize.iconSize = ClampInt(abs(requestedIconSize), kMinTaskbarIconSize, maxIconSize);
+  g_settings_tbiconsize.iconSizeSmall = std::min(g_settings_tbiconsize.iconSize, kSystemSmallTaskbarIconSize);
 }
                 ''',
                 label="replace LoadSettingsTBIconSize",
             )
+            .insert_before_literal("LoadSettingsTBIconSize();", """\nconst int oldTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidth;
+    const int oldSmallTaskbarButtonWidth = g_settings_tbiconsize.taskbarButtonWidthSmall;\n""",
+                                   in_function="void Wh_ModSettingsChangedTBIconSize()")
+            .insert_after_literal("LoadSettingsTBIconSize();", """\nif (!g_unloading &&
+        ((oldTaskbarButtonWidth > 0 && oldTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidth) ||
+         (oldSmallTaskbarButtonWidth > 0 && oldSmallTaskbarButtonWidth != g_settings_tbiconsize.taskbarButtonWidthSmall))) {
+        RequestTaskbarButtonSizeRelayout();
+    }\n""",
+                                  in_function="void Wh_ModSettingsChangedTBIconSize()")
+
             .text()
         )
 
@@ -903,8 +1067,7 @@ class StartButtonPosition(URLProcessor):
     }''',
             '''if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
         ApplyStyleClassicStartMenu(content, monitor);
-    } 
-    ''',
+    }''',
             count=1,
             label="route redesigned start menu to classic position handler",
         )

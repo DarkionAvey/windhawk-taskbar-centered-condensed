@@ -61,7 +61,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | Property | Name | Description | Accepted values |
 | --- | --- | --- | --- |
 | `TaskbarHeight` | Taskbar height | Set the height of the taskbar (Default is 74) | Non-negative integer |
-| `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons (Default is 42) | Non-negative integer |
+| `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42 | Non-negative integer |
 | `TaskbarButtonSize` | Taskbar button size | Set the size (width and height) of taskbar buttons (Default is 74) | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6) | Non-negative integer |
 | `TrayTaskGap` | Tray task gap | Adjust the space between the task area and the tray area (Default is 10) | Non-negative integer |
@@ -78,8 +78,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundBlurAmount` | Background blur amount | WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30 | Non-negative integer |
 | `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}. Use {ThemeResource SystemBaseHighColor} if you want white color when Windows is in dark mode, or black in light mode. | Text |
 | `TaskbarBackgroundTintSaturation` | Background saturation | WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500 | Non-negative integer |
-| `TaskbarBackgroundNoiseOpacity` | Background noise opacity | WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0 | Non-negative integer |
-| `TaskbarBackgroundNoiseDensity` | Background noise density | WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100 | Non-negative integer |
+| `TaskbarBackgroundInversion` | Background inversion | Inverts the blurred background behind the taskbar. 0 = off, 100 = fully inverted. Low values add subtle opposite-background contrast. Default is 0 | Non-negative integer |
 | `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20) | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`) | string hex color |

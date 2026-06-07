@@ -16,8 +16,7 @@ struct {
   unsigned int userDefinedTaskbarBackgroundBlurAmount;
   std::wstring userDefinedTaskbarBackgroundTintColor;
   unsigned int userDefinedTaskbarBackgroundTintSaturation;
-  unsigned int userDefinedTaskbarBackgroundNoiseOpacity;
-  unsigned int userDefinedTaskbarBackgroundNoiseDensity;
+  unsigned int userDefinedTaskbarBackgroundInversion;
   std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
   double userDefinedTaskbarBorderThickness;

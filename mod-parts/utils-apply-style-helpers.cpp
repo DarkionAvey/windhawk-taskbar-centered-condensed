@@ -1,8 +1,16 @@
 bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
-  if (!element) return false;
-  auto transform = element.TransformToVisual(nullptr);
-  winrt::Windows::Foundation::Rect rect = transform.TransformBounds(winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
-  return rect.X < 0 || rect.Y < 0;
+  if (!element) return true;
+  try {
+    auto transform = element.TransformToVisual(nullptr);
+    winrt::Windows::Foundation::Rect rect = transform.TransformBounds(
+        winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
+    return rect.Width <= 0.0 || rect.Height <= 0.0 || rect.X < -kLayoutToleranceDip || rect.Y < -kLayoutToleranceDip;
+  } catch (...) {
+    // Overflow/recycled taskbar elements can briefly be disconnected from the
+    // visual tree while Explorer is rebuilding the task list. Treat them as
+    // invalid instead of letting a transient XAML exception take down Explorer.
+    return true;
+  }
 }
 bool IsTaskbarWidgetsEnabled() {
     DWORD value = 0;

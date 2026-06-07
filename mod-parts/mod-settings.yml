@@ -1,81 +1,81 @@
 - TaskbarHeight: 74
   $name: Taskbar height
-  $description: Set the height of the taskbar (Default is 74)
+  $description: Set the height of the taskbar. Default is 74
   $type: unsigned int
 
 - TaskbarIconSize: 42
   $name: Taskbar icon size
-  $description: Set the width and height of taskbar icons (Default is 42)
+  $description: Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42
   $type: unsigned int
 
 - TaskbarButtonSize: 74
   $name: Taskbar button size
-  $description: Set the size (width and height) of taskbar buttons (Default is 74)
+  $description: Set the size (width and height) of taskbar buttons. Default is 74
   $type: unsigned int
 
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
-  $description: Move the taskbar up or down. Padding of the same value is applied to the top (Default is 6)
+  $description: Move the taskbar up or down. Padding of the same value is applied to the top. Default is 6
   $type: unsigned int
 
 - TrayTaskGap: 10
   $name: Tray task gap
-  $description: Adjust the space between the task area and the tray area (Default is 10)
+  $description: Adjust the space between the task area and the tray area. Default is 10
   $type: unsigned int
 
 - TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
-  $description: Set the horizontal padding on both sides of the taskbar background (Default is 2)
+  $description: Set the horizontal padding on both sides of the taskbar background. Default is 2
   $type: unsigned int
 
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
-  $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior (Default is off)
+  $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off
   $type: bool
 
 - IgnoreShowDesktopButton: false
   $name: Ignore "Show Desktop" button
-  $description: When enabled, the "Show Desktop" button is ignored in width calculations (Default is off)
+  $description: When enabled, the "Show Desktop" button is ignored in width calculations. Default is off
   $type: bool
 
 - TaskbarCornerRadius: 22
   $name: Taskbar corner radius
-  $description: Controls how rounded the taskbar corners appear (Default is 22)
+  $description: Controls how rounded the taskbar corners appear. Default is 22
   $type: unsigned int
 
 - TaskButtonCornerRadius: 16
   $name: Task button corner radius
-  $description: Controls how rounded the corners of individual task buttons are (Default is 16)
+  $description: Controls how rounded the corners of individual task buttons are. Default is 16
   $type: unsigned int
 
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
-  $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option (Default is off)
+  $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option. Default is off
   $type: bool
 
 - CustomizeTaskbarBackground: true
   $name: Stylize the taskbar background
-  $description: When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background (Default is on)
+  $description: When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background. Default is on
   $type: bool
 
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
-  $description: Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque (Default is 100)
+  $description: Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque. Default is 100
   $type: unsigned int
 
 - TaskbarBackgroundTint: 0
   $name: Background tint
-  $description: Modify the taskbar tint level. Higher values = more tint. Range 0-100 (Default is 0)
+  $description: Modify the taskbar tint level. Higher values = more tint. Range 0-100. Default is 0
   $type: unsigned int
 
-- TaskbarBackgroundLuminosity: 30
+- TaskbarBackgroundLuminosity: 0
   $name: Background luminosity
-  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100 (Default is 30)
+  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100. Default is 0
   $type: unsigned int
 
-- TaskbarBackgroundBlurAmount: 30
+- TaskbarBackgroundBlurAmount: 20
   $name: Background blur amount
-  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30
+  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 20
   $type: unsigned int
 
 - TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
@@ -83,19 +83,14 @@
   $description: WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}. Use {ThemeResource SystemBaseHighColor} if you want white color when Windows is in dark mode, or black in light mode.
   $type: string
 
-- TaskbarBackgroundTintSaturation: 100
+- TaskbarBackgroundTintSaturation: 200
   $name: Background saturation
-  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 100. Max is 500
+  $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 200. Max is 500
   $type: unsigned int
 
-- TaskbarBackgroundNoiseOpacity: 0
-  $name: Background noise opacity
-  $description: WindhawkBlur procedural noise opacity. 0 disables noise. Must be non-negative. Default is 0
-  $type: unsigned int
-
-- TaskbarBackgroundNoiseDensity: 100
-  $name: Background noise density
-  $description: WindhawkBlur procedural noise density. Lower values make the noise sparser. Range 1-100. Default is 100
+- TaskbarBackgroundInversion: 20
+  $name: Background inversion
+  $description: Inverts the blurred background behind the taskbar to enhance contrast. 0 = off, 100 = fully inverted. Default is 20
   $type: unsigned int
 
 - TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
@@ -103,78 +98,67 @@
   $description: Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
   $type: string
 
-- TaskbarBorderOpacity: 20
+- TaskbarBorderOpacity: 10
   $name: Border opacity
-  $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100 (Default is 20)
+  $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100. Default is 10
   $type: unsigned int
 
 - TaskbarBorderColorHex: "#ffffff"
   $name: Border color (HEX)
-  $description: Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB` (Default is `#ffffff`)
+  $description: Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB`. Default is `#ffffff`
   $type: string hex color
 
 - TaskbarBorderThickness: 8
   $name: Taskbar border thickness scale (%)
-  $description: Set the scale of the taskbar border. Range 0-100 (Default is 8)
+  $description: Set the scale of the taskbar border. Range 0-100. Default is 8
   $type: unsigned int percentage
 
 - AppsDividerThickness: 8
   $name: Apps divider thickness scale (%)
-  $description: Set the thickness scale of the taskbar dividers. Range 0-100 (Default is 8)
+  $description: Set the thickness scale of the taskbar dividers. Range 0-100. Default is 8
   $type: unsigned int percentage
 
 - AppsDividerVerticalScale: 40
   $name: Apps divider vertical scale (%)
-  $description: Set the vertical scale of the taskbar dividers. Range 0-100 (Default is 40)
+  $description: Set the vertical scale of the taskbar dividers. Range 0-100. Default is 40
   $type: unsigned int percentage
-
-- AppsDividerAlignment: ""
-  $name: Choose the side on which the app dividers should appear
-  $options:
-  - left: Left side
-  - right: Right side
-
-- DividedAppNames: ""
-  $name: App names for divider placement
-  $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
-  $type: string regex
 
 - TrayAreaDivider: true
   $name: Tray area divider
-  $description: When enabled, the tray area will be separated by a divider (Default is on)
+  $description: When enabled, the tray area will be separated by a divider. Default is on
   $type: bool
 
 - StyleTrayArea: false
   $name: Modify the tray area appearance
-  $description: When enabled, the options for tray icon size will take effect (Default is off)
+  $description: When enabled, the options for tray icon size will take effect. Default is off
   $type: bool
 
 - TrayIconSize: 15
   $name: Tray icon size
-  $description: Set the width and height of tray icons. Minimum is 15. (Default is 15)
+  $description: Set the width and height of tray icons. Minimum is 15. Default is 15
   $type: unsigned int
 
 - TrayButtonSize: 30
   $name: Tray button size
-  $description: Set the size (width and height) of tray buttons. Minimum is 20. (Default is 30)
+  $description: Set the size (width and height) of tray buttons. Minimum is 20. Default is 30
   $type: unsigned int
 
 - MoveFlyoutStartMenu: true
   $name: Move Start Menu with Taskbar
-  $description: When enabled, the Start and Search menus are moved to align with taskbar size and location (Default is on).
+  $description: When enabled, the Start and Search menus are moved to align with taskbar size and location. Default is on.
   $type: bool
 
 - MoveFlyoutControlCenter: true
   $name: Move Control Center with Taskbar
-  $description: When enabled, the Control Center is moved to align with taskbar size and location (Default is on).
+  $description: When enabled, the Control Center is moved to align with taskbar size and location. Default is on.
   $type: bool
 
 - MoveFlyoutNotificationCenter: true
   $name: Move Notification Center with Taskbar
-  $description: When enabled, the Notification Center is moved to align with taskbar size and location (Default is on).
+  $description: When enabled, the Notification Center is moved to align with taskbar size and location. Default is on.
   $type: bool
 
 - AlignFlyoutInner: true
   $name: Align flyout windows to the inside of the taskbar
-  $description: When enabled, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds (Default is on).
+  $description: When enabled, the flyout windows will be aligned within the bounds of the taskbar. When off, they will be 50% inside the taskbar bounds. Default is on.
   $type: bool
