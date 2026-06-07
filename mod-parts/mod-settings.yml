@@ -28,6 +28,11 @@
   $description: Set the horizontal padding on both sides of the taskbar background. Default is 2
   $type: unsigned int
 
+- TaskbarOverflowScaleDownFactor: 2
+  $name: Overflow scale-down factor
+  $description: What is the limit of taskbar scale-down when the taskbar overflows. 1 disables scaling, 2 allows scaling down to 0.5x, 3 allows 0.33x. Default is 2
+  $type: unsigned int
+
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
   $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off
@@ -68,14 +73,14 @@
   $description: Modify the taskbar tint level. Higher values = more tint. Range 0-100. Default is 0
   $type: unsigned int
 
-- TaskbarBackgroundLuminosity: 0
+- TaskbarBackgroundLuminosity: 20
   $name: Background luminosity
-  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100. Default is 0
+  $description: Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100. Default is 20
   $type: unsigned int
 
-- TaskbarBackgroundBlurAmount: 20
+- TaskbarBackgroundBlurAmount: 30
   $name: Background blur amount
-  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 20
+  $description: WindhawkBlur Gaussian blur amount. Higher values make the taskbar glass blur stronger. Must be non-negative. Default is 30
   $type: unsigned int
 
 - TaskbarBackgroundTintColor: "{ThemeResource CardStrokeColorDefaultSolid}"
@@ -88,9 +93,9 @@
   $description: WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 200. Max is 500
   $type: unsigned int
 
-- TaskbarBackgroundInversion: 20
+- TaskbarBackgroundInversion: 10
   $name: Background inversion
-  $description: Inverts the blurred background behind the taskbar to enhance contrast. 0 = off, 100 = fully inverted. Default is 20
+  $description: Inverts the blurred background behind the taskbar to enhance contrast. 0 = off, 100 = fully inverted. Default is 10
   $type: unsigned int
 
 - TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"

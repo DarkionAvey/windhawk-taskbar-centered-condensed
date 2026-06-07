@@ -13,6 +13,8 @@ std::atomic<bool> g_animation_followup_worker_running = false;
 std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
+constexpr int kStartButtonAnchorStablePassesRequired = 2;
+constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 2.0;
 constexpr int kLowPriorityStyleDelayMs =
     kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
 constexpr int kExplorerStartupSettleAnimationWindows = 6;
@@ -33,11 +35,52 @@ constexpr int kDefaultFrameIntervalMs = 16;
 constexpr int kMinimumFrameIntervalMs = 1;
 constexpr int kMaximumFrameIntervalMs = 42;
 constexpr int kAnimationFollowupGraceFrames = 2;
+constexpr float kDisplayGeometryChangeToleranceDip = 0.5f;
+constexpr float kDisplayRasterizationChangeTolerance = 0.001f;
 template <typename TAnimation>
 void ConfigureTaskbarIslandAnimation(TAnimation const& animation) {
   animation.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(kTaskbarIslandAnimationDurationMs)));
   animation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(0)));
 }
+
+winrt::Windows::UI::Composition::CompositionEasingFunction CreateTaskbarIslandEasingFunction(
+    winrt::Windows::UI::Composition::Compositor const& compositor) {
+  if (!compositor) {
+    return nullptr;
+  }
+
+  // Keep every moving piece on the same curve. The explicit ease-out avoids
+  // one visual catching up linearly while another decelerates, which reads as
+  // rubber-banding when the taskbar island is resized, translated, and scaled
+  // at the same time.
+  return compositor.CreateCubicBezierEasingFunction(
+      winrt::Windows::Foundation::Numerics::float2{0.16f, 1.0f},
+      winrt::Windows::Foundation::Numerics::float2{0.30f, 1.0f});
+}
+
+template <typename TAnimation, typename TValue>
+void InsertTaskbarIslandKeyFrame(TAnimation const& animation,
+                                 float progress,
+                                 TValue const& value) {
+  if (auto compositor = animation.Compositor()) {
+    if (auto easing = CreateTaskbarIslandEasingFunction(compositor)) {
+      animation.InsertKeyFrame(progress, value, easing);
+      return;
+    }
+  }
+
+  animation.InsertKeyFrame(progress, value);
+}
+
+float ApplyTaskbarIslandEasingForEstimate(float progress) {
+  progress = std::clamp(progress, 0.0f, 1.0f);
+  // Approximation of the compositor ease-out used above. This is only for
+  // calculating a safe start value when an in-flight background shape animation
+  // is retargeted; all real animations use the compositor easing function.
+  const float inv = 1.0f - progress;
+  return 1.0f - (inv * inv * inv);
+}
+
 float LerpFloat(float from, float to, float progress) {
   return from + ((to - from) * progress);
 }
@@ -52,12 +95,120 @@ float EstimateAnimationValue(float from, float to, int64_t startedMs, int64_t no
   if (progress >= 1.0f) {
     return to;
   }
-  return LerpFloat(from, to, progress);
+   return LerpFloat(from, to, ApplyTaskbarIslandEasingForEstimate(progress));
+}
+
+static float SnapToPhysicalPixel(float value, float rasterizationScale);
+
+float SnapScaleForPhysicalPixels(float scale,
+                                 float unscaledWidth,
+                                 float rasterizationScale) {
+  if (unscaledWidth <= 0.0f || !std::isfinite(unscaledWidth) ||
+      !std::isfinite(scale)) {
+    return 1.0f;
+  }
+
+  const float snappedWidth =
+      SnapToPhysicalPixel(unscaledWidth * scale, rasterizationScale);
+  if (snappedWidth <= 0.0f || !std::isfinite(snappedWidth)) {
+    return scale;
+  }
+
+  return snappedWidth / unscaledWidth;
+}
+
+float CalculateTaskbarIslandScale(float screenLeft,
+                                  float screenRight,
+                                  float screenWidth,
+                                  float scaleCenterX,
+                                  float maxScaleDownFactor,
+                                  float rasterizationScale) {
+  if (screenWidth <= 0.0f || screenRight <= screenLeft ||
+      maxScaleDownFactor <= 1.0f || !std::isfinite(screenLeft) ||
+      !std::isfinite(screenRight) || !std::isfinite(screenWidth) ||
+      !std::isfinite(scaleCenterX)) {
+    return 1.0f;
+  }
+
+  float targetScale = 1.0f;
+  if (screenLeft < 0.0f && scaleCenterX > screenLeft) {
+    targetScale = std::min(targetScale,
+                           scaleCenterX / (scaleCenterX - screenLeft));
+  }
+  if (screenRight > screenWidth && screenRight > scaleCenterX) {
+    targetScale = std::min(targetScale,
+                           (screenWidth - scaleCenterX) /
+                               (screenRight - scaleCenterX));
+  }
+
+  const float minScale = 1.0f / maxScaleDownFactor;
+  targetScale = std::clamp(targetScale, minScale, 1.0f);
+  targetScale = SnapScaleForPhysicalPixels(targetScale,
+                                           screenRight - screenLeft,
+                                           rasterizationScale);
+  return std::clamp(targetScale, minScale, 1.0f);
+}
+
+float ApplyScaleToScreenX(float screenX, float scaleCenterX, float scale) {
+  return scaleCenterX + ((screenX - scaleCenterX) * scale);
+}
+
+void SetVisualScaleCenterAndAnimate(
+    winrt::Windows::UI::Composition::Visual const& visual,
+    float targetScale,
+    float localCenterX,
+    float localCenterY,
+    float visualOffsetTolerance,
+    bool animate) {
+  if (!visual) {
+    return;
+  }
+
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    targetScale = 1.0f;
+  }
+  if (!std::isfinite(localCenterX)) {
+    localCenterX = 0.0f;
+  }
+  if (!std::isfinite(localCenterY)) {
+    localCenterY = 0.0f;
+  }
+
+  visual.CenterPoint({localCenterX, localCenterY, visual.CenterPoint().z});
+
+  const auto currentScale = visual.Scale();
+  if (std::abs(currentScale.x - targetScale) <= visualOffsetTolerance &&
+      std::abs(currentScale.y - targetScale) <= visualOffsetTolerance) {
+    return;
+  }
+
+  if (animate) {
+    if (auto compositor = visual.Compositor()) {
+      auto scaleAnimation = compositor.CreateVector3KeyFrameAnimation();
+      ConfigureTaskbarIslandAnimation(scaleAnimation);
+      InsertTaskbarIslandKeyFrame(
+          scaleAnimation,
+          1.0f,
+          winrt::Windows::Foundation::Numerics::float3{
+              targetScale, targetScale, currentScale.z});
+      visual.StartAnimation(L"Scale", scaleAnimation);
+      return;
+    }
+  }
+
+  visual.StopAnimation(L"Scale");
+  visual.Scale({targetScale, targetScale, currentScale.z});
 }
 void ResetAnimationTargetCache(TaskbarState& state) {
   state.hasLastTargetTaskFrameOffsetX = false;
+  state.hasLastTargetTaskbarIslandScale = false;
+  state.lastTargetTaskbarIslandScale = 1.0f;
+  state.lastTaskbarIslandScaleCenterX = 0.0f;
   state.hasLastTargetTrayOffsetX = false;
   state.hasLastTargetWidgetOffset = false;
+  state.hasLastStartButtonAnchorRect = false;
+  state.hasStableStartButtonAnchorRect = false;
+  state.startButtonAnchorStablePasses = 0;
   state.lastBackgroundShapeTargetWidth = 0.0f;
   state.lastBackgroundShapeTargetOffsetX = 0.0f;
   state.lastBackgroundShapeTargetOffsetY = 0.0f;
@@ -68,6 +219,40 @@ void ResetAnimationTargetCache(TaskbarState& state) {
   state.backgroundAnimationFromOffsetY = 0.0f;
   state.backgroundAnimationToOffsetY = 0.0f;
   state.backgroundAnimationStartMs = 0;
+}
+bool CheckAndUpdateDisplayGeometrySignature(TaskbarState& state,
+                                            FrameworkElement const& xamlRootContent,
+                                            FrameworkElement const& taskFrame,
+                                            float rasterizationScale) {
+  const float rootWidth = static_cast<float>(xamlRootContent.ActualWidth());
+  const float rootHeight = static_cast<float>(xamlRootContent.ActualHeight());
+  const float taskFrameWidth = taskFrame ? static_cast<float>(taskFrame.ActualWidth()) : 0.0f;
+  const float taskFrameHeight = taskFrame ? static_cast<float>(taskFrame.ActualHeight()) : 0.0f;
+
+  const bool validSignature =
+      std::isfinite(rootWidth) && rootWidth > 0.0f &&
+      std::isfinite(rootHeight) && rootHeight > 0.0f &&
+      std::isfinite(rasterizationScale) && rasterizationScale > 0.0f;
+  if (!validSignature) {
+    return false;
+  }
+
+  const bool changed =
+      !state.hasLastDisplayGeometrySignature ||
+      std::abs(state.lastObservedRootWidth - rootWidth) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedRootHeight - rootHeight) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedRasterizationScale - rasterizationScale) > kDisplayRasterizationChangeTolerance ||
+      std::abs(state.lastObservedTaskFrameWidth - taskFrameWidth) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedTaskFrameHeight - taskFrameHeight) > kDisplayGeometryChangeToleranceDip;
+
+  state.lastObservedRootWidth = rootWidth;
+  state.lastObservedRootHeight = rootHeight;
+  state.lastObservedRasterizationScale = rasterizationScale;
+  state.lastObservedTaskFrameWidth = taskFrameWidth;
+  state.lastObservedTaskFrameHeight = taskFrameHeight;
+  state.hasLastDisplayGeometrySignature = true;
+
+  return changed;
 }
 void ApplySettings(HWND hTaskbarWnd);
 int64_t DelayedApplyNowMs() {
