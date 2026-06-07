@@ -76,6 +76,34 @@ constexpr int kHookDrainTimeoutMs = 10000;
 bool WaitForConditionWithTimeout(std::function<bool()> condition,
                                  int timeoutMs,
                                  int pollIntervalMs);
+FrameworkElement TryQueryFrameworkElement(IUnknown* unknown,
+                                          PCWSTR context = L"FrameworkElement") {
+  if (!unknown) {
+    return nullptr;
+  }
+  FrameworkElement element{nullptr};
+  try {
+    HRESULT hr = unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                         winrt::put_abi(element));
+    if (FAILED(hr) || !element) {
+      if (context) {
+        Wh_Log(L"%s QueryInterface failed: %08X", context, hr);
+      }
+      return nullptr;
+    }
+  } catch (winrt::hresult_error const& ex) {
+    if (context) {
+      Wh_Log(L"%s QueryInterface threw %08X: %s", context, ex.code(), ex.message().c_str());
+    }
+    return nullptr;
+  } catch (...) {
+    if (context) {
+      Wh_Log(L"%s QueryInterface threw: %08X", context, winrt::to_hresult());
+    }
+    return nullptr;
+  }
+  return element;
+}
 int ClampInt(int value, int minValue, int maxValue) {
   return value < minValue ? minValue : (value > maxValue ? maxValue : value);
 }
@@ -405,7 +433,7 @@ void OverrideResourceDirectoryLookup(
     PCSTR sourceFunctionName,
     const winrt::Windows::Foundation::IInspectable* key,
     winrt::Windows::Foundation::IInspectable* value) {
-    if (g_unloading) {
+    if (g_unloading || !key || !value) {
         return;
     }
     const auto keyString = key->try_as<winrt::hstring>();
@@ -442,9 +470,10 @@ ResourceDictionary_Lookup_TaskbarView_Hook(
     void* pThis,
     void** result,
     winrt::Windows::Foundation::IInspectable* key) {
-    auto ret =
-        ResourceDictionary_Lookup_TaskbarView_Original(pThis, result, key);
-    if (!*ret) {
+    auto ret = ResourceDictionary_Lookup_TaskbarView_Original
+        ? ResourceDictionary_Lookup_TaskbarView_Original(pThis, result, key)
+        : nullptr;
+    if (!ret || !*ret) {
         return ret;
     }
     OverrideResourceDirectoryLookup(__FUNCTION__, key, ret);
@@ -462,9 +491,10 @@ ResourceDictionary_Lookup_SearchUxUi_Hook(
     void* pThis,
     void** result,
     winrt::Windows::Foundation::IInspectable* key) {
-    auto ret =
-        ResourceDictionary_Lookup_SearchUxUi_Original(pThis, result, key);
-    if (!*ret) {
+    auto ret = ResourceDictionary_Lookup_SearchUxUi_Original
+        ? ResourceDictionary_Lookup_SearchUxUi_Original(pThis, result, key)
+        : nullptr;
+    if (!ret || !*ret) {
         return ret;
     }
     OverrideResourceDirectoryLookup(__FUNCTION__, key, ret);
@@ -1567,7 +1597,7 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
     }
     return ret;
 }
-using SendMessageTimeoutW_t = decltype(&SendMessageTimeoutW);
+static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM lParam);using SendMessageTimeoutW_t = decltype(&SendMessageTimeoutW);
 SendMessageTimeoutW_t SendMessageTimeoutW_Original;
 LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
                                         UINT Msg,
@@ -1585,6 +1615,7 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
     }
     LRESULT ret = SendMessageTimeoutW_Original(hWnd, Msg, wParam, lParam,
                                                fuFlags, uTimeout, lpdwResult);
+TryCorrectShellHookMinRectMessageTai(Msg, wParam, lParam);
     return ret;
 }
 void LoadSettingsTBIconSize() {
@@ -2002,8 +2033,12 @@ bool HookSearchUxUiDllSymbols(HMODULE module) {
     return true;
 }
 bool HookTaskbarDllSymbolsTBIconSize() {
-    HMODULE module =
-        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    bool loadedTaskbarDllForHooking = false;
+    HMODULE module = GetModuleHandle(L"taskbar.dll");
+    if (!module) {
+        module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        loadedTaskbarDllForHooking = module != nullptr;
+    }
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -2051,8 +2086,11 @@ bool HookTaskbarDllSymbolsTBIconSize() {
             TrayUI__HandleSettingChange_Hook,
         },
     };
-    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols failed");
+        if (loadedTaskbarDllForHooking) {
+            FreeLibrary(module);
+        }
         return false;
     }
     return true;

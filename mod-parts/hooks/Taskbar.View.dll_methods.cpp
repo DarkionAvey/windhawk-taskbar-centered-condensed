@@ -6,28 +6,33 @@ static TaskbarTelemetry_StartItemPlateEntranceAnimation_t orig_StartItemPlateEnt
 
 void WINAPI Hook_StartItemEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemEntranceAnimation(%d)", b);
-  orig_StartItemEntranceAnimation(b);
+  if (orig_StartItemEntranceAnimation) {
+    orig_StartItemEntranceAnimation(b);
+  }
   ApplySettingsFromTaskbarThreadImmediately();
 }
-
 void WINAPI Hook_StartItemPlateEntranceAnimation_call(const bool& b) {
   Wh_Log(L"[Hook] TaskbarTelemetry::StartItemPlateEntranceAnimation(%d)", b);
-  orig_StartItemPlateEntranceAnimation(b);
+  if (orig_StartItemPlateEntranceAnimation) {
+    orig_StartItemPlateEntranceAnimation(b);
+  }
   ApplySettingsFromTaskbarThreadImmediately();
 }
-
 using TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook(void* pThis) {
   Wh_Log(L"Method called: TaskbarTelemetry_StartEntranceAnimationCompleted");
-  TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
+  if (TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original) {
+    TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original(pThis);
+  }
   return;
 }
-
 using TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t = void(WINAPI*)(void* pThis);
 TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_t TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original;
 static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook(void* pThis) {
-  TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
+  if (TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original) {
+    TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original(pThis);
+  }
   Wh_Log(L"Method called: TaskbarTelemetry_StartHideAnimationCompleted");
   return;
 }

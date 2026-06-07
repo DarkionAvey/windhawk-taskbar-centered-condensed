@@ -341,21 +341,29 @@ void QueueTaskbarAnimationFollowup(HWND hTaskbarWnd) {
     return;
   }
    std::thread([hTaskbarWnd]() {
-    const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
-    const int followupWindowMs =
-        kTaskbarIslandAnimationDurationMs +
-        (frameIntervalMs * kAnimationFollowupGraceFrames);
-    int elapsedMs = 0;
-    while (elapsedMs < followupWindowMs) {
-      Sleep(static_cast<DWORD>(frameIntervalMs));
-      elapsedMs += frameIntervalMs;
-      if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
-        break;
+    struct FollowupWorkerGuard {
+      ~FollowupWorkerGuard() { g_animation_followup_worker_running = false; }
+    } followupWorkerGuard;
+    try {
+      const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
+      const int followupWindowMs =
+          kTaskbarIslandAnimationDurationMs +
+          (frameIntervalMs * kAnimationFollowupGraceFrames);
+      int elapsedMs = 0;
+      while (elapsedMs < followupWindowMs) {
+        Sleep(static_cast<DWORD>(frameIntervalMs));
+        elapsedMs += frameIntervalMs;
+        if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+          break;
+        }
+        ArmSingleStyleApplyPass();
+        ApplySettings(hTaskbarWnd);
       }
-      ArmSingleStyleApplyPass();
-      ApplySettings(hTaskbarWnd);
+    } catch (winrt::hresult_error const& ex) {
+      Wh_Log(L"Animation follow-up worker failed %08X: %s", ex.code(), ex.message().c_str());
+    } catch (...) {
+      Wh_Log(L"Animation follow-up worker failed: %08X", winrt::to_hresult());
     }
-    g_animation_followup_worker_running = false;
   }).detach();
 }
 
@@ -429,6 +437,14 @@ void CleanupDebounce() {
   }
 }
 void DelayedApplyWorker() {
+  struct DelayedWorkerGuard {
+    bool active = true;
+    ~DelayedWorkerGuard() {
+      if (active) {
+        g_delayed_apply_worker_running = false;
+      }
+    }
+  } delayedWorkerGuard;
   try {
   for (;;) {
     if (g_unloading) {
@@ -482,6 +498,7 @@ void DelayedApplyWorker() {
     Wh_Log(L"Delayed apply worker failed: %08X", winrt::to_hresult());
   }
   g_delayed_apply_worker_running = false;
+  delayedWorkerGuard.active = false;
   if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
     EnsureDelayedApplyWorker();
   }

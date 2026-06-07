@@ -31,14 +31,6 @@ modify the source files in the `mod-parts` directory.
 
 ---
 
-## 🛣️ To-do
-
-1. ~~Proper unloading~~
-2. Fix overflowing
-3. ~~Rebrand because someone claimed the name WinDock~~
-
----
-
 ## 🙌 Credits
 
 Huge thanks to these awesome developers who made this mod possible -- your contributions to modding Windows are truly appreciated!:

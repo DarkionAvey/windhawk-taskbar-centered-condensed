@@ -1,8 +1,10 @@
 using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
 StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
 void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
-  StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
-  Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
+ if (StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original) {
+    StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original(pThis, param1);
+  }
+    Wh_Log(L"Method called: StartDocked__StartSizingFrame_UpdateWindowRegion (Width: %.2f, Height: %.2f)", param1.Width, param1.Height);
   const int measuredStartMenuWidth = static_cast<int>(param1.Width + 0.5f);
   if (measuredStartMenuWidth > 0 && g_lastRecordedStartMenuWidth != measuredStartMenuWidth) {
     g_lastRecordedStartMenuWidth = measuredStartMenuWidth;
@@ -719,6 +721,109 @@ bool TryGetDebugBoundsRelativeTo(FrameworkElement const& element,
     return false;
   }
 }
+static bool BuildMeasuredMinimizeAnimationButtonsTai(
+    FrameworkElement const& taskbarFrameRepeater,
+    FrameworkElement const& rootGridTaskBar,
+    const RECT& monitorRect,
+    double targetTaskRootOffsetXDip,
+    double targetTaskbarIslandScale,
+    double targetScaleCenterScreenXDip,
+    double rasterizationScale,
+    std::vector<MinimizeAnimationMeasuredButtonTai>* measuredButtons) {
+  if (!taskbarFrameRepeater || !rootGridTaskBar || !measuredButtons ||
+      IsRectEmpty(&monitorRect) ||
+      !std::isfinite(targetTaskRootOffsetXDip) ||
+      !std::isfinite(targetTaskbarIslandScale) ||
+      !std::isfinite(targetScaleCenterScreenXDip) ||
+      !std::isfinite(rasterizationScale) ||
+      rasterizationScale <= 0.0) {
+    return false;
+  }
+
+  measuredButtons->clear();
+
+  int childrenCount = 0;
+  try {
+    childrenCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
+  } catch (...) {
+    return false;
+  }
+
+  measuredButtons->reserve(static_cast<size_t>(std::max(0, childrenCount)));
+
+  for (int i = 0; i < childrenCount; ++i) {
+    FrameworkElement child = nullptr;
+    try {
+      child = Media::VisualTreeHelper::GetChild(taskbarFrameRepeater, i).try_as<FrameworkElement>();
+    } catch (...) {
+      child = nullptr;
+    }
+
+    if (!child) {
+      continue;
+    }
+
+    winrt::hstring className;
+    try {
+      className = winrt::get_class_name(child);
+    } catch (...) {
+      continue;
+    }
+
+    if (className != L"Taskbar.TaskListButton") {
+      continue;
+    }
+
+    winrt::Windows::Foundation::Rect layoutRect{};
+    if (!TryGetDebugBoundsRelativeTo(child, rootGridTaskBar, layoutRect) ||
+        layoutRect.Width <= 0.0 ||
+        layoutRect.Height <= 0.0 ||
+        layoutRect.X < -kLayoutToleranceDip ||
+        layoutRect.Y < -kLayoutToleranceDip) {
+      continue;
+    }
+
+    const double unscaledLeftDip = layoutRect.X + targetTaskRootOffsetXDip;
+    const double unscaledRightDip = layoutRect.X + layoutRect.Width + targetTaskRootOffsetXDip;
+    const double visibleLeftDip = ApplyScaleToScreenX(
+        static_cast<float>(unscaledLeftDip),
+        static_cast<float>(targetScaleCenterScreenXDip),
+        static_cast<float>(targetTaskbarIslandScale));
+    const double visibleRightDip = ApplyScaleToScreenX(
+        static_cast<float>(unscaledRightDip),
+        static_cast<float>(targetScaleCenterScreenXDip),
+        static_cast<float>(targetTaskbarIslandScale));
+
+    if (!std::isfinite(visibleLeftDip) || !std::isfinite(visibleRightDip)) {
+      continue;
+    }
+
+    RECT visibleRectPx{};
+    visibleRectPx.left = monitorRect.left + static_cast<LONG>(std::lround(std::min(visibleLeftDip, visibleRightDip) * rasterizationScale));
+    visibleRectPx.right = monitorRect.left + static_cast<LONG>(std::lround(std::max(visibleLeftDip, visibleRightDip) * rasterizationScale));
+    // Preserve only the measured X interval. The shell min-rect already carries
+    // the correct bottom-taskbar Y coordinates; root-relative XAML Y values are
+    // not in the same coordinate space on every monitor/taskbar edge.
+    visibleRectPx.top = 1;
+    visibleRectPx.bottom = 2;
+
+    if (!IsUsableMeasuredButtonRectTai(visibleRectPx)) {
+      continue;
+    }
+
+    std::wstring automationName;
+    try {
+      auto value = child.GetValue(Automation::AutomationProperties::NameProperty());
+      automationName = winrt::unbox_value_or<winrt::hstring>(value, L"").c_str();
+    } catch (...) {
+      automationName.clear();
+    }
+
+    measuredButtons->push_back(MinimizeAnimationMeasuredButtonTai{visibleRectPx, TrimTai(automationName)});
+  }
+
+  return !measuredButtons->empty();
+}
 
 void LogDebugRect(PCWSTR label, bool ok, winrt::Windows::Foundation::Rect const& rect) {
   if (!ok) {
@@ -1081,6 +1186,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"xamlRootContent is null");
     return false;
   }
+  try {
   auto& state = g_taskbarStates[monitorName];
   Wh_Log(L"ApplyStyle for monitor: %s", monitorName.c_str());
   g_scheduled_low_priority_update = false;
@@ -1215,18 +1321,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"root width is too small");
     return false;
   }
-
    const double taskbarVirtualSurfaceWidth = g_unloading
       ? rootWidth
       : CalculateDynamicTaskbarVirtualSurfaceWidth(taskbarFrameRepeater,
                                                   rootWidth,
                                                   isOverflowing);
-
   const bool useVirtualTaskbarSurface =
       !g_unloading &&
       std::isfinite(taskbarVirtualSurfaceWidth) &&
       taskbarVirtualSurfaceWidth > rootWidth + kLayoutToleranceDip;
-
   if (useVirtualTaskbarSurface) {
     ApplyVirtualTaskbarLayoutSurface(xamlRootContent,
                                      taskFrame,
@@ -1241,7 +1344,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   } else {
     SetTaskbarOverflowButtonSuppressed(overflowButton, false);
   }
-
   const double taskbarLayoutSurfaceWidth = useVirtualTaskbarSurface
       ? std::max(rootWidth, taskbarFrameRepeater.ActualWidth())
       : rootWidth;
@@ -1305,7 +1407,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   trayFrame.Clip(nullptr);
     DisableElementClip(systemTrayFrameGrid);
   DisableClipForAncestorChain(systemTrayFrameGrid);
-  if (trayFrame.GetValue(FrameworkElement::HorizontalAlignmentProperty()).as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>().Value() == HorizontalAlignment::Center) {
+  auto trayHorizontalAlignmentRef = trayFrame
+      .GetValue(FrameworkElement::HorizontalAlignmentProperty())
+      .try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>();
+  if (trayHorizontalAlignmentRef && trayHorizontalAlignmentRef.Value() == HorizontalAlignment::Center) {
     trayFrame.SetValue(FrameworkElement::HorizontalAlignmentProperty(), winrt::box_value(HorizontalAlignment::Right));
   }
   int childrenCountTray = 0;
@@ -1323,7 +1428,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     trayFrameWidthDbl = std::max(0.0, trayFrameWidthDbl - showDesktopButtonActualWidth);
   }
   int trayGapPlusExtras = g_settings.userDefinedTrayTaskGap + widgetElementVisibleWidth + (widgetPresent ? -6 + g_settings.userDefinedTrayTaskGap : 0);
-  const unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthDbl + trayGapPlusExtras);
+  const double trayFrameWidthSafeDbl = std::max(0.0, trayFrameWidthDbl + static_cast<double>(trayGapPlusExtras));
+  const unsigned int trayFrameWidth = static_cast<unsigned int>(trayFrameWidthSafeDbl + 0.5);
   if (!g_unloading && childrenCountTray == 0) {
     Wh_Log(L"Error: childrenCountTray == 0");
     return false;
@@ -1417,7 +1523,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       taskbarLeftEdge <= taskbarEdgeClampTolerance ||
       taskbarRightEdge >= taskbarLayoutSurfaceWidth - taskbarEdgeClampTolerance ||
       predictedCenteredTaskbarLeft <= taskbarEdgeClampTolerance;
-
   // Windows can shift the taskbar item group left before the official overflow
   // button appears, especially when the centered item group would get too close
   // to the tray/suffixed area. Do not turn that into a second live anchor state
@@ -1447,7 +1552,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
                static_cast<float>(startButtonLeft)) <= visualOffsetTolerance &&
       std::abs(state.stableStartButtonAnchorWidth -
                static_cast<float>(startButtonWidth)) <= visualOffsetTolerance;
-
   const double fallbackTaskbarAnchorLeft =
       taskbarLayoutIsEdgeClamped ? taskbarLeftEdge : predictedCenteredTaskbarLeft;
   const bool useStableStartButtonAnchor =
@@ -1460,7 +1564,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       : fallbackTaskbarAnchorLeft;
   float targetTaskRootOffsetX = snapPx(targetContentLeft - static_cast<float>(taskbarAnchorLeft));
   float centeredTaskbarRightEdge = targetTrayLogicalLeft;
-
   const float taskbarBackgroundPadding =
       static_cast<float>(g_settings.userDefinedTaskbarBackgroundHorizontalPadding);
   float targetWidth = g_unloading
@@ -1496,7 +1599,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       !state.hasLastTargetTaskbarIslandScale ||
       std::abs(state.lastTargetTaskbarIslandScale - targetTaskbarIslandScale) > 0.001f ||
       std::abs(state.lastTaskbarIslandScaleCenterX - targetScaleCenterScreenX) > visualOffsetTolerance;
-
   if (!forceStyleApply && !g_invalidateDimensions && !g_unloading &&
       std::abs(targetOffsetXTray - systemTrayFrameGridVisual.Offset().x) <= visualOffsetTolerance &&
       childrenWidthTaskbar == state.lastChildrenWidthTaskbar &&
@@ -1616,7 +1718,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     taskbarFrameRepeaterVisual.StopAnimation(L"Offset");
     taskbarFrameRepeaterVisual.Offset({0.0f, repeaterOffset.y, repeaterOffset.z});
   }
-
   const float rootGridScaleCenterLocalX =
       snapPx(targetScaleCenterScreenX - targetTaskRootOffsetX);
   const float rootGridScaleCenterLocalY =
@@ -1640,7 +1741,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   state.lastTargetTaskbarIslandScale = targetTaskbarIslandScale;
   state.lastTaskbarIslandScaleCenterX = targetScaleCenterScreenX;
   state.hasLastTargetTaskbarIslandScale = true;
-
   if (auto taskRootVisualCompositor = rootGridTaskBarVisual.Compositor()) {
     if (!g_unloading) {
       const bool taskRootOffsetChanged =
@@ -1749,6 +1849,52 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (!g_unloading && targetHeightPrelim <= 0) {
     Wh_Log(L"Error: targetHeightPrelim<=0");
     return false;
+  }
+   if (!g_unloading && (useVirtualTaskbarSurface || targetTaskbarIslandScale < 0.999f)) {
+    RECT monitorRectForMinRectFix{};
+    RECT taskbarClampRectForMinRectFix{};
+    const bool haveMonitorRectForMinRectFix = GetMonitorRectByNameTai(monitorName, &monitorRectForMinRectFix);
+    if (haveMonitorRectForMinRectFix) {
+      taskbarClampRectForMinRectFix.left = monitorRectForMinRectFix.left +
+          static_cast<LONG>(std::lround(static_cast<double>(scaledBackgroundLeftScreen) * rasterizationScale));
+      taskbarClampRectForMinRectFix.right = monitorRectForMinRectFix.left +
+          static_cast<LONG>(std::lround(static_cast<double>(scaledBackgroundRightScreen) * rasterizationScale));
+      taskbarClampRectForMinRectFix.top = monitorRectForMinRectFix.top;
+      taskbarClampRectForMinRectFix.bottom = monitorRectForMinRectFix.bottom;
+      if (taskbarClampRectForMinRectFix.right <= taskbarClampRectForMinRectFix.left) {
+        taskbarClampRectForMinRectFix = monitorRectForMinRectFix;
+      }
+    }
+
+    std::vector<MinimizeAnimationMeasuredButtonTai> measuredMinRectButtons;
+    if (haveMonitorRectForMinRectFix) {
+      BuildMeasuredMinimizeAnimationButtonsTai(
+          taskbarFrameRepeater,
+          rootGridTaskBar,
+          monitorRectForMinRectFix,
+          static_cast<double>(targetTaskRootOffsetX),
+          static_cast<double>(targetTaskbarIslandScale),
+          static_cast<double>(targetScaleCenterScreenX),
+          static_cast<double>(rasterizationScale),
+          &measuredMinRectButtons);
+    }
+
+    // targetTaskRootOffsetX is kept as a fallback transform only. The preferred
+    // path above uses freshly measured TaskListButton XAML rectangles, converted
+    // through the actual RootGrid offset/scale for this ApplyStyle pass, and
+    // matches them to the target HWND by dynamic window/button metadata. This
+    // avoids guessing with constants when Explorer returns a packed min-rect
+    // whose X coordinate has collapsed or drifted inside the fake-wide surface.
+    SetMinimizeAnimationCorrectionForMonitorTai(
+        monitorName,
+        static_cast<double>(targetTaskRootOffsetX),
+        static_cast<double>(targetTaskbarIslandScale),
+        static_cast<double>(targetScaleCenterScreenX),
+        static_cast<double>(rasterizationScale),
+        haveMonitorRectForMinRectFix ? &taskbarClampRectForMinRectFix : nullptr,
+        &measuredMinRectButtons);
+  } else {
+    ClearMinimizeAnimationCorrectionForMonitorTai(monitorName);
   }
   const auto clipHeight = static_cast<float>(targetHeightPrelim + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? (targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius) : 0.0f));
   if (!g_unloading && clipHeight <= 0) {
@@ -1906,9 +2052,19 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   g_initial_style_apply_completed = true;
   g_initial_style_apply_not_before_ms = 0;
   return true;
+  } catch (winrt::hresult_error const& ex) {
+    Wh_Log(L"ApplyStyle failed %08X: %s", ex.code(), ex.message().c_str());
+  } catch (std::exception const& ex) {
+    Wh_Log(L"ApplyStyle failed: %S", ex.what());
+  } catch (...) {
+    Wh_Log(L"ApplyStyle failed: %08X", winrt::to_hresult());
+  }
+  return false;
 }
 void ApplySettings(HWND hTaskbarWnd) {
-  RunFromWindowThread(hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+  if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
+    RunFromWindowThread(hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+  }
 }
 void RefreshSettings() {
   g_invalidateDimensions = true;
@@ -1972,8 +2128,13 @@ std::wstring GetProcessExeName(DWORD processId) {
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
   DWORD processId = 0;
   bool userDefinedMoveFlyoutControlCenter = Wh_GetIntSetting(L"MoveFlyoutControlCenter");
+  auto callOriginal = [&]() -> BOOL {
+    return SetWindowPos_Original
+        ? SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags)
+        : FALSE;
+  };
   if (!hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+    return callOriginal();
   }
   WCHAR className[256] = L"<unknown>";
   GetClassNameW(hWnd, className, ARRAYSIZE(className));
@@ -2002,7 +2163,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
       Wh_Log(L"[SetWindowPos] No reference state for monitor %s", monitorName.c_str());
     }
   }
-  return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+  return callOriginal();
 }
 BOOL Wh_ModInit() {
   Wh_Log(L"======================================================");
@@ -2032,13 +2193,16 @@ BOOL Wh_ModInit() {
     return true;
   }
   g_unloading = false;
+  InitMinimizeAnimationCorrectionTai();
   ArmInitialExplorerStyleApplyDelay();
   if (!Wh_ModInitTBIconSize()) {
     Wh_Log(L"Wh_ModInitTBIconSize failed");
+    UninitMinimizeAnimationCorrectionTai();
     return FALSE;
   }
   if (!Wh_ModInitStartButtonPosition()) {
     Wh_Log(L"Wh_ModInitStartButtonPosition failed");
+    UninitMinimizeAnimationCorrectionTai();
     return FALSE;
   }
   return TRUE;
@@ -2060,6 +2224,7 @@ void Wh_ModBeforeUninit() {
     return;
   }
   g_unloading = true;
+  UninitMinimizeAnimationCorrectionTai();
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
   RefreshSettings();
@@ -2072,6 +2237,7 @@ void Wh_ModUninit() {
   if (g_PartialMode) {
     return;
   }
+  UninitMinimizeAnimationCorrectionTai();
   CleanupDebounce();
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();

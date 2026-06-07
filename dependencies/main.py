@@ -852,6 +852,7 @@ bool EnsureElementTaskbarButtonWidth(FrameworkElement const& element,
         Wh_Log(L"Timed out waiting for taskbar icon size hooks to drain");
     }""", in_function="void Wh_ModUninitTBIconSize()",
                            flags=re.VERBOSE)
+
             .insert_after_literal("bool g_taskbarButtonWidthCustomized;", """\n
 constexpr int kDefaultTaskbarHeight = 74;
 constexpr int kDefaultTaskbarIconSize = 42;
@@ -882,7 +883,34 @@ constexpr int kHookDrainTimeoutMs = 10000;
 bool WaitForConditionWithTimeout(std::function<bool()> condition,
                                  int timeoutMs,
                                  int pollIntervalMs);
-
+FrameworkElement TryQueryFrameworkElement(IUnknown* unknown,
+                                          PCWSTR context = L"FrameworkElement") {
+  if (!unknown) {
+    return nullptr;
+  }
+  FrameworkElement element{nullptr};
+  try {
+    HRESULT hr = unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                         winrt::put_abi(element));
+    if (FAILED(hr) || !element) {
+      if (context) {
+        Wh_Log(L"%s QueryInterface failed: %08X", context, hr);
+      }
+      return nullptr;
+    }
+  } catch (winrt::hresult_error const& ex) {
+    if (context) {
+      Wh_Log(L"%s QueryInterface threw %08X: %s", context, ex.code(), ex.message().c_str());
+    }
+    return nullptr;
+  } catch (...) {
+    if (context) {
+      Wh_Log(L"%s QueryInterface threw: %08X", context, winrt::to_hresult());
+    }
+    return nullptr;
+  }
+  return element;
+}
 int ClampInt(int value, int minValue, int maxValue) {
   return value < minValue ? minValue : (value > maxValue ? maxValue : value);
 }
@@ -894,6 +922,61 @@ int GetMaxTaskbarIconSizeForLayout(int taskbarHeight, int taskbarButtonSize) {
   int maxIconSize = std::min(kMaxTaskbarIconSize, std::min(taskbarHeight, taskbarButtonSize));
   return std::max(kMinTaskbarIconSize, maxIconSize);
 }\n""")
+            .replace_regex(re.escape("""    auto ret =
+        ResourceDictionary_Lookup_TaskbarView_Original(pThis, result, key);
+    if (!*ret) {
+        return ret;
+    }"""), """    auto ret = ResourceDictionary_Lookup_TaskbarView_Original
+        ? ResourceDictionary_Lookup_TaskbarView_Original(pThis, result, key)
+        : nullptr;
+    if (!ret || !*ret) {
+        return ret;
+    }""", in_function="""ResourceDictionary_Lookup_TaskbarView_Hook(
+    void* pThis,
+    void** result,
+    winrt::Windows::Foundation::IInspectable* key)""")
+            .replace_regex(re.escape("""    auto ret =
+        ResourceDictionary_Lookup_SearchUxUi_Original(pThis, result, key);
+    if (!*ret) {
+        return ret;
+    }"""), """    auto ret = ResourceDictionary_Lookup_SearchUxUi_Original
+        ? ResourceDictionary_Lookup_SearchUxUi_Original(pThis, result, key)
+        : nullptr;
+    if (!ret || !*ret) {
+        return ret;
+    }""", in_function="""ResourceDictionary_Lookup_SearchUxUi_Hook(
+    void* pThis,
+    void** result,
+    winrt::Windows::Foundation::IInspectable* key)""")
+
+            .replace_regex(re.escape("""    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }"""), """    bool loadedTaskbarDllForHooking = false;
+    HMODULE module = GetModuleHandle(L"taskbar.dll");
+    if (!module) {
+        module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        loadedTaskbarDllForHooking = module != nullptr;
+    }
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }""", in_function="bool HookTaskbarDllSymbolsTBIconSize()")
+
+            .replace_regex(re.escape("""    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }"""), """if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        if (loadedTaskbarDllForHooking) {
+            FreeLibrary(module);
+        }
+        return false;
+    }""", in_function="bool HookTaskbarDllSymbolsTBIconSize()")
+            .replace_regex(r"if \(g_unloading\)", "if (g_unloading || !key || !value)",
+                           in_function="void OverrideResourceDirectoryLookup")
             .insert_after_literal("g_inSystemTrayController_UpdateFrameSize = false;",
                                   "\nApplySettingsFromTaskbarThreadGeometryChanged();",
                                   in_function="void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis)")
@@ -903,6 +986,15 @@ int GetMaxTaskbarIconSizeForLayout(int taskbarHeight, int taskbarButtonSize) {
             .replace_literal("ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);",
                              'Wh_Log(L"Deferring taskbar icon size settings until delayed initial apply");',
                              in_function="void Wh_ModAfterInitTBIconSize()")
+            .insert_before_literal("using SendMessageTimeoutW_t = decltype(&SendMessageTimeoutW);","static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM lParam);")
+            .insert_after_literal("""LRESULT ret = SendMessageTimeoutW_Original(hWnd, Msg, wParam, lParam,
+                                               fuFlags, uTimeout, lpdwResult);""","\nTryCorrectShellHookMinRectMessageTai(Msg, wParam, lParam);",in_function="""LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
+                                        UINT Msg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        UINT fuFlags,
+                                        UINT uTimeout,
+                                        PDWORD_PTR lpdwResult)""", )
             .insert_before_literal(
                 "#include <winrt/Windows.Foundation.h>\n#include <winrt/Windows.UI.Xaml.Automation.h>",
                 "#include <initguid.h>\n", )
@@ -995,11 +1087,39 @@ class StartButtonPosition(URLProcessor):
         self._patch_dwm_targeting(patch)
         self._patch_reload_and_settings(patch)
 
-        return patch.prepend(
+        return (patch.prepend(
             "bool ApplyStyle(FrameworkElement const& element, std::wstring monitorName);\n"
             "bool InitializeDebounce();\n"
             "DispatcherTimer debounceTimer{nullptr};\n\n"
-        ).text()
+        ).replace_regex(re.escape(""" RunFromWindowThread(
+        hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);"""), """   if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
+        RunFromWindowThread(
+            hTaskbarWnd, [](void* pParam) { ApplySettingsFromTaskbarThread(); }, 0);
+    }""", in_function="void ApplySettingsStartButtonPosition(HWND hTaskbarWnd)")
+                .replace_regex(re.escape("""    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }"""),"""    bool loadedTaskbarDllForHooking = false;
+    HMODULE module = GetModuleHandle(L"taskbar.dll");
+    if (!module) {
+        module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        loadedTaskbarDllForHooking = module != nullptr;
+    }
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }""", in_function="bool HookTaskbarDllSymbolsStartButtonPosition()")
+        .replace_regex(re.escape("""return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));"""),""" if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        if (loadedTaskbarDllForHooking) {
+            FreeLibrary(module);
+        }
+        return false;
+    }
+    return true;""",in_function="bool HookTaskbarDllSymbolsStartButtonPosition()")
+                .text())
 
     def _remove_unused_upstream_code(self, patch: CppPatcher) -> None:
         patch.remove_function("FrameworkElement EnumChildElements(")

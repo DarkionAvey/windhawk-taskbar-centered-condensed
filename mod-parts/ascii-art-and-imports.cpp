@@ -57,5 +57,8 @@
 #include <windows.h>
 #include <psapi.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <mutex>
+#include <cmath>
+#include <cwctype>
 using namespace winrt::Windows::UI::Xaml;
 
