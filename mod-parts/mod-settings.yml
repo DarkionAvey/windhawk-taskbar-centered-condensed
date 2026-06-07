@@ -28,11 +28,6 @@
   $description: Set the horizontal padding on both sides of the taskbar background. Default is 2
   $type: unsigned int
 
-- TaskbarOverflowScaleDownFactor: 2
-  $name: Overflow scale-down factor
-  $description: What is the limit of taskbar scale-down when the taskbar overflows. 1 disables scaling, 2 allows scaling down to 0.5x, 3 allows 0.33x. Default is 2
-  $type: unsigned int
-
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
   $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off

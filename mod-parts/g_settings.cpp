@@ -19,7 +19,6 @@ struct {
   unsigned int userDefinedTaskbarBackgroundInversion;
   std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
-  unsigned int userDefinedTaskbarOverflowScaleDownFactor;
   double userDefinedTaskbarBorderThickness;
   bool userDefinedFullWidthTaskbarBackground;
   bool userDefinedIgnoreShowDesktopButton;

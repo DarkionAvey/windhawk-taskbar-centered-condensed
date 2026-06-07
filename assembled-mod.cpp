@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.133
+// @version         1.5.138
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -63,7 +63,6 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarOffsetY` | Taskbar vertical offset | Move the taskbar up or down. Padding of the same value is applied to the top. Default is 6 | Non-negative integer |
 | `TrayTaskGap` | Tray task gap | Adjust the space between the task area and the tray area. Default is 10 | Non-negative integer |
 | `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Set the horizontal padding on both sides of the taskbar background. Default is 2 | Non-negative integer |
-| `TaskbarOverflowScaleDownFactor` | Overflow scale-down factor | What is the limit of taskbar scale-down when the taskbar overflows. 1 disables scaling, 2 allows scaling down to 0.5x, 3 allows 0.33x. Default is 2 | Non-negative integer |
 | `FullWidthTaskbarBackground` | Full-width taskbar background | When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations. Default is off | Boolean (true/false) |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear. Default is 22 | Non-negative integer |
@@ -113,9 +112,6 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarBackgroundHorizontalPadding: 2
   $name: Taskbar background horizontal padding
   $description: Set the horizontal padding on both sides of the taskbar background. Default is 2
-- TaskbarOverflowScaleDownFactor: 2
-  $name: Overflow scale-down factor
-  $description: What is the limit of taskbar scale-down when the taskbar overflows. 1 disables scaling, 2 allows scaling down to 0.5x, 3 allows 0.33x. Default is 2
 - FullWidthTaskbarBackground: false
   $name: Full-width taskbar background
   $description: When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off
@@ -376,7 +372,6 @@ static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
   unsigned int userDefinedTaskbarBackgroundInversion;
   std::wstring userDefinedTaskbarBackgroundFallbackColor;
   uint8_t userDefinedTaskbarBorderOpacity;
-  unsigned int userDefinedTaskbarOverflowScaleDownFactor;
   double userDefinedTaskbarBorderThickness;
   bool userDefinedFullWidthTaskbarBackground;
   bool userDefinedIgnoreShowDesktopButton;
@@ -4489,7 +4484,9 @@ std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
 constexpr int kStartButtonAnchorStablePassesRequired = 2;
-constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 2.0;
+constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 4.0;
+constexpr int kTaskbarVirtualExtraButtonReserve = 128;
+constexpr int kTaskbarVirtualOverflowRecoveryButtonReserve = 512;
 constexpr int kLowPriorityStyleDelayMs =
     kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
 constexpr int kExplorerStartupSettleAnimationWindows = 6;
@@ -4585,15 +4582,18 @@ float CalculateTaskbarIslandScale(float screenLeft,
                                   float screenRight,
                                   float screenWidth,
                                   float scaleCenterX,
-                                  float maxScaleDownFactor,
                                   float rasterizationScale) {
   if (screenWidth <= 0.0f || screenRight <= screenLeft ||
-      maxScaleDownFactor <= 1.0f || !std::isfinite(screenLeft) ||
-      !std::isfinite(screenRight) || !std::isfinite(screenWidth) ||
-      !std::isfinite(scaleCenterX)) {
+      !std::isfinite(screenLeft) || !std::isfinite(screenRight) ||
+      !std::isfinite(screenWidth) || !std::isfinite(scaleCenterX)) {
     return 1.0f;
   }
+  const float unscaledWidth = screenRight - screenLeft;
   float targetScale = 1.0f;
+  // Scale only as much as needed to keep the island inside the current screen.
+  // This is intentionally not limited by a user setting: once the task area is
+  // wider than the monitor, shrinking to any size is safer than allowing
+  // Explorer's native overflow layout to appear and destabilize the taskbar.
   if (screenLeft < 0.0f && scaleCenterX > screenLeft) {
     targetScale = std::min(targetScale,
                            scaleCenterX / (scaleCenterX - screenLeft));
@@ -4603,12 +4603,22 @@ float CalculateTaskbarIslandScale(float screenLeft,
                            (screenWidth - scaleCenterX) /
                                (screenRight - scaleCenterX));
   }
-  const float minScale = 1.0f / maxScaleDownFactor;
-  targetScale = std::clamp(targetScale, minScale, 1.0f);
-  targetScale = SnapScaleForPhysicalPixels(targetScale,
-                                           screenRight - screenLeft,
-                                           rasterizationScale);
-  return std::clamp(targetScale, minScale, 1.0f);
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    targetScale = screenWidth / unscaledWidth;
+  }
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    return 1.0f;
+  }
+  targetScale = std::min(targetScale, 1.0f);
+  const float snappedScale = SnapScaleForPhysicalPixels(targetScale,
+                                                        unscaledWidth,
+                                                        rasterizationScale);
+  if (std::isfinite(snappedScale) && snappedScale > 0.0f) {
+    // Pixel snapping can round the scaled width up by a fraction of a pixel.
+    // Never let snapping pick a larger scale than the geometric fit.
+    targetScale = std::min(targetScale, snappedScale);
+  }
+  return std::min(targetScale, 1.0f);
 }
 float ApplyScaleToScreenX(float screenX, float scaleCenterX, float scale) {
   return scaleCenterX + ((screenX - scaleCenterX) * scale);
@@ -5564,6 +5574,35 @@ bool SetVirtualLayoutWidth(FrameworkElement const& element, double width) {
   }
   return changed;
 }
+double CalculateDynamicTaskbarVirtualSurfaceWidth(FrameworkElement const& taskbarFrameRepeater,
+                                                 double rootWidth,
+                                                 bool isOverflowing) {
+  if (g_unloading || !std::isfinite(rootWidth) || rootWidth <= 0.0) {
+    return rootWidth;
+  }
+  int visualChildCount = 0;
+  try {
+    visualChildCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
+  } catch (...) {
+    visualChildCount = 0;
+  }
+  const double buttonSize = std::max<double>(
+      1.0, static_cast<double>(g_settings.userDefinedTaskbarButtonSize));
+  const int reserveButtons = isOverflowing
+      ? kTaskbarVirtualOverflowRecoveryButtonReserve
+      : kTaskbarVirtualExtraButtonReserve;
+  const double buttonReserveWidth =
+      static_cast<double>(std::max(visualChildCount, 1) + reserveButtons) *
+      buttonSize;
+  const double screenReserveWidth =
+      rootWidth * kTaskbarRepeaterVirtualWidthMultiplier;
+  const double virtualWidth = std::max({rootWidth,
+                                        screenReserveWidth,
+                                        buttonReserveWidth});
+  return std::isfinite(virtualWidth) && virtualWidth > rootWidth
+      ? virtualWidth
+      : rootWidth;
+}
 void ApplyVirtualTaskbarLayoutSurface(FrameworkElement const& xamlRootContent,
                                       FrameworkElement const& taskFrame,
                                       FrameworkElement const& rootGridTaskBar,
@@ -5874,8 +5913,6 @@ void UpdateGlobalSettings() {
   // Booleans
   g_settings.userDefinedFlatTaskbarBottomCorners = (getInt(L"FlatTaskbarBottomCorners") != 0);
   g_settings.userDefinedFullWidthTaskbarBackground = (getInt(L"FullWidthTaskbarBackground") != 0) || g_unloading;
-  g_settings.userDefinedTaskbarOverflowScaleDownFactor =
-      g_unloading ? 1 : static_cast<unsigned int>(clamp(abs(getInt(L"TaskbarOverflowScaleDownFactor")), 1, 8));
   if (g_settings.userDefinedFullWidthTaskbarBackground) g_settings.userDefinedFlatTaskbarBottomCorners = true;
   g_settings.userDefinedIgnoreShowDesktopButton = (getInt(L"IgnoreShowDesktopButton") != 0);
   g_settings.userDefinedTrayAreaDivider = (getInt(L"TrayAreaDivider") != 0) && !g_unloading;
@@ -5968,7 +6005,6 @@ bool HasInvalidSettings() {
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
   if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
   if (g_settings.userDefinedTaskbarHeight < kMinTaskbarHeight || g_settings.userDefinedTaskbarHeight > kMaxTaskbarHeight) return true;
-  if (g_settings.userDefinedTaskbarOverflowScaleDownFactor < 1 || g_settings.userDefinedTaskbarOverflowScaleDownFactor > 8) return true;
   if (g_settings.userDefinedTaskbarIconSize <= 0) return true;
   if (g_settings.userDefinedTrayIconSize <= 0) return true;
   if (g_settings.userDefinedTaskbarButtonSize <= 0) return true;
@@ -6008,7 +6044,6 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBorderOpacity, L"userDefinedTaskbarBorderOpacity");
   Wh_Log(L"setting %d %s", (int)(g_settings.userDefinedTaskbarBorderThickness * 100.0 / 10.0), L"userDefinedTaskbarBorderThickness (scaled)");
   Wh_Log(L"setting %d %s", g_settings.userDefinedFullWidthTaskbarBackground ? 1 : 0, L"userDefinedFullWidthTaskbarBackground");
-  Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarOverflowScaleDownFactor, L"userDefinedTaskbarOverflowScaleDownFactor");
   Wh_Log(L"setting %d %s", g_settings.userDefinedIgnoreShowDesktopButton ? 1 : 0, L"userDefinedIgnoreShowDesktopButton");
   Wh_Log(L"setting %d %s", g_settings.userDefinedStyleTrayArea ? 1 : 0, L"userDefinedStyleTrayArea");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTrayAreaDivider ? 1 : 0, L"userDefinedTrayAreaDivider");
@@ -6155,9 +6190,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"root width is too small");
     return false;
   }
-  const double taskbarVirtualSurfaceWidth = g_unloading
+   const double taskbarVirtualSurfaceWidth = g_unloading
       ? rootWidth
-      : std::max(rootWidth, rootWidth * kTaskbarRepeaterVirtualWidthMultiplier);
+      : CalculateDynamicTaskbarVirtualSurfaceWidth(taskbarFrameRepeater,
+                                                  rootWidth,
+                                                  isOverflowing);
   const bool useVirtualTaskbarSurface =
       !g_unloading &&
       std::isfinite(taskbarVirtualSurfaceWidth) &&
@@ -6408,15 +6445,12 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       snapPx(targetBackgroundLeftScreen + targetWidth);
   const float targetScaleCenterScreenX =
       snapPx((targetBackgroundLeftScreen + targetBackgroundRightScreen) * 0.5f);
-  const float maxScaleDownFactor = static_cast<float>(
-      std::max<unsigned int>(1, g_settings.userDefinedTaskbarOverflowScaleDownFactor));
   const float targetTaskbarIslandScale = g_unloading
       ? 1.0f
       : CalculateTaskbarIslandScale(targetBackgroundLeftScreen,
                                     targetBackgroundRightScreen,
                                     static_cast<float>(rootWidth),
                                     targetScaleCenterScreenX,
-                                    maxScaleDownFactor,
                                     rasterizationScale);
   const float scaledBackgroundLeftScreen = snapPx(
       ApplyScaleToScreenX(targetBackgroundLeftScreen,
@@ -6459,9 +6493,8 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
            taskbarFrameRepeater.ActualWidth(),
            taskbarLayoutSurfaceWidth,
            (overflowButton && useVirtualTaskbarSurface) ? 1 : 0);
-    Wh_Log(L"[TBGEOM] scale target=%.4f maxFactor=%.2f centerX=%.2f rawBg=[%.2f..%.2f] scaledBg=[%.2f..%.2f]",
+    Wh_Log(L"[TBGEOM] scale target=%.4f centerX=%.2f rawBg=[%.2f..%.2f] scaledBg=[%.2f..%.2f]",
            targetTaskbarIslandScale,
-           maxScaleDownFactor,
            targetScaleCenterScreenX,
            targetBackgroundLeftScreen,
            targetBackgroundRightScreen,

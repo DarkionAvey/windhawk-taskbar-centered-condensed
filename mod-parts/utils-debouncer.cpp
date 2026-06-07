@@ -14,7 +14,9 @@ std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
 constexpr int kStartButtonAnchorStablePassesRequired = 2;
-constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 2.0;
+constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 4.0;
+constexpr int kTaskbarVirtualExtraButtonReserve = 128;
+constexpr int kTaskbarVirtualOverflowRecoveryButtonReserve = 512;
 constexpr int kLowPriorityStyleDelayMs =
     kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
 constexpr int kExplorerStartupSettleAnimationWindows = 6;
@@ -121,16 +123,20 @@ float CalculateTaskbarIslandScale(float screenLeft,
                                   float screenRight,
                                   float screenWidth,
                                   float scaleCenterX,
-                                  float maxScaleDownFactor,
                                   float rasterizationScale) {
   if (screenWidth <= 0.0f || screenRight <= screenLeft ||
-      maxScaleDownFactor <= 1.0f || !std::isfinite(screenLeft) ||
-      !std::isfinite(screenRight) || !std::isfinite(screenWidth) ||
-      !std::isfinite(scaleCenterX)) {
+      !std::isfinite(screenLeft) || !std::isfinite(screenRight) ||
+      !std::isfinite(screenWidth) || !std::isfinite(scaleCenterX)) {
     return 1.0f;
   }
 
+  const float unscaledWidth = screenRight - screenLeft;
   float targetScale = 1.0f;
+
+  // Scale only as much as needed to keep the island inside the current screen.
+  // This is intentionally not limited by a user setting: once the task area is
+  // wider than the monitor, shrinking to any size is safer than allowing
+  // Explorer's native overflow layout to appear and destabilize the taskbar.
   if (screenLeft < 0.0f && scaleCenterX > screenLeft) {
     targetScale = std::min(targetScale,
                            scaleCenterX / (scaleCenterX - screenLeft));
@@ -141,14 +147,24 @@ float CalculateTaskbarIslandScale(float screenLeft,
                                (screenRight - scaleCenterX));
   }
 
-  const float minScale = 1.0f / maxScaleDownFactor;
-  targetScale = std::clamp(targetScale, minScale, 1.0f);
-  targetScale = SnapScaleForPhysicalPixels(targetScale,
-                                           screenRight - screenLeft,
-                                           rasterizationScale);
-  return std::clamp(targetScale, minScale, 1.0f);
-}
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    targetScale = screenWidth / unscaledWidth;
+  }
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    return 1.0f;
+  }
 
+  targetScale = std::min(targetScale, 1.0f);
+  const float snappedScale = SnapScaleForPhysicalPixels(targetScale,
+                                                        unscaledWidth,
+                                                        rasterizationScale);
+  if (std::isfinite(snappedScale) && snappedScale > 0.0f) {
+    // Pixel snapping can round the scaled width up by a fraction of a pixel.
+    // Never let snapping pick a larger scale than the geometric fit.
+    targetScale = std::min(targetScale, snappedScale);
+  }
+  return std::min(targetScale, 1.0f);
+}
 float ApplyScaleToScreenX(float screenX, float scaleCenterX, float scale) {
   return scaleCenterX + ((screenX - scaleCenterX) * scale);
 }
