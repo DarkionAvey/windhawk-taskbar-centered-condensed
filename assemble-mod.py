@@ -159,21 +159,13 @@ def main(major_minor="1.0"):
             merged_contents += f"{cpp_contents}\n\n"
 
     merged_contents = f"""
+    
 {merged_contents.strip()}
-
-{read_file(os.path.join(base_dir, 'mod-parts', 'ascii-art-and-imports.cpp')).strip()}
-
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-style-xml.cpp')).strip()}
 
 {read_file(os.path.join(base_dir, 'mod-parts', 'windhawk-brush.cpp')).strip()}
 
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-string.cpp')).strip()}
-
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-debouncer.cpp')).strip()}
-
-{read_file(os.path.join(base_dir, 'mod-parts', 'utils-apply-style-helpers.cpp')).strip()}
-
 {read_file(os.path.join(base_dir, 'mod-parts', 'win-dock-mod.cpp')).strip()}
+
 """
 
     merged_contents = re.sub(r'[ \t]*\n', '\n', merged_contents)  # remove whitespace-only lines
@@ -188,5 +180,6 @@ def main(major_minor="1.0"):
 
 if __name__ == '__main__':
     from dependencies import main as fetcher
+
     fetcher.process_all_mods()
     main(major_minor="1.5")

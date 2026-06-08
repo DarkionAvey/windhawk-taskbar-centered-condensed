@@ -244,36 +244,36 @@ void ApplySettingsFromTaskbarThread() {
                 Wh_Log(L"Getting XamlRoot failed");
                 return TRUE;
             }
-  const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-  if (!xamlRootContent) {
-  Wh_Log(L"XamlRoot content is null");
-  return TRUE;
-  }
-  auto dispatcher = xamlRootContent.Dispatcher();
-  if (!dispatcher) {
-  Wh_Log(L"XamlRoot content dispatcher is null");
-  return TRUE;
-  }
-  std::wstring monitorName = GetMonitorName(hWnd);
-  auto applyOnDispatcher = [xamlRootContent, monitorName]() {
-  if (!ApplyStyle(xamlRootContent, monitorName)) {
-   Wh_Log(L"ApplyStyles failed");
-  }
- };
-            if (dispatcher.HasThreadAccess()) {
-                applyOnDispatcher();
-            } else if (!g_unloading){
-                auto priority = winrt::Windows::UI::Core::CoreDispatcherPriority::Low;
-                int highPriorityPasses = g_high_priority_dispatch_passes.load();
-                while (highPriorityPasses > 0) {
-                    if (g_high_priority_dispatch_passes.compare_exchange_weak(
-                            highPriorityPasses, highPriorityPasses - 1)) {
-                        priority = winrt::Windows::UI::Core::CoreDispatcherPriority::High;
-                        break;
-                    }
-                }
-                dispatcher.TryRunAsync(priority, applyOnDispatcher);
-            }
+            const auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+if (!xamlRootContent) {
+    Wh_Log(L"XamlRoot content is null");
+    return TRUE;
+}
+auto dispatcher = xamlRootContent.Dispatcher();
+if (!dispatcher) {
+    Wh_Log(L"XamlRoot content dispatcher is null");
+    return TRUE;
+}
+std::wstring monitorName = GetMonitorName(hWnd);
+auto applyOnDispatcher = [xamlRootContent, monitorName]() {
+    if (!ApplyStyle(xamlRootContent, monitorName)) {
+        Wh_Log(L"ApplyStyles failed");
+    }
+};
+if (dispatcher.HasThreadAccess()) {
+    applyOnDispatcher();
+} else if (!g_unloading) {
+    auto priority = winrt::Windows::UI::Core::CoreDispatcherPriority::Low;
+    int highPriorityPasses = g_high_priority_dispatch_passes.load();
+    while (highPriorityPasses > 0) {
+        if (g_high_priority_dispatch_passes.compare_exchange_weak(
+                highPriorityPasses, highPriorityPasses - 1)) {
+            priority = winrt::Windows::UI::Core::CoreDispatcherPriority::High;
+            break;
+        }
+    }
+    dispatcher.TryRunAsync(priority, applyOnDispatcher);
+}
             return TRUE;
         },
         0);
@@ -913,12 +913,12 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         .cbSize = sizeof(MONITORINFO),
     };
     GetMonitorInfo(monitor, &monitorInfo);
-    auto monitorName = GetMonitorName(monitor);
-    auto iterationTbStates = g_taskbarStates.find(monitorName);
-    if (iterationTbStates == g_taskbarStates.end()) {
-      return original();
-    }
-    TaskbarState& taskbarState = iterationTbStates->second;
+auto monitorName = GetMonitorName(monitor);
+auto iterationTbStates = g_taskbarStates.find(monitorName);
+if (iterationTbStates == g_taskbarStates.end()) {
+    return original();
+}
+TaskbarState& taskbarState = iterationTbStates->second;
     RECT targetRect;
     if (!GetWindowRect(hwnd, &targetRect)) {
         return original();
@@ -987,7 +987,8 @@ if (target == DwmTarget::StartMenu) {
     x = static_cast<int>(absRootWidth - cx);
   }
 }
-Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
+SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }
 namespace StartMenuUI {
@@ -1027,12 +1028,9 @@ HWND GetCoreWnd() {
         (LPARAM)&param);
     return hWnd;
 }
-void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor){
-         if(true){
-         ApplyStyle(content,GetMonitorName(monitor));
-         return;
-         }
-         }
+void ApplyStyleClassicStartMenu(FrameworkElement content, HMONITOR monitor) {
+    ApplyStyle(content, GetMonitorName(monitor));
+}
 void ApplyStyleRedesignedStartMenu(FrameworkElement content) {
     FrameworkElement frameRoot = FindChildByName(content, L"FrameRoot");
     if (!frameRoot) {
@@ -1186,7 +1184,8 @@ void RestoreMenuPositions() {
     }
 }
 void LoadSettingsStartButtonPosition() {
-    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
+    g_settings_startbuttonposition.startMenuOnTheLeft = Wh_GetIntSetting(L"MoveFlyoutStartMenu");
+g_settings_startbuttonposition.MoveFlyoutNotificationCenter = Wh_GetIntSetting(L"MoveFlyoutNotificationCenter");
 }
 BOOL Wh_ModInitStartButtonPosition() {
     LoadSettingsStartButtonPosition();

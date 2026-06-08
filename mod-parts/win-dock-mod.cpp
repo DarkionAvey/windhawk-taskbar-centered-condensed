@@ -1,3 +1,1525 @@
+
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+/////      .___________.     ___       __        /////
+/////      |           |    /   \     |  |       /////
+/////      `---|  |----`   /  ^  \    |  |       /////
+/////          |  |       /  /_\  \   |  |       /////
+/////          |  |      /  _____  \  |  |       /////
+/////          |__|     /__/     \__\ |__|       /////
+/////                                            /////
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+#include <dwmapi.h>
+#include <chrono>
+#include <string>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+#include <unordered_map>
+#include <limits>
+#include <utility>
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <functional>
+#undef GetCurrentTime
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+#include <commctrl.h>
+#include <roapi.h>
+#include <winstring.h>
+#include <string_view>
+#include <vector>
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.Storage.Search.h>
+#include <chrono>
+#include <thread>
+#include <windows.h>
+#include <psapi.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <mutex>
+#include <cmath>
+#include <cwctype>
+using namespace winrt::Windows::UI::Xaml;
+
+#include <cwctype>
+#ifndef HSHELL_GETMINRECT
+#define HSHELL_GETMINRECT 5
+#endif
+
+struct SHELLHOOKINFO_TAI {
+  HWND hwnd;
+  RECT rc;
+};
+
+struct MinimizeAnimationMeasuredButtonTai {
+  RECT visibleRectPx{};
+  std::wstring automationName;
+};
+
+struct MinimizeAnimationCorrectionTai {
+  double layoutOffsetXDip{0.0};
+  double visualScale{1.0};
+  double scaleCenterXDip{0.0};
+  double rasterizationScale{1.0};
+  RECT monitorRect{};
+  RECT clampXRect{};
+  bool hasClampXRect{false};
+  std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons;
+};
+
+static std::mutex g_minimizeAnimationCorrectionMutexTai;
+static std::unordered_map<std::wstring, MinimizeAnimationCorrectionTai> g_minimizeAnimationCorrectionByMonitorNameTai;
+static std::atomic_bool g_minimizeAnimationCorrectionReadyTai{false};
+static std::atomic_bool g_minimizeAnimationCorrectionUninitializingTai{false};
+
+static thread_local LPARAM g_minimizeAnimationLastCorrectedLParamTai = 0;
+static thread_local HWND g_minimizeAnimationLastCorrectedHwndTai = nullptr;
+static thread_local RECT g_minimizeAnimationLastCorrectedRawTai{};
+static thread_local DWORD g_minimizeAnimationLastCorrectedTickTai = 0;
+
+using SendMessageW_t = LRESULT(WINAPI*)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+static SendMessageW_t SendMessageW_OriginalTai = nullptr;
+
+
+static bool ReadShellHookInfoTai(LPARAM lParam, SHELLHOOKINFO_TAI* shellHookInfo) {
+  if (!lParam || !shellHookInfo) {
+    return false;
+  }
+
+#if defined(_MSC_VER)
+  __try {
+    *shellHookInfo = *reinterpret_cast<const SHELLHOOKINFO_TAI*>(lParam);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+#else
+  *shellHookInfo = *reinterpret_cast<const SHELLHOOKINFO_TAI*>(lParam);
+#endif
+
+  return true;
+}
+
+static bool WriteShellHookRectTai(LPARAM lParam, const RECT& rect) {
+  if (!lParam) {
+    return false;
+  }
+
+#if defined(_MSC_VER)
+  __try {
+    reinterpret_cast<SHELLHOOKINFO_TAI*>(lParam)->rc = rect;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+#else
+  reinterpret_cast<SHELLHOOKINFO_TAI*>(lParam)->rc = rect;
+#endif
+
+  return true;
+}
+
+static bool GetMonitorRectByNameTai(const std::wstring& monitorName, RECT* rect) {
+  if (!rect || monitorName.empty()) {
+    return false;
+  }
+
+  struct EnumContext {
+    const std::wstring* monitorName;
+    RECT* rect;
+    bool found;
+  } context{&monitorName, rect, false};
+
+  EnumDisplayMonitors(
+      nullptr,
+      nullptr,
+      [](HMONITOR monitor, HDC, LPRECT, LPARAM lParam) -> BOOL {
+        auto* context = reinterpret_cast<EnumContext*>(lParam);
+        if (!context || !context->monitorName || !context->rect) {
+          return TRUE;
+        }
+
+        MONITORINFOEXW monitorInfo{};
+        monitorInfo.cbSize = sizeof(monitorInfo);
+        if (GetMonitorInfoW(monitor, &monitorInfo) &&
+            _wcsicmp(monitorInfo.szDevice, context->monitorName->c_str()) == 0) {
+          *context->rect = monitorInfo.rcMonitor;
+          context->found = true;
+          return FALSE;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&context));
+
+  return context.found;
+}
+
+static int RectWidthTai(const RECT& rect) {
+  return rect.right - rect.left;
+}
+
+static int ClampIntTai(int value, int minValue, int maxValue) {
+  if (value < minValue) {
+    return minValue;
+  }
+  if (value > maxValue) {
+    return maxValue;
+  }
+  return value;
+}
+
+static void ClampRectCenterXToBoundsTai(RECT* rect, const RECT& bounds) {
+  if (!rect || IsRectEmpty(rect) || IsRectEmpty(&bounds)) {
+    return;
+  }
+
+  const int width = std::max(1, RectWidthTai(*rect));
+  const int currentCenterX = rect->left + width / 2;
+
+  int minCenterX = bounds.left + width / 2;
+  int maxCenterX = bounds.right - width / 2;
+  if (minCenterX > maxCenterX) {
+    minCenterX = maxCenterX = (bounds.left + bounds.right) / 2;
+  }
+
+  const int newCenterX = ClampIntTai(currentCenterX, minCenterX, maxCenterX);
+  OffsetRect(rect, newCenterX - currentCenterX, 0);
+}
+
+static std::wstring ToLowerTai(std::wstring value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) {
+    return static_cast<wchar_t>(towlower(ch));
+  });
+  return value;
+}
+
+static std::wstring TrimTai(const std::wstring& value) {
+  const auto first = value.find_first_not_of(L" \t\r\n");
+  if (first == std::wstring::npos) {
+    return L"";
+  }
+  const auto last = value.find_last_not_of(L" \t\r\n");
+  return value.substr(first, last - first + 1);
+}
+
+static std::wstring GetWindowTextSafeTai(HWND hwnd) {
+  if (!hwnd || !IsWindow(hwnd)) {
+    return L"";
+  }
+
+  int length = GetWindowTextLengthW(hwnd);
+  if (length <= 0 || length > 32767) {
+    return L"";
+  }
+
+  std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+  int copied = GetWindowTextW(hwnd, text.data(), length + 1);
+  if (copied <= 0) {
+    return L"";
+  }
+  text.resize(static_cast<size_t>(copied));
+  return TrimTai(text);
+}
+
+static std::wstring StripExeExtensionTai(std::wstring value) {
+  value = TrimTai(value);
+  if (value.size() > 4 && _wcsicmp(value.c_str() + value.size() - 4, L".exe") == 0) {
+    value.resize(value.size() - 4);
+  }
+  return value;
+}
+
+static bool TryGetTargetWindowProcessBaseNameTai(HWND hwnd, std::wstring* processBaseName) {
+  if (!hwnd || !processBaseName || !IsWindow(hwnd)) {
+    return false;
+  }
+
+  DWORD processId = 0;
+  GetWindowThreadProcessId(hwnd, &processId);
+  if (!processId) {
+    return false;
+  }
+
+  std::wstring processName = StripExeExtensionTai(GetProcessFileName(processId));
+  if (processName.empty()) {
+    return false;
+  }
+
+  *processBaseName = processName;
+  return true;
+}
+
+static bool IsUsableMeasuredButtonRectTai(const RECT& rect) {
+  return rect.right > rect.left && rect.bottom > rect.top;
+}
+
+static bool TextContainsTai(const std::wstring& haystack, const std::wstring& needle) {
+  return !haystack.empty() && !needle.empty() && haystack.find(needle) != std::wstring::npos;
+}
+
+static const MinimizeAnimationMeasuredButtonTai* FindMeasuredButtonForTargetWindowTai(
+    HWND targetWindow,
+    const RECT& currentRect,
+    const MinimizeAnimationCorrectionTai& correction,
+    int* matchTier) {
+  if (!targetWindow || !IsWindow(targetWindow) || correction.measuredButtons.empty()) {
+    return nullptr;
+  }
+
+  const std::wstring titleLower = ToLowerTai(GetWindowTextSafeTai(targetWindow));
+  std::wstring processLower;
+  std::wstring processBaseName;
+  if (TryGetTargetWindowProcessBaseNameTai(targetWindow, &processBaseName)) {
+    processLower = ToLowerTai(processBaseName);
+  }
+
+  const int currentCenterX = currentRect.left + std::max(1, RectWidthTai(currentRect)) / 2;
+
+  const MinimizeAnimationMeasuredButtonTai* best = nullptr;
+  int bestTier = 0;
+  LONG bestDistance = LONG_MAX;
+
+  for (const auto& button : correction.measuredButtons) {
+    if (!IsUsableMeasuredButtonRectTai(button.visibleRectPx)) {
+      continue;
+    }
+
+    const std::wstring nameLower = ToLowerTai(TrimTai(button.automationName));
+    if (nameLower.empty()) {
+      continue;
+    }
+
+    int tier = 0;
+    if (!titleLower.empty() && nameLower == titleLower) {
+      tier = 3;
+    } else if (!titleLower.empty() &&
+               (TextContainsTai(nameLower, titleLower) || TextContainsTai(titleLower, nameLower))) {
+      tier = 2;
+    } else if (!processLower.empty() && TextContainsTai(nameLower, processLower)) {
+      tier = 1;
+    }
+
+    if (tier <= 0) {
+      continue;
+    }
+
+    const int buttonCenterX = button.visibleRectPx.left + RectWidthTai(button.visibleRectPx) / 2;
+    const LONG distance = buttonCenterX >= currentCenterX ? buttonCenterX - currentCenterX : currentCenterX - buttonCenterX;
+    if (!best || tier > bestTier || (tier == bestTier && distance < bestDistance)) {
+      best = &button;
+      bestTier = tier;
+      bestDistance = distance;
+    }
+  }
+
+  if (matchTier) {
+    *matchTier = bestTier;
+  }
+  return best;
+}
+
+static bool TryUseMeasuredTaskbarButtonRectTai(
+    HWND targetWindow,
+    RECT* rect,
+    const MinimizeAnimationCorrectionTai& correction,
+    int* matchTier) {
+  if (!rect || correction.measuredButtons.empty()) {
+    return false;
+  }
+
+  const auto* button = FindMeasuredButtonForTargetWindowTai(targetWindow, *rect, correction, matchTier);
+  if (!button || !IsUsableMeasuredButtonRectTai(button->visibleRectPx)) {
+    return false;
+  }
+
+  rect->left = button->visibleRectPx.left;
+  rect->right = button->visibleRectPx.right;
+  return true;
+}
+
+static LONG TransformMinimizeRectXTai(LONG xPx, const MinimizeAnimationCorrectionTai& correction) {
+  const double dpiScale = std::max(0.01, correction.rasterizationScale);
+  double xDip = (static_cast<double>(xPx) - static_cast<double>(correction.monitorRect.left)) / dpiScale;
+
+  // First apply the RootGrid translation that visually brings the virtual
+  // taskbar surface back to the real screen, then apply the same island scale.
+  xDip += correction.layoutOffsetXDip;
+  xDip = correction.scaleCenterXDip + ((xDip - correction.scaleCenterXDip) * correction.visualScale);
+
+  return static_cast<LONG>(std::lround(static_cast<double>(correction.monitorRect.left) + xDip * dpiScale));
+}
+
+static bool GetMinimizeAnimationCorrectionForWindowTai(
+    HWND targetWindow,
+    MinimizeAnimationCorrectionTai* correction) {
+  if (!targetWindow || !correction ||
+      !g_minimizeAnimationCorrectionReadyTai.load(std::memory_order_acquire) ||
+      g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
+    return false;
+  }
+
+  if (!IsWindow(targetWindow)) {
+    return false;
+  }
+
+  HMONITOR monitor = MonitorFromWindow(targetWindow, MONITOR_DEFAULTTONEAREST);
+  if (!monitor) {
+    return false;
+  }
+
+  const std::wstring monitorName = GetMonitorName(monitor);
+  if (monitorName.empty()) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
+  auto it = g_minimizeAnimationCorrectionByMonitorNameTai.find(monitorName);
+  if (it == g_minimizeAnimationCorrectionByMonitorNameTai.end()) {
+    return false;
+  }
+
+  *correction = it->second;
+  return true;
+}
+
+static bool WasMinimizeAnimationPayloadAlreadyCorrectedTai(
+    LPARAM lParam,
+    const SHELLHOOKINFO_TAI& shellHookInfo) {
+  if (!lParam) {
+    return false;
+  }
+
+  if (g_minimizeAnimationLastCorrectedLParamTai != lParam ||
+      g_minimizeAnimationLastCorrectedHwndTai != shellHookInfo.hwnd ||
+      !EqualRect(&g_minimizeAnimationLastCorrectedRawTai, &shellHookInfo.rc)) {
+    return false;
+  }
+
+  return GetTickCount() - g_minimizeAnimationLastCorrectedTickTai < 1000;
+}
+
+static void RememberMinimizeAnimationCorrectedPayloadTai(
+    LPARAM lParam,
+    const SHELLHOOKINFO_TAI& shellHookInfo) {
+  if (!lParam) {
+    return;
+  }
+
+  g_minimizeAnimationLastCorrectedLParamTai = lParam;
+  g_minimizeAnimationLastCorrectedHwndTai = shellHookInfo.hwnd;
+  g_minimizeAnimationLastCorrectedRawTai = shellHookInfo.rc;
+  g_minimizeAnimationLastCorrectedTickTai = GetTickCount();
+}
+
+static SHORT SignedLowWordTai(LONG value) {
+  return static_cast<SHORT>(static_cast<WORD>(value & 0xFFFF));
+}
+
+static SHORT SignedHighWordTai(LONG value) {
+  return static_cast<SHORT>(static_cast<WORD>((static_cast<DWORD>(value) >> 16) & 0xFFFF));
+}
+
+static LONG PackSignedPointTai(LONG x, LONG y) {
+  return static_cast<LONG>((static_cast<DWORD>(static_cast<WORD>(y)) << 16) |
+                           static_cast<DWORD>(static_cast<WORD>(x)));
+}
+
+static bool TryDecodePackedMinimizeRectTai(const SHELLHOOKINFO_TAI& shellHookInfo, RECT* decodedRect) {
+  if (!decodedRect) {
+    return false;
+  }
+
+  // On recent Windows 11 builds, the SHELLHOOKINFO rc for HSHELL_GETMINRECT can
+  // arrive as two packed POINTS rather than a normal RECT:
+  //   rc.left = MAKELONG(left, top)
+  //   rc.top  = MAKELONG(right, bottom)
+  //   rc.right/rc.bottom = 0
+  // Example raw log: rc=(87304471,93399320,0,0)
+  // Decoded: (10519,1332,10520,1425)
+  if (shellHookInfo.rc.right != 0 || shellHookInfo.rc.bottom != 0) {
+    return false;
+  }
+
+  RECT candidate{};
+  candidate.left = SignedLowWordTai(shellHookInfo.rc.left);
+  candidate.top = SignedHighWordTai(shellHookInfo.rc.left);
+  candidate.right = SignedLowWordTai(shellHookInfo.rc.top);
+  candidate.bottom = SignedHighWordTai(shellHookInfo.rc.top);
+
+  if (candidate.right < candidate.left) {
+    std::swap(candidate.left, candidate.right);
+  }
+  if (candidate.bottom < candidate.top) {
+    std::swap(candidate.top, candidate.bottom);
+  }
+
+  if (candidate.left == 0 && candidate.top == 0 &&
+      candidate.right == 0 && candidate.bottom == 0) {
+    return false;
+  }
+
+  // The packed format is often point-like or very narrow, so do not reject
+  // small widths. Only reject obviously unusable vertical geometry.
+  if (candidate.bottom <= candidate.top) {
+    return false;
+  }
+
+  *decodedRect = candidate;
+  return true;
+}
+
+static RECT EncodePackedMinimizeRectTai(const RECT& rect) {
+  RECT encoded{};
+  encoded.left = PackSignedPointTai(rect.left, rect.top);
+  encoded.top = PackSignedPointTai(rect.right, rect.bottom);
+  encoded.right = 0;
+  encoded.bottom = 0;
+  return encoded;
+}
+
+static void CorrectMinimizeAnimationRectTai(HWND targetWindow, RECT* rect) {
+  if (!targetWindow || !rect || IsRectEmpty(rect)) {
+    return;
+  }
+
+  MinimizeAnimationCorrectionTai correction{};
+  if (!GetMinimizeAnimationCorrectionForWindowTai(targetWindow, &correction)) {
+    return;
+  }
+
+  RECT before = *rect;
+
+  LONG transformedLeft = TransformMinimizeRectXTai(rect->left, correction);
+  LONG transformedRight = TransformMinimizeRectXTai(rect->right, correction);
+  if (transformedRight < transformedLeft) {
+    std::swap(transformedLeft, transformedRight);
+  }
+
+  rect->left = transformedLeft;
+  rect->right = transformedRight;
+
+  int measuredMatchTier = 0;
+  const bool usedMeasuredButtonRect =
+      TryUseMeasuredTaskbarButtonRectTai(targetWindow, rect, correction, &measuredMatchTier);
+
+  if (correction.hasClampXRect) {
+    ClampRectCenterXToBoundsTai(rect, correction.clampXRect);
+  }
+
+  if (!EqualRect(&before, rect)) {
+    Wh_Log(L"[MinRectFix] hwnd=%p before=(%ld,%ld,%ld,%ld) after=(%ld,%ld,%ld,%ld) mode=%s matchTier=%d offsetDip=%.2f scale=%.4f centerDip=%.2f dpiScale=%.3f measuredButtons=%zu",
+           targetWindow,
+           before.left,
+           before.top,
+           before.right,
+           before.bottom,
+           rect->left,
+           rect->top,
+           rect->right,
+           rect->bottom,
+           usedMeasuredButtonRect ? L"measured" : L"transform",
+           measuredMatchTier,
+           correction.layoutOffsetXDip,
+           correction.visualScale,
+           correction.scaleCenterXDip,
+           correction.rasterizationScale,
+           correction.measuredButtons.size());
+  }
+}
+
+static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM lParam) {
+  if (!g_shellHookMessageTai || Msg != g_shellHookMessageTai ||
+      wParam != HSHELL_GETMINRECT || !lParam ||
+      g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
+    return false;
+  }
+
+  SHELLHOOKINFO_TAI shellHookInfo{};
+  if (!ReadShellHookInfoTai(lParam, &shellHookInfo)) {
+    Wh_Log(L"[MinRectFix] skipped unreadable HSHELL_GETMINRECT payload");
+    return true;
+  }
+
+  if (!shellHookInfo.hwnd || !IsWindow(shellHookInfo.hwnd)) {
+    return true;
+  }
+
+  if (WasMinimizeAnimationPayloadAlreadyCorrectedTai(lParam, shellHookInfo)) {
+    return true;
+  }
+
+  Wh_Log(L"[MinRectFix] HSHELL_GETMINRECT received target=%p raw=(%ld,%ld,%ld,%ld)",
+         shellHookInfo.hwnd,
+         shellHookInfo.rc.left,
+         shellHookInfo.rc.top,
+         shellHookInfo.rc.right,
+         shellHookInfo.rc.bottom);
+
+  if (!IsRectEmpty(&shellHookInfo.rc)) {
+    RECT corrected = shellHookInfo.rc;
+    CorrectMinimizeAnimationRectTai(shellHookInfo.hwnd, &corrected);
+    if (!EqualRect(&shellHookInfo.rc, &corrected) && WriteShellHookRectTai(lParam, corrected)) {
+      SHELLHOOKINFO_TAI remembered = shellHookInfo;
+      remembered.rc = corrected;
+      RememberMinimizeAnimationCorrectedPayloadTai(lParam, remembered);
+    }
+    return true;
+  }
+
+  RECT decodedPackedRect{};
+  if (TryDecodePackedMinimizeRectTai(shellHookInfo, &decodedPackedRect)) {
+    RECT before = decodedPackedRect;
+    CorrectMinimizeAnimationRectTai(shellHookInfo.hwnd, &decodedPackedRect);
+
+    if (!EqualRect(&before, &decodedPackedRect)) {
+      RECT encoded = EncodePackedMinimizeRectTai(decodedPackedRect);
+      if (WriteShellHookRectTai(lParam, encoded)) {
+        SHELLHOOKINFO_TAI remembered = shellHookInfo;
+        remembered.rc = encoded;
+        RememberMinimizeAnimationCorrectedPayloadTai(lParam, remembered);
+        Wh_Log(L"[MinRectFix] packed decoded before=(%ld,%ld,%ld,%ld) after=(%ld,%ld,%ld,%ld) encoded=(%ld,%ld,%ld,%ld)",
+               before.left,
+               before.top,
+               before.right,
+               before.bottom,
+               decodedPackedRect.left,
+               decodedPackedRect.top,
+               decodedPackedRect.right,
+               decodedPackedRect.bottom,
+               encoded.left,
+               encoded.top,
+               encoded.right,
+               encoded.bottom);
+      }
+    } else {
+      Wh_Log(L"[MinRectFix] packed decoded no-op rect=(%ld,%ld,%ld,%ld)",
+             decodedPackedRect.left,
+             decodedPackedRect.top,
+             decodedPackedRect.right,
+             decodedPackedRect.bottom);
+    }
+
+    return true;
+  }
+
+  Wh_Log(L"[MinRectFix] skipped empty/unrecognized min rect payload");
+  return true;
+}
+
+static void ClearMinimizeAnimationCorrectionForMonitorTai(const std::wstring& monitorName) {
+  if (monitorName.empty()) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
+  g_minimizeAnimationCorrectionByMonitorNameTai.erase(monitorName);
+}
+
+static void SetMinimizeAnimationCorrectionForMonitorTai(
+    const std::wstring& monitorName,
+    double layoutOffsetXDip,
+    double visualScale,
+    double scaleCenterXDip,
+    double rasterizationScale,
+    const RECT* clampXRect,
+    const std::vector<MinimizeAnimationMeasuredButtonTai>* measuredButtons) {
+  if (monitorName.empty() ||
+      g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
+    return;
+  }
+
+  RECT monitorRect{};
+  if (!GetMonitorRectByNameTai(monitorName, &monitorRect) || IsRectEmpty(&monitorRect)) {
+    return;
+  }
+
+  if (!std::isfinite(layoutOffsetXDip) ||
+      !std::isfinite(visualScale) ||
+      !std::isfinite(scaleCenterXDip) ||
+      !std::isfinite(rasterizationScale)) {
+    return;
+  }
+
+  MinimizeAnimationCorrectionTai correction{};
+  correction.layoutOffsetXDip = layoutOffsetXDip;
+  correction.visualScale = std::clamp(visualScale, 0.01, 4.0);
+  correction.scaleCenterXDip = scaleCenterXDip;
+  correction.rasterizationScale = std::clamp(rasterizationScale, 0.25, 8.0);
+  correction.monitorRect = monitorRect;
+
+  if (clampXRect && !IsRectEmpty(clampXRect) &&
+      clampXRect->right > clampXRect->left) {
+    correction.clampXRect = *clampXRect;
+    correction.hasClampXRect = true;
+  }
+
+  if (measuredButtons) {
+    correction.measuredButtons.reserve(measuredButtons->size());
+    for (const auto& button : *measuredButtons) {
+      if (IsUsableMeasuredButtonRectTai(button.visibleRectPx)) {
+        correction.measuredButtons.push_back(button);
+      }
+    }
+  }
+
+  bool shouldLog = true;
+  {
+    std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
+    auto it = g_minimizeAnimationCorrectionByMonitorNameTai.find(monitorName);
+    if (it != g_minimizeAnimationCorrectionByMonitorNameTai.end()) {
+      const auto& previous = it->second;
+      shouldLog =
+          std::abs(previous.layoutOffsetXDip - correction.layoutOffsetXDip) > 0.01 ||
+          std::abs(previous.visualScale - correction.visualScale) > 0.0001 ||
+          std::abs(previous.scaleCenterXDip - correction.scaleCenterXDip) > 0.01 ||
+          std::abs(previous.rasterizationScale - correction.rasterizationScale) > 0.0001 ||
+          previous.hasClampXRect != correction.hasClampXRect ||
+          previous.measuredButtons.size() != correction.measuredButtons.size() ||
+          !EqualRect(&previous.monitorRect, &correction.monitorRect) ||
+          (correction.hasClampXRect && !EqualRect(&previous.clampXRect, &correction.clampXRect));
+    }
+    g_minimizeAnimationCorrectionByMonitorNameTai[monitorName] = correction;
+  }
+
+  if (shouldLog) {
+    Wh_Log(L"[MinRectFix] correction monitor=%s offsetDip=%.2f scale=%.4f centerDip=%.2f dpiScale=%.3f clamp=%d [%ld..%ld] measuredButtons=%zu",
+           monitorName.c_str(),
+           correction.layoutOffsetXDip,
+           correction.visualScale,
+           correction.scaleCenterXDip,
+           correction.rasterizationScale,
+           correction.hasClampXRect ? 1 : 0,
+           correction.hasClampXRect ? correction.clampXRect.left : 0,
+           correction.hasClampXRect ? correction.clampXRect.right : 0,
+           correction.measuredButtons.size());
+  }
+}
+
+static LRESULT WINAPI SendMessageW_HookTai(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+  LRESULT result = SendMessageW_OriginalTai
+      ? SendMessageW_OriginalTai(hWnd, Msg, wParam, lParam)
+      : 0;
+
+  TryCorrectShellHookMinRectMessageTai(Msg, wParam, lParam);
+  return result;
+}
+
+static void InitMinimizeAnimationCorrectionTai() {
+  g_minimizeAnimationCorrectionUninitializingTai.store(false, std::memory_order_release);
+  g_minimizeAnimationCorrectionReadyTai.store(false, std::memory_order_release);
+  g_shellHookMessageTai = RegisterWindowMessageW(L"SHELLHOOK");
+
+  HMODULE user32 = GetModuleHandleW(L"user32.dll");
+  if (user32) {
+    auto sendMessageW = reinterpret_cast<SendMessageW_t>(GetProcAddress(user32, "SendMessageW"));
+    if (sendMessageW) {
+      if (WindhawkUtils::Wh_SetFunctionHookT(sendMessageW,
+                                             SendMessageW_HookTai,
+                                             &SendMessageW_OriginalTai)) {
+        Wh_Log(L"[MinRectFix] Successfully hooked SendMessageW");
+      } else {
+        Wh_Log(L"[MinRectFix] Failed to hook SendMessageW");
+      }
+    }
+  }
+
+  g_minimizeAnimationCorrectionReadyTai.store(g_shellHookMessageTai != 0, std::memory_order_release);
+  Wh_Log(L"[MinRectFix] initialized without persistent window subclassing");
+}
+
+static void UninitMinimizeAnimationCorrectionTai() {
+  g_minimizeAnimationCorrectionUninitializingTai.store(true, std::memory_order_release);
+  g_minimizeAnimationCorrectionReadyTai.store(false, std::memory_order_release);
+
+  {
+    std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
+    g_minimizeAnimationCorrectionByMonitorNameTai.clear();
+  }
+
+  g_shellHookMessageTai = 0;
+}
+
+std::wstring EscapeXmlAttribute(std::wstring_view data) {
+  std::wstring buffer;
+  buffer.reserve(data.size());
+  for (wchar_t c : data) buffer.append((c == L'&') ? L"&amp;" : (c == L'\"') ? L"&quot;" : (c == L'<') ? L"&lt;" : (c == L'>') ? L"&gt;" : std::wstring(1, c));
+  return buffer;
+}
+
+Style GetStyleFromXamlSetters(const std::wstring_view type, const std::wstring_view xamlStyleSetters, std::wstring& outXaml) {
+  std::wstring xaml =
+      LR"(<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls")";
+  if (auto pos = type.rfind('.'); pos != type.npos) {
+    auto typeNamespace = std::wstring_view(type).substr(0, pos);
+    auto typeName = std::wstring_view(type).substr(pos + 1);
+    xaml += L"\n    xmlns:windhawkstyler=\"using:";
+    xaml += EscapeXmlAttribute(typeNamespace);
+    xaml += L"\">\n    <Style TargetType=\"windhawkstyler:";
+    xaml += EscapeXmlAttribute(typeName);
+    xaml += L"\">\n";
+  } else {
+    xaml += L">\n    <Style TargetType=\"";
+    xaml += EscapeXmlAttribute(type);
+    xaml += L"\">\n";
+  }
+  xaml += xamlStyleSetters;
+  xaml +=
+      L"    </Style>\n"
+      L"</ResourceDictionary>";
+  outXaml = xaml;
+  auto resourceDictionary = Markup::XamlReader::Load(xaml).as<ResourceDictionary>();
+  auto [styleKey, styleInspectable] = resourceDictionary.First().Current();
+  return styleInspectable.as<Style>();
+}
+
+void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue, bool isXamlValue) {
+  if(!obj) return;
+  std::wstring outXamlResult;
+  try {
+    std::wstring xamlSetter = L"<Setter Property=\"";
+    xamlSetter += EscapeXmlAttribute(propertyName);
+    xamlSetter += L"\"";
+    if (isXamlValue) {
+      xamlSetter +=
+          L">\n"
+          L"    <Setter.Value>\n";
+      xamlSetter += propertyValue;
+      xamlSetter += L"\n    </Setter.Value>\n";
+      xamlSetter += L"</Setter>";
+    } else {
+      xamlSetter += L" Value=\"";
+      xamlSetter += EscapeXmlAttribute(propertyValue);
+      xamlSetter += L"\"/>";
+    }
+    auto style = GetStyleFromXamlSetters(type, xamlSetter, outXamlResult);
+    for (uint32_t i = 0; i < style.Setters().Size(); ++i) {
+      auto setter = style.Setters().GetAt(i).as<Setter>();
+      obj.SetValue(setter.Property(), setter.Value());
+    }
+  } catch (const std::exception& ex) {
+    if (!outXamlResult.empty()) {
+      Wh_Log(L"Error: %S. Xaml Result: %s", ex.what(), outXamlResult.c_str());
+    } else {
+      Wh_Log(L"Error: %S", ex.what());
+    }
+  } catch (const winrt::hresult_error& ex) {
+    if (!outXamlResult.empty()) {
+      Wh_Log(L"Error %08X: %s. Xaml Result: %s", ex.code(), ex.message().c_str(), outXamlResult.c_str());
+    } else {
+      Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+  } catch (...) {
+    if (!outXamlResult.empty()) {
+      Wh_Log(L"Unknown error occurred while setting property. Xaml Result: %s", outXamlResult.c_str());
+    } else {
+      Wh_Log(L"Unknown error occurred while setting property.");
+    }
+  }
+}
+
+void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
+
+#include <regex>
+std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input) {
+  std::vector<std::wstring> result;
+
+  if (!input.has_value() || input->empty()) {
+    return result;
+  }
+  std::wstringstream ss(*input);
+  std::wstring item;
+  while (std::getline(ss, item, L';')) {
+    size_t start = item.find_first_not_of(L" \t");
+    size_t end = item.find_last_not_of(L" \t");
+
+    if (start != std::wstring::npos && end != std::wstring::npos) {
+      std::wstring trimmed = item.substr(start, end - start + 1);
+      if (!trimmed.empty()) {
+        result.push_back(trimmed);
+      }
+    }
+  }
+  return result;
+}
+
+bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pattern) {
+  try {
+    std::wregex regexPattern(pattern, std::regex_constants::icase);
+    return std::regex_search(haystack, regexPattern);
+  } catch (const std::regex_error&) {
+    return false;
+  }
+}
+
+
+std::atomic<bool> g_scheduled_low_priority_update = false;
+std::atomic<bool> g_delayed_apply_worker_running = false;
+std::atomic<int64_t> g_delayed_apply_due_ms = 0;
+std::atomic<unsigned long long> g_delayed_apply_generation = 0;
+std::atomic<bool> g_initial_style_apply_completed = false;
+std::atomic<bool> g_initial_taskbar_size_apply_done = false;
+std::atomic<int64_t> g_initial_style_apply_not_before_ms = 0;
+std::atomic<int> g_force_style_apply_passes = 0;
+std::atomic<int> g_high_priority_dispatch_passes = 0;
+std::atomic<int> g_reset_animation_target_passes = 0;
+std::atomic<int64_t> g_last_geometry_critical_apply_ms = 0;
+std::atomic<bool> g_animation_followup_worker_running = false;
+std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
+constexpr int kDefaultStyleDebounceDelayMs = 150;
+constexpr int kTaskbarIslandAnimationDurationMs = 250;
+constexpr int kStartButtonAnchorStablePassesRequired = 2;
+constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 4.0;
+constexpr int kTaskbarVirtualExtraButtonReserve = 128;
+constexpr int kTaskbarVirtualOverflowRecoveryButtonReserve = 512;
+constexpr int kLowPriorityStyleDelayMs =
+    kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
+constexpr int kExplorerStartupSettleAnimationWindows = 6;
+constexpr int kInitialExplorerStyleDelayMs =
+    kLowPriorityStyleDelayMs + kDefaultStyleDebounceDelayMs +
+    (kTaskbarIslandAnimationDurationMs * kExplorerStartupSettleAnimationWindows);
+constexpr int kGeometryCriticalApplyMinIntervalMs = kDefaultStyleDebounceDelayMs / 2;
+constexpr int kDelayedWorkerMaxSleepMs = kTaskbarIslandAnimationDurationMs;
+constexpr int kInitialExplorerStyleRetryDelayMs = kTaskbarIslandAnimationDurationMs * 2;
+constexpr int kButtonSizeLowPrioritySuppressionMs = kTaskbarIslandAnimationDurationMs;
+constexpr int kGeometryCriticalLowPrioritySuppressionMs =
+    (kTaskbarIslandAnimationDurationMs * 2) + kDefaultStyleDebounceDelayMs;
+constexpr int kScheduledLowPriorityFlagTtlMs =
+    kLowPriorityStyleDelayMs + kDefaultStyleDebounceDelayMs + kTaskbarIslandAnimationDurationMs;
+constexpr double kMinimumTrustedRefreshHz = 24.0;
+constexpr double kMaximumTrustedRefreshHz = 1000.0;
+constexpr int kDefaultFrameIntervalMs = 16;
+constexpr int kMinimumFrameIntervalMs = 1;
+constexpr int kMaximumFrameIntervalMs = 42;
+constexpr int kAnimationFollowupGraceFrames = 2;
+constexpr float kDisplayGeometryChangeToleranceDip = 0.5f;
+constexpr float kDisplayRasterizationChangeTolerance = 0.001f;
+template <typename TAnimation>
+void ConfigureTaskbarIslandAnimation(TAnimation const& animation) {
+  animation.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(kTaskbarIslandAnimationDurationMs)));
+  animation.DelayTime(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(0)));
+}
+
+winrt::Windows::UI::Composition::CompositionEasingFunction CreateTaskbarIslandEasingFunction(
+    winrt::Windows::UI::Composition::Compositor const& compositor) {
+  if (!compositor) {
+    return nullptr;
+  }
+
+  // Keep every moving piece on the same curve. The explicit ease-out avoids
+  // one visual catching up linearly while another decelerates, which reads as
+  // rubber-banding when the taskbar island is resized, translated, and scaled
+  // at the same time.
+  return compositor.CreateCubicBezierEasingFunction(
+      winrt::Windows::Foundation::Numerics::float2{0.16f, 1.0f},
+      winrt::Windows::Foundation::Numerics::float2{0.30f, 1.0f});
+}
+
+template <typename TAnimation, typename TValue>
+void InsertTaskbarIslandKeyFrame(TAnimation const& animation,
+                                 float progress,
+                                 TValue const& value) {
+  if (auto compositor = animation.Compositor()) {
+    if (auto easing = CreateTaskbarIslandEasingFunction(compositor)) {
+      animation.InsertKeyFrame(progress, value, easing);
+      return;
+    }
+  }
+
+  animation.InsertKeyFrame(progress, value);
+}
+
+float ApplyTaskbarIslandEasingForEstimate(float progress) {
+  progress = std::clamp(progress, 0.0f, 1.0f);
+  // Approximation of the compositor ease-out used above. This is only for
+  // calculating a safe start value when an in-flight background shape animation
+  // is retargeted; all real animations use the compositor easing function.
+  const float inv = 1.0f - progress;
+  return 1.0f - (inv * inv * inv);
+}
+
+float LerpFloat(float from, float to, float progress) {
+  return from + ((to - from) * progress);
+}
+float EstimateAnimationValue(float from, float to, int64_t startedMs, int64_t nowMs) {
+  if (startedMs <= 0 || nowMs <= startedMs) {
+    return from;
+  }
+  float progress = static_cast<float>(nowMs - startedMs) / static_cast<float>(kTaskbarIslandAnimationDurationMs);
+  if (progress <= 0.0f) {
+    return from;
+  }
+  if (progress >= 1.0f) {
+    return to;
+  }
+   return LerpFloat(from, to, ApplyTaskbarIslandEasingForEstimate(progress));
+}
+
+static float SnapToPhysicalPixel(float value, float rasterizationScale);
+
+float SnapScaleForPhysicalPixels(float scale,
+                                 float unscaledWidth,
+                                 float rasterizationScale) {
+  if (unscaledWidth <= 0.0f || !std::isfinite(unscaledWidth) ||
+      !std::isfinite(scale)) {
+    return 1.0f;
+  }
+
+  const float snappedWidth =
+      SnapToPhysicalPixel(unscaledWidth * scale, rasterizationScale);
+  if (snappedWidth <= 0.0f || !std::isfinite(snappedWidth)) {
+    return scale;
+  }
+
+  return snappedWidth / unscaledWidth;
+}
+
+float CalculateTaskbarIslandScale(float screenLeft,
+                                  float screenRight,
+                                  float screenWidth,
+                                  float scaleCenterX,
+                                  float rasterizationScale) {
+  if (screenWidth <= 0.0f || screenRight <= screenLeft ||
+      !std::isfinite(screenLeft) || !std::isfinite(screenRight) ||
+      !std::isfinite(screenWidth) || !std::isfinite(scaleCenterX)) {
+    return 1.0f;
+  }
+
+  const float unscaledWidth = screenRight - screenLeft;
+  float targetScale = 1.0f;
+
+  // Scale only as much as needed to keep the island inside the current screen.
+  // This is intentionally not limited by a user setting: once the task area is
+  // wider than the monitor, shrinking to any size is safer than allowing
+  // Explorer's native overflow layout to appear and destabilize the taskbar.
+  if (screenLeft < 0.0f && scaleCenterX > screenLeft) {
+    targetScale = std::min(targetScale,
+                           scaleCenterX / (scaleCenterX - screenLeft));
+  }
+  if (screenRight > screenWidth && screenRight > scaleCenterX) {
+    targetScale = std::min(targetScale,
+                           (screenWidth - scaleCenterX) /
+                               (screenRight - scaleCenterX));
+  }
+
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    targetScale = screenWidth / unscaledWidth;
+  }
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    return 1.0f;
+  }
+
+  targetScale = std::min(targetScale, 1.0f);
+  const float snappedScale = SnapScaleForPhysicalPixels(targetScale,
+                                                        unscaledWidth,
+                                                        rasterizationScale);
+  if (std::isfinite(snappedScale) && snappedScale > 0.0f) {
+    // Pixel snapping can round the scaled width up by a fraction of a pixel.
+    // Never let snapping pick a larger scale than the geometric fit.
+    targetScale = std::min(targetScale, snappedScale);
+  }
+  return std::min(targetScale, 1.0f);
+}
+float ApplyScaleToScreenX(float screenX, float scaleCenterX, float scale) {
+  return scaleCenterX + ((screenX - scaleCenterX) * scale);
+}
+
+void SetVisualScaleCenterAndAnimate(
+    winrt::Windows::UI::Composition::Visual const& visual,
+    float targetScale,
+    float localCenterX,
+    float localCenterY,
+    float visualOffsetTolerance,
+    bool animate) {
+  if (!visual) {
+    return;
+  }
+
+  if (!std::isfinite(targetScale) || targetScale <= 0.0f) {
+    targetScale = 1.0f;
+  }
+  if (!std::isfinite(localCenterX)) {
+    localCenterX = 0.0f;
+  }
+  if (!std::isfinite(localCenterY)) {
+    localCenterY = 0.0f;
+  }
+
+  visual.CenterPoint({localCenterX, localCenterY, visual.CenterPoint().z});
+
+  const auto currentScale = visual.Scale();
+  if (std::abs(currentScale.x - targetScale) <= visualOffsetTolerance &&
+      std::abs(currentScale.y - targetScale) <= visualOffsetTolerance) {
+    return;
+  }
+
+  if (animate) {
+    if (auto compositor = visual.Compositor()) {
+      auto scaleAnimation = compositor.CreateVector3KeyFrameAnimation();
+      ConfigureTaskbarIslandAnimation(scaleAnimation);
+      InsertTaskbarIslandKeyFrame(
+          scaleAnimation,
+          1.0f,
+          winrt::Windows::Foundation::Numerics::float3{
+              targetScale, targetScale, currentScale.z});
+      visual.StartAnimation(L"Scale", scaleAnimation);
+      return;
+    }
+  }
+
+  visual.StopAnimation(L"Scale");
+  visual.Scale({targetScale, targetScale, currentScale.z});
+}
+void ResetAnimationTargetCache(TaskbarState& state) {
+  state.hasLastTargetTaskFrameOffsetX = false;
+  state.hasLastTargetTaskbarIslandScale = false;
+  state.lastTargetTaskbarIslandScale = 1.0f;
+  state.lastTaskbarIslandScaleCenterX = 0.0f;
+  state.hasLastTargetTrayOffsetX = false;
+  state.hasLastTargetWidgetOffset = false;
+  state.hasLastStartButtonAnchorRect = false;
+  state.hasStableStartButtonAnchorRect = false;
+  state.startButtonAnchorStablePasses = 0;
+  state.lastBackgroundShapeTargetWidth = 0.0f;
+  state.lastBackgroundShapeTargetOffsetX = 0.0f;
+  state.lastBackgroundShapeTargetOffsetY = 0.0f;
+  state.backgroundAnimationFromWidth = 0.0f;
+  state.backgroundAnimationToWidth = 0.0f;
+  state.backgroundAnimationFromOffsetX = 0.0f;
+  state.backgroundAnimationToOffsetX = 0.0f;
+  state.backgroundAnimationFromOffsetY = 0.0f;
+  state.backgroundAnimationToOffsetY = 0.0f;
+  state.backgroundAnimationStartMs = 0;
+}
+bool CheckAndUpdateDisplayGeometrySignature(TaskbarState& state,
+                                            FrameworkElement const& xamlRootContent,
+                                            FrameworkElement const& taskFrame,
+                                            float rasterizationScale) {
+  const float rootWidth = static_cast<float>(xamlRootContent.ActualWidth());
+  const float rootHeight = static_cast<float>(xamlRootContent.ActualHeight());
+  const float taskFrameWidth = taskFrame ? static_cast<float>(taskFrame.ActualWidth()) : 0.0f;
+  const float taskFrameHeight = taskFrame ? static_cast<float>(taskFrame.ActualHeight()) : 0.0f;
+
+  const bool validSignature =
+      std::isfinite(rootWidth) && rootWidth > 0.0f &&
+      std::isfinite(rootHeight) && rootHeight > 0.0f &&
+      std::isfinite(rasterizationScale) && rasterizationScale > 0.0f;
+  if (!validSignature) {
+    return false;
+  }
+
+  const bool changed =
+      !state.hasLastDisplayGeometrySignature ||
+      std::abs(state.lastObservedRootWidth - rootWidth) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedRootHeight - rootHeight) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedRasterizationScale - rasterizationScale) > kDisplayRasterizationChangeTolerance ||
+      std::abs(state.lastObservedTaskFrameWidth - taskFrameWidth) > kDisplayGeometryChangeToleranceDip ||
+      std::abs(state.lastObservedTaskFrameHeight - taskFrameHeight) > kDisplayGeometryChangeToleranceDip;
+
+  state.lastObservedRootWidth = rootWidth;
+  state.lastObservedRootHeight = rootHeight;
+  state.lastObservedRasterizationScale = rasterizationScale;
+  state.lastObservedTaskFrameWidth = taskFrameWidth;
+  state.lastObservedTaskFrameHeight = taskFrameHeight;
+  state.hasLastDisplayGeometrySignature = true;
+
+  return changed;
+}
+void ApplySettings(HWND hTaskbarWnd);
+int64_t DelayedApplyNowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+int GetCompositionFrameIntervalMs(HWND hwnd) {
+  DWM_TIMING_INFO timing{};
+  timing.cbSize = sizeof(timing);
+  if (SUCCEEDED(DwmGetCompositionTimingInfo(hwnd, &timing)) &&
+      timing.rateRefresh.uiNumerator > 0 &&
+      timing.rateRefresh.uiDenominator > 0) {
+    const double detectedRefreshHz =
+        static_cast<double>(timing.rateRefresh.uiNumerator) /
+        static_cast<double>(timing.rateRefresh.uiDenominator);
+    const double clampedRefreshHz = std::clamp(detectedRefreshHz,
+                                               kMinimumTrustedRefreshHz,
+                                               kMaximumTrustedRefreshHz);
+    return ClampInt(static_cast<int>((1000.0 / clampedRefreshHz) + 0.5),
+                    kMinimumFrameIntervalMs,
+                    kMaximumFrameIntervalMs);
+  }
+  return kDefaultFrameIntervalMs;
+}
+int GetTaskbarIslandFollowupPassCount(HWND hwnd) {
+  const int frameIntervalMs = GetCompositionFrameIntervalMs(hwnd);
+  const int followupWindowMs =
+      kTaskbarIslandAnimationDurationMs +
+      (frameIntervalMs * kAnimationFollowupGraceFrames);
+  return std::max(1, (followupWindowMs + frameIntervalMs - 1) / frameIntervalMs);
+}
+void ArmStyleApplyPasses(int passCount, bool resetAnimationTargets = false) {
+  passCount = std::max(1, passCount);
+  g_force_style_apply_passes.store(passCount);
+  g_high_priority_dispatch_passes.store(passCount);
+  if (resetAnimationTargets) {
+    g_reset_animation_target_passes.store(passCount);
+  }
+}
+void ArmStyleFollowupPasses(HWND hwnd, bool resetAnimationTargets = false) {
+  ArmStyleApplyPasses(GetTaskbarIslandFollowupPassCount(hwnd), resetAnimationTargets);
+}
+void ArmSingleStyleApplyPass(bool resetAnimationTargets = false) {
+  ArmStyleApplyPasses(1, resetAnimationTargets);
+}
+bool WaitForConditionWithTimeout(std::function<bool()> condition,
+                                 int timeoutMs,
+                                 int pollIntervalMs) {
+  const int64_t startMs = DelayedApplyNowMs();
+  while (!condition()) {
+    if (g_unloading && timeoutMs > 0) {
+      // During unload we still wait briefly for workers/hooks to exit, but never
+      // spin forever inside code that may be unloaded by recompilation.
+    }
+    const int64_t elapsedMs = DelayedApplyNowMs() - startMs;
+    if (elapsedMs >= timeoutMs) {
+      return false;
+    }
+    Sleep(static_cast<DWORD>(std::max(1, pollIntervalMs)));
+  }
+  return true;
+}
+void QueueTaskbarAnimationFollowup(HWND hTaskbarWnd) {
+  if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+    return;
+  }
+  bool expected = false;
+  if (!g_animation_followup_worker_running.compare_exchange_strong(expected, true)) {
+    return;
+  }
+   std::thread([hTaskbarWnd]() {
+    struct FollowupWorkerGuard {
+      ~FollowupWorkerGuard() { g_animation_followup_worker_running = false; }
+    } followupWorkerGuard;
+    try {
+      const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
+      const int followupWindowMs =
+          kTaskbarIslandAnimationDurationMs +
+          (frameIntervalMs * kAnimationFollowupGraceFrames);
+      int elapsedMs = 0;
+      while (elapsedMs < followupWindowMs) {
+        Sleep(static_cast<DWORD>(frameIntervalMs));
+        elapsedMs += frameIntervalMs;
+        if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+          break;
+        }
+        ArmSingleStyleApplyPass();
+        ApplySettings(hTaskbarWnd);
+      }
+    } catch (winrt::hresult_error const& ex) {
+      Wh_Log(L"Animation follow-up worker failed %08X: %s", ex.code(), ex.message().c_str());
+    } catch (...) {
+      Wh_Log(L"Animation follow-up worker failed: %08X", winrt::to_hresult());
+    }
+  }).detach();
+}
+
+void RequestTaskbarButtonSizeRelayout() {
+  if (g_unloading) {
+    return;
+  }
+
+  // Taskbar buttons are virtualized/recycled. Instead of forcing an arbitrary
+  // number of relayout passes, mark button widths as customized and kick one
+  // immediate style pass. Every realized/recycled button is validated in the
+  // normal taskbar child loop and fixed only if its width is wrong.
+  g_taskbarButtonWidthCustomized = true;
+  ArmSingleStyleApplyPass(true);
+  g_scheduled_low_priority_update = false;
+  g_suppress_low_priority_apply_until_ms =
+      DelayedApplyNowMs() + kButtonSizeLowPrioritySuppressionMs;
+
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+  if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
+    ApplySettings(hTaskbarWnd);
+  }
+}
+
+void ArmInitialExplorerStyleApplyDelay() {
+  g_initial_style_apply_completed = false;
+  g_initial_taskbar_size_apply_done = false;
+  g_initial_style_apply_not_before_ms =
+      DelayedApplyNowMs() + kInitialExplorerStyleDelayMs;
+  Wh_Log(L"Initial Explorer style apply armed");
+}
+void DelayedApplyWorker();
+void EnsureDelayedApplyWorker() {
+  bool expected = false;
+  if (!g_delayed_apply_worker_running.compare_exchange_strong(expected, true)) {
+    return;
+  }
+  std::thread(DelayedApplyWorker).detach();
+}
+bool InitializeDebounce() {
+  // Kept as a compatibility shim for older call sites. The old DispatcherTimer
+  // debounce was removed because timer creation/stop could race Explorer/XAML
+  // initialization and crash. Scheduling is now handled by DelayedApplyWorker.
+  g_already_requested_debounce_initializing = false;
+  return true;
+}
+
+void CleanupDebounce() {
+  g_already_requested_debounce_initializing = false;
+  g_scheduled_low_priority_update = false;
+  g_delayed_apply_due_ms = 0;
+  g_delayed_apply_generation.fetch_add(1);
+
+  // The debounce worker is detached, so the only safe unload strategy is to
+  // force it to observe cancellation and wait until it has left mod code.
+  // Otherwise a recompilation can unload this DLL while the sleeping worker
+  // later resumes inside DelayedApplyWorker from the old image.
+    WaitForConditionWithTimeout(
+      [] { return !g_delayed_apply_worker_running.load(); },
+      kDelayedApplyWorkerShutdownTimeoutMs,
+      kWorkerShutdownPollMs);
+  if (g_delayed_apply_worker_running.load()) {
+    Wh_Log(L"Delayed apply worker did not exit before unload");
+  }
+  WaitForConditionWithTimeout(
+      [] { return !g_animation_followup_worker_running.load(); },
+      kAnimationFollowupWorkerShutdownTimeoutMs,
+      kWorkerShutdownPollMs);
+  if (g_animation_followup_worker_running.load()) {
+    Wh_Log(L"Animation follow-up worker did not exit before unload");
+  }
+}
+void DelayedApplyWorker() {
+  struct DelayedWorkerGuard {
+    bool active = true;
+    ~DelayedWorkerGuard() {
+      if (active) {
+        g_delayed_apply_worker_running = false;
+      }
+    }
+  } delayedWorkerGuard;
+  try {
+  for (;;) {
+    if (g_unloading) {
+      break;
+    }
+    int64_t dueMs = g_delayed_apply_due_ms.load();
+    if (dueMs <= 0) {
+      break;
+    }
+    int64_t nowMs = DelayedApplyNowMs();
+    if (nowMs < dueMs) {
+      DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(kDelayedWorkerMaxSleepMs, std::max<int64_t>(1, dueMs - nowMs)));
+      Sleep(sleepMs);
+      continue;
+    }
+    unsigned long long generation = g_delayed_apply_generation.load();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+      Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
+      g_delayed_apply_generation.fetch_add(1);
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
+      continue;
+    }
+    g_scheduled_low_priority_update = false;
+    Wh_Log(L"Delayed apply triggered");
+       const bool initialStyleApply = !g_initial_style_apply_completed.load();
+    if (initialStyleApply) {
+           ArmStyleFollowupPasses(hTaskbarWnd, true);
+    }
+    if (!g_initial_style_apply_completed.load() &&
+        !g_initial_taskbar_size_apply_done.exchange(true)) {
+      ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
+    }
+    ApplySettings(hTaskbarWnd);
+    if (!g_initial_style_apply_completed.load() && !g_unloading) {
+      Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
+      g_delayed_apply_generation.fetch_add(1);
+      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
+      continue;
+    }
+    int64_t expectedDueMs = dueMs;
+    if (g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0)) {
+      if (g_delayed_apply_generation.load() == generation) {
+        break;
+      }
+    }
+  }
+  } catch (winrt::hresult_error const& ex) {
+    Wh_Log(L"Delayed apply worker failed %08X: %s", ex.code(), ex.message().c_str());
+  } catch (...) {
+    Wh_Log(L"Delayed apply worker failed: %08X", winrt::to_hresult());
+  }
+  g_delayed_apply_worker_running = false;
+  delayedWorkerGuard.active = false;
+  if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
+    EnsureDelayedApplyWorker();
+  }
+}
+void ApplySettingsDebounced(int delayMs) {
+  if (g_unloading) {
+    return;
+  }
+  if (delayMs <= 0) {
+    delayMs = kLowPriorityStyleDelayMs;
+  }
+  if (delayMs < 1) {
+    delayMs = kDefaultStyleDebounceDelayMs;
+  }
+  int64_t nowMs = DelayedApplyNowMs();
+  int64_t dueMs = nowMs + delayMs;
+  int64_t initialNotBeforeMs = g_initial_style_apply_not_before_ms.load();
+  if (!g_initial_style_apply_completed.load() && initialNotBeforeMs > dueMs) {
+    dueMs = initialNotBeforeMs;
+  }
+  g_delayed_apply_generation.fetch_add(1);
+  g_delayed_apply_due_ms = dueMs;
+  Wh_Log(L"Scheduled delayed apply in %lld ms", static_cast<long long>(std::max<int64_t>(0, dueMs - nowMs)));
+  EnsureDelayedApplyWorker();
+}
+void ApplySettingsDebounced() {
+  ApplySettingsDebounced(kDefaultStyleDebounceDelayMs);
+}
+void ApplySettingsFromTaskbarThreadImmediately() {
+  if (g_unloading) {
+    return;
+  }
+  int64_t initialNotBeforeMs = g_initial_style_apply_not_before_ms.load();
+  if (!g_initial_style_apply_completed.load() && initialNotBeforeMs > DelayedApplyNowMs()) {
+    ApplySettingsDebounced(1);
+    return;
+  }
+  g_scheduled_low_priority_update = false;
+  g_delayed_apply_due_ms = 0;
+  g_delayed_apply_generation.fetch_add(1);
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+  ArmStyleFollowupPasses(hTaskbarWnd);
+  g_suppress_low_priority_apply_until_ms =
+      DelayedApplyNowMs() + kGeometryCriticalLowPrioritySuppressionMs;
+  if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+    Wh_Log(L"Immediate apply skipped: taskbar window is not ready");
+    return;
+  }
+  Wh_Log(L"Immediate taskbar animation apply");
+  ApplySettings(hTaskbarWnd);
+  QueueTaskbarAnimationFollowup(hTaskbarWnd);
+}
+void ApplySettingsFromTaskbarThreadGeometryChanged() {
+  if (g_unloading) {
+    return;
+  }
+  int64_t nowMs = DelayedApplyNowMs();
+  int64_t initialNotBeforeMs = g_initial_style_apply_not_before_ms.load();
+  if (!g_initial_style_apply_completed.load() && initialNotBeforeMs > nowMs) {
+    ApplySettingsDebounced(1);
+    return;
+  }
+
+  HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+  int64_t lastMs = g_last_geometry_critical_apply_ms.load();
+  while (nowMs - lastMs >= kGeometryCriticalApplyMinIntervalMs) {
+    if (g_last_geometry_critical_apply_ms.compare_exchange_weak(lastMs, nowMs)) {
+      g_scheduled_low_priority_update = false;
+      ArmStyleFollowupPasses(hTaskbarWnd);
+      g_suppress_low_priority_apply_until_ms =
+          nowMs + kGeometryCriticalLowPrioritySuppressionMs;
+      ApplySettingsDebounced(1);
+      if (hTaskbarWnd && IsWindow(hTaskbarWnd)) {
+        QueueTaskbarAnimationFollowup(hTaskbarWnd);
+      }
+      return;
+    }
+  }
+
+  ArmStyleFollowupPasses(hTaskbarWnd);
+}
+void ScheduleInitialExplorerStyleApply() {
+  ApplySettingsDebounced(kInitialExplorerStyleDelayMs);
+}
+
+bool IsWeirdFrameworkElement(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
+  if (!element) return true;
+  try {
+    auto transform = element.TransformToVisual(nullptr);
+    winrt::Windows::Foundation::Rect rect = transform.TransformBounds(
+        winrt::Windows::Foundation::Rect(0, 0, element.ActualWidth(), element.ActualHeight()));
+    return rect.Width <= 0.0 || rect.Height <= 0.0 || rect.X < -kLayoutToleranceDip || rect.Y < -kLayoutToleranceDip;
+  } catch (...) {
+    // Overflow/recycled taskbar elements can briefly be disconnected from the
+    // visual tree while Explorer is rebuilding the task list. Treat them as
+    // invalid instead of letting a transient XAML exception take down Explorer.
+    return true;
+  }
+}
+bool IsTaskbarWidgetsEnabled() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(hKey, L"TaskbarDa", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&value), &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            return value == 1;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+static float SnapToPhysicalPixel(float value, float rasterizationScale = 1.0f) {
+  if (rasterizationScale <= 0.0f) {
+    rasterizationScale = 1.0f;
+  }
+
+  float scaledValue = value * rasterizationScale;
+  float snappedScaledValue =
+      (scaledValue >= 0.0f)
+          ? static_cast<float>(static_cast<long>(scaledValue + 0.5f))
+          : -static_cast<float>(static_cast<long>(-scaledValue + 0.5f));
+
+  return snappedScaledValue / rasterizationScale;
+}
+
+static float GetRasterizationScale(FrameworkElement const& element) {
+  if (element) {
+    auto xamlRoot = element.XamlRoot();
+    if (xamlRoot) {
+      float rasterizationScale = static_cast<float>(xamlRoot.RasterizationScale());
+      if (rasterizationScale > 0.0f) {
+        return rasterizationScale;
+      }
+    }
+  }
+
+  return 1.0f;
+}
+
 using StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t = void(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size param1);
 StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_t StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original;
 void WINAPI StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook(void* pThis, winrt::Windows::Foundation::Size param1) {
@@ -1529,8 +3051,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   // machine: just broaden the original stable Start-button anchor path for this
   // specific tray-collision condition.
   const double trayFrameLeft = rootWidth - static_cast<double>(trayFrameWidth);
-  const double predictedCenteredTaskbarRight =
-      predictedCenteredTaskbarLeft + childrenWidthTaskbarDbl;
   const double predictedTaskbarRightOnScreen =
       targetContentLeft + static_cast<double>(childrenWidthTaskbar);
   const double predictedGapToTray =

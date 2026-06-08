@@ -1,3 +1,63 @@
+struct TaskbarState {
+  std::chrono::steady_clock::time_point lastApplyStyleTime{};
+  struct Data {
+    int childrenCount;
+    int rightMostEdge;
+    unsigned int childrenWidth;
+  } lastTaskbarData{};
+  unsigned int lastChildrenWidthTaskbar{0};
+  unsigned int lastTrayFrameWidth{0};
+  float lastTargetWidth{0};
+  float lastTargetOffsetX{0};
+  float lastTargetOffsetY{0};
+  float initOffsetX{-1};
+  bool wasOverflowing{false};
+  float lastStartButtonXCalculated=0.0f;
+  float lastStartButtonXActual=0.0f;
+  float lastStartButtonAnchorLeft{0.0f};
+  float lastStartButtonAnchorTop{0.0f};
+  float lastStartButtonAnchorWidth{0.0f};
+  float lastStartButtonAnchorHeight{0.0f};
+  bool hasLastStartButtonAnchorRect{false};
+  float stableStartButtonAnchorLeft{0.0f};
+  float stableStartButtonAnchorTop{0.0f};
+  float stableStartButtonAnchorWidth{0.0f};
+  float stableStartButtonAnchorHeight{0.0f};
+  bool hasStableStartButtonAnchorRect{false};
+  int startButtonAnchorStablePasses{0};
+  float lastRootWidth=0.0f;
+  float lastTargetTaskFrameOffsetX=0.0f;
+  bool hasLastTargetTaskFrameOffsetX{false};
+  float lastTargetTaskbarIslandScale{1.0f};
+  float lastTaskbarIslandScaleCenterX{0.0f};
+  bool hasLastTargetTaskbarIslandScale{false};
+  float lastObservedRootWidth{0.0f};
+  float lastObservedRootHeight{0.0f};
+  float lastObservedRasterizationScale{0.0f};
+  float lastObservedTaskFrameWidth{0.0f};
+  float lastObservedTaskFrameHeight{0.0f};
+  bool hasLastDisplayGeometrySignature{false};
+  float lastTargetTrayOffsetX{0.0f};
+  bool hasLastTargetTrayOffsetX{false};
+  float lastTargetWidgetOffsetX{0.0f};
+  float lastTargetWidgetOffsetY{0.0f};
+  bool hasLastTargetWidgetOffset{false};
+  float lastLeftMostEdgeTray{0};
+  int lastRightMostEdgeTray{0};
+  float lastBackgroundShapeTargetWidth{0.0f};
+  float lastBackgroundShapeTargetOffsetX{0.0f};
+  float lastBackgroundShapeTargetOffsetY{0.0f};
+  float backgroundAnimationFromWidth{0.0f};
+  float backgroundAnimationToWidth{0.0f};
+  float backgroundAnimationFromOffsetX{0.0f};
+  float backgroundAnimationToOffsetX{0.0f};
+  float backgroundAnimationFromOffsetY{0.0f};
+  float backgroundAnimationToOffsetY{0.0f};
+  int64_t backgroundAnimationStartMs{0};
+};
+static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
+
+
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
@@ -54,10 +114,6 @@ int GetFlyoutInnerPaddingPx(float dpiScale) {
     if (dpiScale <= 0.0f) {
         dpiScale = 1.0f;
     }
-    // Match the flyout inset to the visible taskbar island instead of keeping a
-    // fixed 12 px offset. With the default 22 dip corner radius and 2 dip
-    // horizontal padding this resolves to about 13 px, close to the old value,
-    // but it scales with user styling and DPI.
     constexpr int kMaxFlyoutInnerPaddingDip = 32;
     const float logicalPadding =
         std::min<float>(kMaxFlyoutInnerPaddingDip,

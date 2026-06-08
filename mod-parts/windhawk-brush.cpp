@@ -2,6 +2,56 @@
 // Based on the WindhawkBlur/XamlBlurBrush approach used by Windows 11 Taskbar Styler.
 // Yoinked from ramensoftware windows-11-taskbar-styler
 // which is yoinked from https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp
+#include <dwmapi.h>
+#include <chrono>
+#include <string>
+#include <regex>
+#include <sstream>
+#include <algorithm>
+#include <unordered_map>
+#include <limits>
+#include <utility>
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <functional>
+#undef GetCurrentTime
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+#include <commctrl.h>
+#include <roapi.h>
+#include <winstring.h>
+#include <string_view>
+#include <vector>
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.Storage.Search.h>
+#include <chrono>
+#include <thread>
+#include <windows.h>
+#include <psapi.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <mutex>
+#include <cmath>
+#include <cwctype>
+using namespace winrt::Windows::UI::Xaml;
+
 #include <cmath>
 #include <d2d1_1.h>
 #include <d2d1effects.h>
