@@ -612,6 +612,33 @@ ParsedWindhawkColorSetting ParseWindhawkColorSetting(std::wstring value, winrt::
 
   return {fallbackColor, L""};
 }
+
+bool ShouldUseSolidTaskbarBackgroundFill() {
+  return g_settings.userDefinedDisableCustomBlurBackground ||
+         g_settings.userDefinedTaskbarBackgroundTint >= 100 ||
+         g_settings.userDefinedTaskbarBackgroundBlurAmount == 0 ||
+         g_settings.userDefinedTaskbarBackgroundInversion >= 100;
+}
+
+Media::Brush CreateSolidBackgroundBrushFromSetting(ParsedWindhawkColorSetting const& setting) {
+  if (!setting.themeResourceKey.empty()) {
+    std::wstring xaml = LR"(<SolidColorBrush xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Color="{ThemeResource )";
+    xaml += setting.themeResourceKey;
+    xaml += LR"(}"/>)";
+    try {
+      if (auto themeBrush = Markup::XamlReader::Load(winrt::hstring(xaml)).try_as<Media::SolidColorBrush>()) {
+        return themeBrush;
+      }
+    } catch (winrt::hresult_error const& ex) {
+      Wh_Log(L"Failed to create solid background theme brush %08X", ex.code());
+    }
+  }
+
+  auto solidBrush = Media::SolidColorBrush();
+  solidBrush.Color(setting.color);
+  return solidBrush;
+}
+
 void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillChild) {
   if (!backgroundFillChild) return;
 
@@ -627,7 +654,7 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
     auto oldFill = rectangle.Fill();
     rectangle.Fill(Media::Brush{nullptr});
     rectangle.ClearValue(winrt::Windows::UI::Xaml::Shapes::Shape::FillProperty());
-    rectangle.Opacity(1.0);
+    rectangle.ClearValue(UIElement::OpacityProperty());
     oldFill = nullptr;
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur cleanup failed %08X: %s", ex.code(), ex.message().c_str());
@@ -650,38 +677,43 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
   const float backgroundOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f, 0.0f, 1.0f);
   rectangle.Opacity(backgroundOpacity);
 
-  auto tintSetting = ParseWindhawkColorSetting(
-      g_settings.userDefinedTaskbarBackgroundTintColor,
-      winrt::Windows::UI::Color{0, 255, 255, 255});
   auto fallbackSetting = ParseWindhawkColorSetting(
       g_settings.userDefinedTaskbarBackgroundFallbackColor,
       winrt::Windows::UI::Color{255, 32, 32, 32});
-
-  const float tintOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundTint / 100.0f, 0.0f, 1.0f);
-  const auto tintAlpha = static_cast<uint8_t>(std::round(tintOpacity * 255.0f));
-  tintSetting.color.A = tintAlpha;
-
-  const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
-  const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
-  const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
+  const bool useSolidBackground = ShouldUseSolidTaskbarBackgroundFill();
 
   try {
     auto oldFill = rectangle.Fill();
     rectangle.Fill(Media::Brush{nullptr});
     oldFill = nullptr;
 
-    auto blurBrush = winrt::make<XamlBlurBrush>(
-        rectangle,
-        static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),
-        tintSetting.color,
-        std::optional<uint8_t>(tintAlpha),
-        winrt::hstring(tintSetting.themeResourceKey),
-        std::optional<float>(luminosityOpacity),
-        std::optional<float>(saturation),
-        inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
-        fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
-        winrt::hstring(fallbackSetting.themeResourceKey));
-    rectangle.Fill(blurBrush);
+    if (useSolidBackground) {
+      rectangle.Fill(CreateSolidBackgroundBrushFromSetting(fallbackSetting));
+    } else {
+      auto tintSetting = ParseWindhawkColorSetting(
+          g_settings.userDefinedTaskbarBackgroundTintColor,
+          winrt::Windows::UI::Color{0, 255, 255, 255});
+      const float tintOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundTint / 100.0f, 0.0f, 1.0f);
+      const auto tintAlpha = static_cast<uint8_t>(std::round(tintOpacity * 255.0f));
+      tintSetting.color.A = tintAlpha;
+
+      const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
+      const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
+      const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
+
+      auto blurBrush = winrt::make<XamlBlurBrush>(
+          rectangle,
+          static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),
+          tintSetting.color,
+          std::optional<uint8_t>(tintAlpha),
+          winrt::hstring(tintSetting.themeResourceKey),
+          std::optional<float>(luminosityOpacity),
+          std::optional<float>(saturation),
+          inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
+          fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
+          winrt::hstring(fallbackSetting.themeResourceKey));
+      rectangle.Fill(blurBrush);
+    }
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur failed %08X: %s", ex.code(), ex.message().c_str());
   } catch (...) {

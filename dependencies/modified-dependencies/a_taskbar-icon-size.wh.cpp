@@ -154,6 +154,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
+  bool userDefinedDisableCustomBlurBackground;
   double userDefinedAppsDividerThickness;
   float userDefinedAppsDividerVerticalScale{0.7};
   bool userDefinedDividerLeftAligned=false;
@@ -214,6 +215,7 @@ struct TaskbarState {
   float backgroundAnimationFromOffsetY{0.0f};
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
+  bool hasCustomTaskbarBackgroundVisuals{false};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
 void ApplySettingsDebounced(int delayMs);

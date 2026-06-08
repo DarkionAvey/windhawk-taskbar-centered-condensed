@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.169
+// @version         1.5.181
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -63,7 +63,8 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear. Default is 22 | Non-negative integer |
 | `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are. Default is 16 | Non-negative integer |
 | `FlatTaskbarBottomCorners` | Flat bottom corners | When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option. Default is off | Boolean (true/false) |
-| `CustomizeTaskbarBackground` | Stylize the taskbar background | When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background. Default is on | Boolean (true/false) |
+| `CustomizeTaskbarBackground` | Stylize the taskbar background | When enabled, this mod applies its taskbar background visuals. When disabled, this mod skips all taskbar background changes so other Windhawk mods can provide their own background. Default is on | Boolean (true/false) |
+| `DisableCustomBlurBackground` | Disable custom blur background | When enabled, the WindhawkBlur brush is skipped and only the fallback color is used, producing a solid background. Background blur, tint, tint color, luminosity, saturation, and inversion settings are ignored. This also activates automatically when background tint is 100, background blur amount is 0, or background inversion is 100. Default is off | Boolean (true/false) |
 | `TaskbarBackgroundOpacity` | Background opacity | Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque. Default is 100 | Non-negative integer |
 | `TaskbarBackgroundTint` | Background tint | Modify the taskbar tint level. Higher values = more tint. Range 0-100. Default is 0 | Non-negative integer |
 | `TaskbarBackgroundLuminosity` | Background luminosity | Adjust luminosity of the taskbar background. Higher values = more opaque, lower values = more glass-like. Range 0-100. Default is 20 | Non-negative integer |
@@ -71,7 +72,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBackgroundTintColor` | Background tint color | WindhawkBlur tint color. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}. Use {ThemeResource SystemBaseHighColor} if you want white color when Windows is in dark mode, or black in light mode. | Text |
 | `TaskbarBackgroundTintSaturation` | Background saturation | WindhawkBlur saturation applied before tint. 0 = grayscale, 100 = normal, 200-500 = boosted saturation. Must be non-negative. Default is 200. Max is 500 | Non-negative integer |
 | `TaskbarBackgroundInversion` | Background inversion | Inverts the blurred background behind the taskbar to enhance contrast. 0 = off, 100 = fully inverted. Default is 10 | Non-negative integer |
-| `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
+| `TaskbarBackgroundFallbackColor` | Background fallback color | Color used when transparency effects or energy saver disable blur, or when the custom blur background is disabled. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid} | Text |
 | `TaskbarBorderOpacity` | Border opacity | Set the opacity of the taskbar border, as well as the app dividers. Range 0-100. Default is 10 | Non-negative integer |
 | `TaskbarBorderColorHex` | Border color (HEX) | Set the color of the taskbar border and app dividers, Hex color as `#RRGGBB`. Default is `#ffffff` | string hex color |
 | `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Set the scale of the taskbar border. Range 0-100. Default is 8 | unsigned int percentage |
@@ -124,7 +125,10 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
   $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option. Default is off
 - CustomizeTaskbarBackground: true
   $name: Stylize the taskbar background
-  $description: When enabled, the taskbar background will be changed to acrylic blur. Disable this option if you are using other mods that change the taskbar background. You may need to restart explorer.exe to restore the default taskbar background. Default is on
+  $description: When enabled, this mod applies its taskbar background visuals. When disabled, this mod skips all taskbar background changes so other Windhawk mods can provide their own background. Default is on
+- DisableCustomBlurBackground: false
+  $name: Disable custom blur background
+  $description: When enabled, the WindhawkBlur brush is skipped and only the fallback color is used, producing a solid background. Background blur, tint, tint color, luminosity, saturation, and inversion settings are ignored. This also activates automatically when background tint is 100, background blur amount is 0, or background inversion is 100. Default is off
 - TaskbarBackgroundOpacity: 100
   $name: Background opacity
   $description: Adjust the opacity of the taskbar background. 0 = fully transparent, 100 = fully opaque. Default is 100
@@ -148,7 +152,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
   $description: Inverts the blurred background behind the taskbar to enhance contrast. 0 = off, 100 = fully inverted. Default is 10
 - TaskbarBackgroundFallbackColor: "{ThemeResource CardStrokeColorDefaultSolid}"
   $name: Background fallback color
-  $description: Color used when transparency effects or energy saver disable blur. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
+  $description: Color used when transparency effects or energy saver disable blur, or when the custom blur background is disabled. Accepts `#RRGGBB`, `#AARRGGBB`, or {ThemeResource Name}. Default is {ThemeResource CardStrokeColorDefaultSolid}
 - TaskbarBorderOpacity: 10
   $name: Border opacity
   $description: Set the opacity of the taskbar border, as well as the app dividers. Range 0-100. Default is 10
@@ -346,6 +350,7 @@ struct {
   std::vector<std::wstring> userDefinedDividedAppNames;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
+  bool userDefinedDisableCustomBlurBackground;
   double userDefinedAppsDividerThickness;
   float userDefinedAppsDividerVerticalScale{0.7};
   bool userDefinedDividerLeftAligned=false;
@@ -406,6 +411,7 @@ struct TaskbarState {
   float backgroundAnimationFromOffsetY{0.0f};
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
+  bool hasCustomTaskbarBackgroundVisuals{false};
 };
 static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
 void ApplySettingsDebounced(int delayMs);
@@ -4406,6 +4412,29 @@ ParsedWindhawkColorSetting ParseWindhawkColorSetting(std::wstring value, winrt::
   }
   return {fallbackColor, L""};
 }
+bool ShouldUseSolidTaskbarBackgroundFill() {
+  return g_settings.userDefinedDisableCustomBlurBackground ||
+         g_settings.userDefinedTaskbarBackgroundTint >= 100 ||
+         g_settings.userDefinedTaskbarBackgroundBlurAmount == 0 ||
+         g_settings.userDefinedTaskbarBackgroundInversion >= 100;
+}
+Media::Brush CreateSolidBackgroundBrushFromSetting(ParsedWindhawkColorSetting const& setting) {
+  if (!setting.themeResourceKey.empty()) {
+    std::wstring xaml = LR"(<SolidColorBrush xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Color="{ThemeResource )";
+    xaml += setting.themeResourceKey;
+    xaml += LR"(}"/>)";
+    try {
+      if (auto themeBrush = Markup::XamlReader::Load(winrt::hstring(xaml)).try_as<Media::SolidColorBrush>()) {
+        return themeBrush;
+      }
+    } catch (winrt::hresult_error const& ex) {
+      Wh_Log(L"Failed to create solid background theme brush %08X", ex.code());
+    }
+  }
+  auto solidBrush = Media::SolidColorBrush();
+  solidBrush.Color(setting.color);
+  return solidBrush;
+}
 void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillChild) {
   if (!backgroundFillChild) return;
   auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
@@ -4420,7 +4449,7 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
     auto oldFill = rectangle.Fill();
     rectangle.Fill(Media::Brush{nullptr});
     rectangle.ClearValue(winrt::Windows::UI::Xaml::Shapes::Shape::FillProperty());
-    rectangle.Opacity(1.0);
+    rectangle.ClearValue(UIElement::OpacityProperty());
     oldFill = nullptr;
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur cleanup failed %08X: %s", ex.code(), ex.message().c_str());
@@ -4441,34 +4470,39 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
   }
   const float backgroundOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f, 0.0f, 1.0f);
   rectangle.Opacity(backgroundOpacity);
-  auto tintSetting = ParseWindhawkColorSetting(
-      g_settings.userDefinedTaskbarBackgroundTintColor,
-      winrt::Windows::UI::Color{0, 255, 255, 255});
   auto fallbackSetting = ParseWindhawkColorSetting(
       g_settings.userDefinedTaskbarBackgroundFallbackColor,
       winrt::Windows::UI::Color{255, 32, 32, 32});
-  const float tintOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundTint / 100.0f, 0.0f, 1.0f);
-  const auto tintAlpha = static_cast<uint8_t>(std::round(tintOpacity * 255.0f));
-  tintSetting.color.A = tintAlpha;
-  const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
-  const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
-  const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
+  const bool useSolidBackground = ShouldUseSolidTaskbarBackgroundFill();
   try {
     auto oldFill = rectangle.Fill();
     rectangle.Fill(Media::Brush{nullptr});
     oldFill = nullptr;
-    auto blurBrush = winrt::make<XamlBlurBrush>(
-        rectangle,
-        static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),
-        tintSetting.color,
-        std::optional<uint8_t>(tintAlpha),
-        winrt::hstring(tintSetting.themeResourceKey),
-        std::optional<float>(luminosityOpacity),
-        std::optional<float>(saturation),
-        inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
-        fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
-        winrt::hstring(fallbackSetting.themeResourceKey));
-    rectangle.Fill(blurBrush);
+    if (useSolidBackground) {
+      rectangle.Fill(CreateSolidBackgroundBrushFromSetting(fallbackSetting));
+    } else {
+      auto tintSetting = ParseWindhawkColorSetting(
+          g_settings.userDefinedTaskbarBackgroundTintColor,
+          winrt::Windows::UI::Color{0, 255, 255, 255});
+      const float tintOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundTint / 100.0f, 0.0f, 1.0f);
+      const auto tintAlpha = static_cast<uint8_t>(std::round(tintOpacity * 255.0f));
+      tintSetting.color.A = tintAlpha;
+      const float luminosityOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundLuminosity / 100.0f, 0.0f, 1.0f);
+      const float saturation = std::clamp(g_settings.userDefinedTaskbarBackgroundTintSaturation / 100.0f, 0.0f, 5.0f);
+      const float inversion = std::clamp(g_settings.userDefinedTaskbarBackgroundInversion / 100.0f, 0.0f, 1.0f);
+      auto blurBrush = winrt::make<XamlBlurBrush>(
+          rectangle,
+          static_cast<float>(g_settings.userDefinedTaskbarBackgroundBlurAmount),
+          tintSetting.color,
+          std::optional<uint8_t>(tintAlpha),
+          winrt::hstring(tintSetting.themeResourceKey),
+          std::optional<float>(luminosityOpacity),
+          std::optional<float>(saturation),
+          inversion > 0.0f ? std::optional<float>(inversion) : std::nullopt,
+          fallbackSetting.themeResourceKey.empty() ? std::optional<winrt::Windows::UI::Color>(fallbackSetting.color) : std::nullopt,
+          winrt::hstring(fallbackSetting.themeResourceKey));
+      rectangle.Fill(blurBrush);
+    }
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur failed %08X: %s", ex.code(), ex.message().c_str());
   } catch (...) {
@@ -5421,16 +5455,7 @@ void SetVisualScaleCenterAndAnimate(
   visual.StopAnimation(L"Scale");
   visual.Scale({targetScale, targetScale, currentScale.z});
 }
-void ResetAnimationTargetCache(TaskbarState& state) {
-  state.hasLastTargetTaskFrameOffsetX = false;
-  state.hasLastTargetTaskbarIslandScale = false;
-  state.lastTargetTaskbarIslandScale = 1.0f;
-  state.lastTaskbarIslandScaleCenterX = 0.0f;
-  state.hasLastTargetTrayOffsetX = false;
-  state.hasLastTargetWidgetOffset = false;
-  state.hasLastStartButtonAnchorRect = false;
-  state.hasStableStartButtonAnchorRect = false;
-  state.startButtonAnchorStablePasses = 0;
+void ResetBackgroundVisualCache(TaskbarState& state) {
   state.lastBackgroundShapeTargetWidth = 0.0f;
   state.lastBackgroundShapeTargetOffsetX = 0.0f;
   state.lastBackgroundShapeTargetOffsetY = 0.0f;
@@ -5441,6 +5466,18 @@ void ResetAnimationTargetCache(TaskbarState& state) {
   state.backgroundAnimationFromOffsetY = 0.0f;
   state.backgroundAnimationToOffsetY = 0.0f;
   state.backgroundAnimationStartMs = 0;
+}
+void ResetAnimationTargetCache(TaskbarState& state) {
+  state.hasLastTargetTaskFrameOffsetX = false;
+  state.hasLastTargetTaskbarIslandScale = false;
+  state.lastTargetTaskbarIslandScale = 1.0f;
+  state.lastTaskbarIslandScaleCenterX = 0.0f;
+  state.hasLastTargetTrayOffsetX = false;
+  state.hasLastTargetWidgetOffset = false;
+  state.hasLastStartButtonAnchorRect = false;
+  state.hasStableStartButtonAnchorRect = false;
+  state.startButtonAnchorStablePasses = 0;
+  ResetBackgroundVisualCache(state);
 }
 bool CheckAndUpdateDisplayGeometrySignature(TaskbarState& state,
                                             FrameworkElement const& xamlRootContent,
@@ -6783,6 +6820,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedStyleTrayArea = (getInt(L"StyleTrayArea") != 0);
   g_settings.userDefinedAlignFlyoutInner = (getInt(L"AlignFlyoutInner") != 0);
   g_settings.userDefinedCustomizeTaskbarBackground = (getInt(L"CustomizeTaskbarBackground") != 0);
+  g_settings.userDefinedDisableCustomBlurBackground = (getInt(L"DisableCustomBlurBackground") != 0);
   PCWSTR appsDividerAlignment = Wh_GetStringSetting(L"AppsDividerAlignment");
   g_settings.userDefinedDividerLeftAligned =
       appsDividerAlignment && _wcsicmp(appsDividerAlignment, L"left") == 0;
@@ -6919,6 +6957,8 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorR, L"borderColorR");
   Wh_Log(L"setting %d %s", g_settings.borderColorG, L"borderColorG");
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedCustomizeTaskbarBackground ? 1 : 0, L"userDefinedCustomizeTaskbarBackground");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedDisableCustomBlurBackground ? 1 : 0, L"userDefinedDisableCustomBlurBackground");
 }
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
   if (!xamlRootContent) {
@@ -7646,18 +7686,22 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   //  if (widgetPresent && widgetElementInnerChild) {
   //    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
   //  }
+  const bool shouldApplyCustomTaskbarBackground = !g_unloading && g_settings.userDefinedCustomizeTaskbarBackground;
+  const bool shouldClearCustomTaskbarBackground = g_unloading || (!shouldApplyCustomTaskbarBackground && state.hasCustomTaskbarBackgroundVisuals);
   auto taskbarStroke = FindChildByName(backgroundFillParent, L"BackgroundStroke");
-  if (taskbarStroke) {
-    taskbarStroke.Opacity(g_unloading ? 1.0 : 0.0);
-  }
   auto screenEdgeStroke = FindChildByName(rootGridTaskBar, L"ScreenEdgeStroke");
-  if (screenEdgeStroke) {
-    screenEdgeStroke.Opacity(g_unloading ? 1.0 : 0.0);
-  }
- if (g_unloading) {
-    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
-  } else if (g_settings.userDefinedCustomizeTaskbarBackground) {
+  // you can also try SystemAccentColor
+  auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
+  auto compositorTaskBackground = backgroundFillVisual.Compositor();
+  if (shouldApplyCustomTaskbarBackground) {
+    if (taskbarStroke) {
+      taskbarStroke.Opacity(0.0);
+    }
+    if (screenEdgeStroke) {
+      screenEdgeStroke.Opacity(0.0);
+    }
     ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
+    state.hasCustomTaskbarBackgroundVisuals = true;
 //    For custom brush
 //    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
 //    float blurAmount = float(g_settings.userDefinedTaskbarBackgroundLuminosity);
@@ -7667,12 +7711,25 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
 //    if (rectangle){
 //    rectangle.Fill(blurBrush);
 //    }
+  } else if (shouldClearCustomTaskbarBackground) {
+    if (taskbarStroke) {
+      taskbarStroke.ClearValue(UIElement::OpacityProperty());
+    }
+    if (screenEdgeStroke) {
+      screenEdgeStroke.ClearValue(UIElement::OpacityProperty());
+    }
+    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
+    if (backgroundFillVisual) {
+      backgroundFillVisual.Clip(nullptr);
+    }
+    if (compositorTaskBackground) {
+      winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
+    }
+    ResetBackgroundVisualCache(state);
+    state.hasCustomTaskbarBackgroundVisuals = false;
   }
-  // you can also try SystemAccentColor
-  auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
-  auto compositorTaskBackground = backgroundFillVisual.Compositor();
   // borders and corners
-  if (!g_unloading) {
+  if (shouldApplyCustomTaskbarBackground) {
     if (backgroundFillVisual) {
       if (compositorTaskBackground) {
         const float userDefinedTaskbarBorderThicknessFloat = static_cast<float>(g_settings.userDefinedTaskbarBorderThickness);
@@ -7770,13 +7827,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
           state.lastBackgroundShapeTargetOffsetY = newOffsetYRect;
         }
       }
-    }
-  } else {
-    if (backgroundFillVisual) {
-      backgroundFillVisual.Clip(nullptr);
-    }
-    if (compositorTaskBackground) {
-      winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
     }
   }
   state.wasOverflowing = isOverflowing;

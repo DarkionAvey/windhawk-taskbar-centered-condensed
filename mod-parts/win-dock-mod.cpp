@@ -1087,16 +1087,7 @@ void SetVisualScaleCenterAndAnimate(
   visual.StopAnimation(L"Scale");
   visual.Scale({targetScale, targetScale, currentScale.z});
 }
-void ResetAnimationTargetCache(TaskbarState& state) {
-  state.hasLastTargetTaskFrameOffsetX = false;
-  state.hasLastTargetTaskbarIslandScale = false;
-  state.lastTargetTaskbarIslandScale = 1.0f;
-  state.lastTaskbarIslandScaleCenterX = 0.0f;
-  state.hasLastTargetTrayOffsetX = false;
-  state.hasLastTargetWidgetOffset = false;
-  state.hasLastStartButtonAnchorRect = false;
-  state.hasStableStartButtonAnchorRect = false;
-  state.startButtonAnchorStablePasses = 0;
+void ResetBackgroundVisualCache(TaskbarState& state) {
   state.lastBackgroundShapeTargetWidth = 0.0f;
   state.lastBackgroundShapeTargetOffsetX = 0.0f;
   state.lastBackgroundShapeTargetOffsetY = 0.0f;
@@ -1107,6 +1098,18 @@ void ResetAnimationTargetCache(TaskbarState& state) {
   state.backgroundAnimationFromOffsetY = 0.0f;
   state.backgroundAnimationToOffsetY = 0.0f;
   state.backgroundAnimationStartMs = 0;
+}
+void ResetAnimationTargetCache(TaskbarState& state) {
+  state.hasLastTargetTaskFrameOffsetX = false;
+  state.hasLastTargetTaskbarIslandScale = false;
+  state.lastTargetTaskbarIslandScale = 1.0f;
+  state.lastTaskbarIslandScaleCenterX = 0.0f;
+  state.hasLastTargetTrayOffsetX = false;
+  state.hasLastTargetWidgetOffset = false;
+  state.hasLastStartButtonAnchorRect = false;
+  state.hasStableStartButtonAnchorRect = false;
+  state.startButtonAnchorStablePasses = 0;
+  ResetBackgroundVisualCache(state);
 }
 bool CheckAndUpdateDisplayGeometrySignature(TaskbarState& state,
                                             FrameworkElement const& xamlRootContent,
@@ -2565,6 +2568,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedStyleTrayArea = (getInt(L"StyleTrayArea") != 0);
   g_settings.userDefinedAlignFlyoutInner = (getInt(L"AlignFlyoutInner") != 0);
   g_settings.userDefinedCustomizeTaskbarBackground = (getInt(L"CustomizeTaskbarBackground") != 0);
+  g_settings.userDefinedDisableCustomBlurBackground = (getInt(L"DisableCustomBlurBackground") != 0);
   PCWSTR appsDividerAlignment = Wh_GetStringSetting(L"AppsDividerAlignment");
   g_settings.userDefinedDividerLeftAligned =
       appsDividerAlignment && _wcsicmp(appsDividerAlignment, L"left") == 0;
@@ -2701,6 +2705,8 @@ void LogAllSettings() {
   Wh_Log(L"setting %d %s", g_settings.borderColorR, L"borderColorR");
   Wh_Log(L"setting %d %s", g_settings.borderColorG, L"borderColorG");
   Wh_Log(L"setting %d %s", g_settings.borderColorB, L"borderColorB");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedCustomizeTaskbarBackground ? 1 : 0, L"userDefinedCustomizeTaskbarBackground");
+  Wh_Log(L"setting %d %s", g_settings.userDefinedDisableCustomBlurBackground ? 1 : 0, L"userDefinedDisableCustomBlurBackground");
 }
 bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorName) {
   if (!xamlRootContent) {
@@ -3430,18 +3436,22 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   //  if (widgetPresent && widgetElementInnerChild) {
   //    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
   //  }
+  const bool shouldApplyCustomTaskbarBackground = !g_unloading && g_settings.userDefinedCustomizeTaskbarBackground;
+  const bool shouldClearCustomTaskbarBackground = g_unloading || (!shouldApplyCustomTaskbarBackground && state.hasCustomTaskbarBackgroundVisuals);
   auto taskbarStroke = FindChildByName(backgroundFillParent, L"BackgroundStroke");
-  if (taskbarStroke) {
-    taskbarStroke.Opacity(g_unloading ? 1.0 : 0.0);
-  }
   auto screenEdgeStroke = FindChildByName(rootGridTaskBar, L"ScreenEdgeStroke");
-  if (screenEdgeStroke) {
-    screenEdgeStroke.Opacity(g_unloading ? 1.0 : 0.0);
-  }
- if (g_unloading) {
-    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
-  } else if (g_settings.userDefinedCustomizeTaskbarBackground) {
+  // you can also try SystemAccentColor
+  auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
+  auto compositorTaskBackground = backgroundFillVisual.Compositor();
+  if (shouldApplyCustomTaskbarBackground) {
+    if (taskbarStroke) {
+      taskbarStroke.Opacity(0.0);
+    }
+    if (screenEdgeStroke) {
+      screenEdgeStroke.Opacity(0.0);
+    }
     ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
+    state.hasCustomTaskbarBackgroundVisuals = true;
 //    For custom brush
 //    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
 //    float blurAmount = float(g_settings.userDefinedTaskbarBackgroundLuminosity);
@@ -3451,12 +3461,25 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
 //    if (rectangle){
 //    rectangle.Fill(blurBrush);
 //    }
+  } else if (shouldClearCustomTaskbarBackground) {
+    if (taskbarStroke) {
+      taskbarStroke.ClearValue(UIElement::OpacityProperty());
+    }
+    if (screenEdgeStroke) {
+      screenEdgeStroke.ClearValue(UIElement::OpacityProperty());
+    }
+    ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
+    if (backgroundFillVisual) {
+      backgroundFillVisual.Clip(nullptr);
+    }
+    if (compositorTaskBackground) {
+      winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
+    }
+    ResetBackgroundVisualCache(state);
+    state.hasCustomTaskbarBackgroundVisuals = false;
   }
-  // you can also try SystemAccentColor
-  auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
-  auto compositorTaskBackground = backgroundFillVisual.Compositor();
   // borders and corners
-  if (!g_unloading) {
+  if (shouldApplyCustomTaskbarBackground) {
     if (backgroundFillVisual) {
       if (compositorTaskBackground) {
         const float userDefinedTaskbarBorderThicknessFloat = static_cast<float>(g_settings.userDefinedTaskbarBorderThickness);
@@ -3554,13 +3577,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
           state.lastBackgroundShapeTargetOffsetY = newOffsetYRect;
         }
       }
-    }
-  } else {
-    if (backgroundFillVisual) {
-      backgroundFillVisual.Clip(nullptr);
-    }
-    if (compositorTaskBackground) {
-      winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
     }
   }
   state.wasOverflowing = isOverflowing;

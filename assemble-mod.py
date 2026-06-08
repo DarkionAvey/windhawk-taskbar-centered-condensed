@@ -168,9 +168,11 @@ def main(major_minor="1.0"):
 
 """
 
+    merged_contents = merged_contents.replace("LoadLibrary(L", "GetModuleHandle(L")
+    # formating
+    # merged_contents= re.sub(r'//.*$', '', merged_contents, flags=re.MULTILINE)
     merged_contents = re.sub(r'[ \t]*\n', '\n', merged_contents)  # remove whitespace-only lines
     merged_contents = re.sub(r'\n+', '\n', merged_contents).strip()
-    merged_contents = merged_contents.replace("LoadLibrary(L", "GetModuleHandle(L")
     # merged_contents = merged_contents.replace(") {", ") {\n  Wh_Log(L\".\");\n")
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)
