@@ -44,7 +44,6 @@
 #include <winstring.h>
 #include <string_view>
 #include <vector>
-#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <winrt/Windows.Graphics.Imaging.h>
@@ -52,17 +51,13 @@
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.Search.h>
-#include <chrono>
 #include <thread>
 #include <windows.h>
 #include <psapi.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <mutex>
-#include <cmath>
-#include <cwctype>
 using namespace winrt::Windows::UI::Xaml;
 
-#include <cwctype>
 #ifndef HSHELL_GETMINRECT
 #define HSHELL_GETMINRECT 5
 #endif
@@ -843,14 +838,13 @@ void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type
 
 void SetElementPropertyFromString(FrameworkElement obj, const std::wstring& type, const std::wstring& propertyName, const std::wstring& propertyValue) { return SetElementPropertyFromString(obj, type, propertyName, propertyValue, false); }
 
-#include <regex>
-std::vector<std::wstring> SplitAndTrim(const std::optional<std::wstring>& input) {
+std::vector<std::wstring> SplitAndTrim(PCWSTR input) {
   std::vector<std::wstring> result;
 
-  if (!input.has_value() || input->empty()) {
+  if (!input || *input == L'\0') {
     return result;
   }
-  std::wstringstream ss(*input);
+  std::wstringstream ss(input);
   std::wstring item;
   while (std::getline(ss, item, L';')) {
     size_t start = item.find_first_not_of(L" \t");
@@ -2572,8 +2566,11 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedAlignFlyoutInner = (getInt(L"AlignFlyoutInner") != 0);
   g_settings.userDefinedCustomizeTaskbarBackground = (getInt(L"CustomizeTaskbarBackground") != 0);
   PCWSTR appsDividerAlignment = Wh_GetStringSetting(L"AppsDividerAlignment");
-  g_settings.userDefinedDividerLeftAligned = (_wcsicmp(appsDividerAlignment, L"left") == 0);
-  Wh_FreeStringSetting(appsDividerAlignment);
+  g_settings.userDefinedDividerLeftAligned =
+      appsDividerAlignment && _wcsicmp(appsDividerAlignment, L"left") == 0;
+  if (appsDividerAlignment) {
+    Wh_FreeStringSetting(appsDividerAlignment);
+  }
   // Gaps & Padding (non-negative)
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : std::max(0, getInt(L"TrayTaskGap"));
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : std::max(0, getInt(L"TaskbarBackgroundHorizontalPadding"));
@@ -2650,7 +2647,9 @@ void UpdateGlobalSettings() {
   // String list
   PCWSTR dividerAppNames = Wh_GetStringSetting(L"DividedAppNames");
   g_settings.userDefinedDividedAppNames = SplitAndTrim(dividerAppNames);
-  Wh_FreeStringSetting(dividerAppNames);
+  if (dividerAppNames) {
+    Wh_FreeStringSetting(dividerAppNames);
+  }
 }
 bool HasInvalidSettings() {
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
@@ -2732,7 +2731,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (resetAnimationTargetsThisPass) {
     ResetAnimationTargetCache(state);
   }
-  if (!xamlRootContent) return false;
   const float rasterizationScale = GetRasterizationScale(xamlRootContent);
   auto snapPx = [rasterizationScale](float value) -> float {
     return SnapToPhysicalPixel(value, rasterizationScale);
@@ -3432,7 +3430,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   //  if (widgetPresent && widgetElementInnerChild) {
   //    SetDividerForElement(widgetElementInnerChild, clipHeight, widgetPresent && g_settings.userDefinedTrayAreaDivider, true);
   //  }
-  if (!taskbarBackground) return false;
   auto taskbarStroke = FindChildByName(backgroundFillParent, L"BackgroundStroke");
   if (taskbarStroke) {
     taskbarStroke.Opacity(g_unloading ? 1.0 : 0.0);
@@ -3567,7 +3564,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     }
   }
   state.wasOverflowing = isOverflowing;
-  state.lastTargetWidth = targetWidthRect;
   state.lastTargetWidth = targetWidth;
   g_initial_style_apply_completed = true;
   g_initial_style_apply_not_before_ms = 0;
@@ -3647,7 +3643,8 @@ std::wstring GetProcessExeName(DWORD processId) {
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
   DWORD processId = 0;
-  bool userDefinedMoveFlyoutControlCenter = Wh_GetIntSetting(L"MoveFlyoutControlCenter");
+  const bool userDefinedMoveFlyoutControlCenter =
+      Wh_GetIntSetting(L"MoveFlyoutControlCenter") != 0;
   auto callOriginal = [&]() -> BOOL {
     return SetWindowPos_Original
         ? SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags)
@@ -3658,24 +3655,40 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
   }
   WCHAR className[256] = L"<unknown>";
   GetClassNameW(hWnd, className, ARRAYSIZE(className));
-  std::wstring windowClassName = className;
-  std::wstring processFileName = GetProcessExeName(processId);
-  if (true) {
-    Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X", processId, processFileName.c_str(), windowClassName.c_str(), hWnd, X, Y, cx, cy, uFlags);
-  }
+  const std::wstring windowClassName = className;
+  const std::wstring processFileName = GetProcessExeName(processId);
+  Wh_Log(L"[SetWindowPos] PID: %lu | EXE: %s | Class: %s | HWND: 0x%p | Pos: (%d,%d) Size: %dx%d Flags: 0x%08X",
+         processId,
+         processFileName.c_str(),
+         windowClassName.c_str(),
+         hWnd,
+         X,
+         Y,
+         cx,
+         cy,
+         uFlags);
   if (!g_unloading && userDefinedMoveFlyoutControlCenter && _wcsicmp(processFileName.c_str(), L"ShellHost.exe") == 0 && _wcsicmp(windowClassName.c_str(), L"ControlCenterWindow") == 0) {
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO monitorInfo{
-        .cbSize = sizeof(MONITORINFO),
-    };
-    GetMonitorInfo(monitor, &monitorInfo);
+    if (!monitor) {
+      return callOriginal();
+    }
+
     auto monitorName = GetMonitorName(monitor);
+    if (monitorName.empty()) {
+      Wh_Log(L"[SetWindowPos] Failed to resolve monitor name");
+      return callOriginal();
+    }
+
     int lastRecordedTrayRightMostEdgeForMonitor = Wh_GetIntValue((L"lastRightMostEdgeTray_" + monitorName).c_str(), -1);
     if (lastRecordedTrayRightMostEdgeForMonitor > 0) {
       UINT monitorDpiX = 96;
       UINT monitorDpiY = 96;
-      GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
-      float dpiScale = monitorDpiX / 96.0f;
+      if (FAILED(GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY)) ||
+          monitorDpiX == 0) {
+        monitorDpiX = 96;
+        monitorDpiY = 96;
+      }
+      float dpiScale = static_cast<float>(monitorDpiX) / 96.0f;
       const int flyoutInnerPaddingPx = GetFlyoutInnerPaddingPx(dpiScale);
       X = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale + flyoutInnerPaddingPx - (Wh_GetIntSetting(L"AlignFlyoutInner") ? cx : (cx / 2.0f)));
       Wh_Log(L"[SetWindowPos] New X %d", X);
