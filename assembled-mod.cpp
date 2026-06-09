@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.185
+// @version         1.5.187
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -6148,11 +6148,10 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
       visual.Scale({1.0f, g_unloading ? 1.0f : g_settings.userDefinedAppsDividerVerticalScale, 1.0f});
     }
   }
-  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-  PCWSTR originalHex = hex;
+  PCWSTR originalHex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  PCWSTR hex = originalHex;
   if (!hex || *hex == L'\0') {
     hex = L"#ffffff";
-    originalHex = nullptr;
   }
   if (*hex == L'#') ++hex;
   std::wstring fillBrush = L"<SolidColorBrush Color=\"#" + std::wstring(hex) + L"\"/>";
@@ -7011,11 +7010,10 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedAppsDividerThickness = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerThickness")), 0, 100) * 0.1f);
   g_settings.userDefinedAppsDividerVerticalScale = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerVerticalScale")), 0, 100) / 100.0f);
   // Border color
-  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-  PCWSTR originalHex = hex;
+  PCWSTR originalHex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  PCWSTR hex = originalHex;
   if (!hex || *hex == L'\0') {
     hex = L"#ffffff";
-    originalHex = nullptr;
   }
   if (*hex == L'#') ++hex;
   unsigned int r = 255, g = 255, b = 255;

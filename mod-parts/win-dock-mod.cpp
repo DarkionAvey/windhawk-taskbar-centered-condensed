@@ -1771,11 +1771,10 @@ void StyleNativeDividerElement(winrt::Windows::UI::Xaml::FrameworkElement const&
     }
   }
 
-  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-  PCWSTR originalHex = hex;
+  PCWSTR originalHex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  PCWSTR hex = originalHex;
   if (!hex || *hex == L'\0') {
     hex = L"#ffffff";
-    originalHex = nullptr;
   }
 
   if (*hex == L'#') ++hex;
@@ -2700,11 +2699,10 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedAppsDividerThickness = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerThickness")), 0, 100) * 0.1f);
   g_settings.userDefinedAppsDividerVerticalScale = g_unloading ? 0.0f : (clamp(abs(getInt(L"AppsDividerVerticalScale")), 0, 100) / 100.0f);
   // Border color
-  PCWSTR hex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
-  PCWSTR originalHex = hex;
+  PCWSTR originalHex = Wh_GetStringSetting(L"TaskbarBorderColorHex");
+  PCWSTR hex = originalHex;
   if (!hex || *hex == L'\0') {
     hex = L"#ffffff";
-    originalHex = nullptr;
   }
   if (*hex == L'#') ++hex;
   unsigned int r = 255, g = 255, b = 255;
