@@ -56,6 +56,7 @@
 #include <psapi.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <mutex>
+#include <condition_variable>
 using namespace winrt::Windows::UI::Xaml;
 
 #ifndef HSHELL_GETMINRECT
@@ -883,6 +884,13 @@ std::atomic<int> g_reset_animation_target_passes = 0;
 std::atomic<int64_t> g_last_geometry_critical_apply_ms = 0;
 std::atomic<bool> g_animation_followup_worker_running = false;
 std::atomic<int64_t> g_suppress_low_priority_apply_until_ms = 0;
+std::atomic<bool> g_worker_threads_stopping = false;
+std::mutex g_delayed_apply_worker_thread_mutex;
+std::thread g_delayed_apply_worker_thread;
+std::mutex g_delayed_apply_worker_wait_mutex;
+std::condition_variable g_delayed_apply_worker_wake;
+std::mutex g_animation_followup_worker_thread_mutex;
+std::thread g_animation_followup_worker_thread;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
 constexpr int kStartButtonAnchorStablePassesRequired = 2;
@@ -896,7 +904,6 @@ constexpr int kInitialExplorerStyleDelayMs =
     kLowPriorityStyleDelayMs + kDefaultStyleDebounceDelayMs +
     (kTaskbarIslandAnimationDurationMs * kExplorerStartupSettleAnimationWindows);
 constexpr int kGeometryCriticalApplyMinIntervalMs = kDefaultStyleDebounceDelayMs / 2;
-constexpr int kDelayedWorkerMaxSleepMs = kTaskbarIslandAnimationDurationMs;
 constexpr int kInitialExplorerStyleRetryDelayMs = kTaskbarIslandAnimationDurationMs * 2;
 constexpr int kButtonSizeLowPrioritySuppressionMs = kTaskbarIslandAnimationDurationMs;
 constexpr int kGeometryCriticalLowPrioritySuppressionMs =
@@ -1208,38 +1215,90 @@ bool WaitForConditionWithTimeout(std::function<bool()> condition,
   return true;
 }
 void QueueTaskbarAnimationFollowup(HWND hTaskbarWnd) {
-  if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+  if (g_unloading || g_worker_threads_stopping.load() ||
+      !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
     return;
   }
   bool expected = false;
   if (!g_animation_followup_worker_running.compare_exchange_strong(expected, true)) {
     return;
   }
-   std::thread([hTaskbarWnd]() {
-    struct FollowupWorkerGuard {
-      ~FollowupWorkerGuard() { g_animation_followup_worker_running = false; }
-    } followupWorkerGuard;
-    try {
-      const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
-      const int followupWindowMs =
-          kTaskbarIslandAnimationDurationMs +
-          (frameIntervalMs * kAnimationFollowupGraceFrames);
-      int elapsedMs = 0;
-      while (elapsedMs < followupWindowMs) {
-        Sleep(static_cast<DWORD>(frameIntervalMs));
-        elapsedMs += frameIntervalMs;
-        if (g_unloading || !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
-          break;
+
+  std::lock_guard<std::mutex> lock(g_animation_followup_worker_thread_mutex);
+  if (g_unloading || g_worker_threads_stopping.load()) {
+    g_animation_followup_worker_running = false;
+    return;
+  }
+  if (g_animation_followup_worker_thread.joinable()) {
+    g_animation_followup_worker_thread.join();
+  }
+
+  try {
+    g_animation_followup_worker_thread = std::thread([hTaskbarWnd]() {
+      struct FollowupWorkerGuard {
+        ~FollowupWorkerGuard() { g_animation_followup_worker_running = false; }
+      } followupWorkerGuard;
+      try {
+        const int frameIntervalMs = GetCompositionFrameIntervalMs(hTaskbarWnd);
+        const int followupWindowMs =
+            kTaskbarIslandAnimationDurationMs +
+            (frameIntervalMs * kAnimationFollowupGraceFrames);
+        int elapsedMs = 0;
+        while (elapsedMs < followupWindowMs) {
+          Sleep(static_cast<DWORD>(frameIntervalMs));
+          elapsedMs += frameIntervalMs;
+          if (g_unloading || g_worker_threads_stopping.load() ||
+              !hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+            break;
+          }
+          ArmSingleStyleApplyPass();
+          ApplySettings(hTaskbarWnd);
         }
-        ArmSingleStyleApplyPass();
-        ApplySettings(hTaskbarWnd);
+      } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Animation follow-up worker failed %08X: %s", ex.code(), ex.message().c_str());
+      } catch (...) {
+        Wh_Log(L"Animation follow-up worker failed: %08X", winrt::to_hresult());
       }
-    } catch (winrt::hresult_error const& ex) {
-      Wh_Log(L"Animation follow-up worker failed %08X: %s", ex.code(), ex.message().c_str());
-    } catch (...) {
-      Wh_Log(L"Animation follow-up worker failed: %08X", winrt::to_hresult());
+    });
+  } catch (std::exception const& ex) {
+    g_animation_followup_worker_running = false;
+    Wh_Log(L"Failed to create animation follow-up worker: %S", ex.what());
+  } catch (...) {
+    g_animation_followup_worker_running = false;
+    Wh_Log(L"Failed to create animation follow-up worker");
+  }
+}
+
+void DelayedApplyWorker();
+void EnsureDelayedApplyWorker() {
+  if (g_unloading || g_worker_threads_stopping.load()) {
+    return;
+  }
+
+  bool expected = false;
+  if (g_delayed_apply_worker_running.compare_exchange_strong(expected, true)) {
+    std::lock_guard<std::mutex> lock(g_delayed_apply_worker_thread_mutex);
+    if (g_unloading || g_worker_threads_stopping.load()) {
+      g_delayed_apply_worker_running = false;
+      return;
     }
-  }).detach();
+    if (g_delayed_apply_worker_thread.joinable()) {
+      g_delayed_apply_worker_thread.join();
+    }
+    try {
+      g_delayed_apply_worker_thread = std::thread(DelayedApplyWorker);
+    } catch (std::exception const& ex) {
+      g_delayed_apply_worker_running = false;
+      Wh_Log(L"Failed to create delayed apply worker: %S", ex.what());
+      return;
+    } catch (...) {
+      g_delayed_apply_worker_running = false;
+      Wh_Log(L"Failed to create delayed apply worker");
+      return;
+    }
+  }
+
+  g_delayed_apply_worker_wake.notify_one();
 }
 
 void RequestTaskbarButtonSizeRelayout() {
@@ -1270,112 +1329,121 @@ void ArmInitialExplorerStyleApplyDelay() {
       DelayedApplyNowMs() + kInitialExplorerStyleDelayMs;
   Wh_Log(L"Initial Explorer style apply armed");
 }
-void DelayedApplyWorker();
-void EnsureDelayedApplyWorker() {
-  bool expected = false;
-  if (!g_delayed_apply_worker_running.compare_exchange_strong(expected, true)) {
-    return;
-  }
-  std::thread(DelayedApplyWorker).detach();
-}
 bool InitializeDebounce() {
   // Kept as a compatibility shim for older call sites. The old DispatcherTimer
   // debounce was removed because timer creation/stop could race Explorer/XAML
   // initialization and crash. Scheduling is now handled by DelayedApplyWorker.
+  g_worker_threads_stopping = false;
   g_already_requested_debounce_initializing = false;
   return true;
 }
 
 void CleanupDebounce() {
+  g_worker_threads_stopping = true;
   g_already_requested_debounce_initializing = false;
   g_scheduled_low_priority_update = false;
   g_delayed_apply_due_ms = 0;
   g_delayed_apply_generation.fetch_add(1);
+  g_delayed_apply_worker_wake.notify_all();
 
-  // The debounce worker is detached, so the only safe unload strategy is to
-  // force it to observe cancellation and wait until it has left mod code.
-  // Otherwise a recompilation can unload this DLL while the sleeping worker
-  // later resumes inside DelayedApplyWorker from the old image.
-    WaitForConditionWithTimeout(
-      [] { return !g_delayed_apply_worker_running.load(); },
-      kDelayedApplyWorkerShutdownTimeoutMs,
-      kWorkerShutdownPollMs);
-  if (g_delayed_apply_worker_running.load()) {
-    Wh_Log(L"Delayed apply worker did not exit before unload");
+  std::thread animationFollowupWorker;
+  {
+    std::lock_guard<std::mutex> lock(g_animation_followup_worker_thread_mutex);
+    animationFollowupWorker = std::move(g_animation_followup_worker_thread);
   }
-  WaitForConditionWithTimeout(
-      [] { return !g_animation_followup_worker_running.load(); },
-      kAnimationFollowupWorkerShutdownTimeoutMs,
-      kWorkerShutdownPollMs);
-  if (g_animation_followup_worker_running.load()) {
-    Wh_Log(L"Animation follow-up worker did not exit before unload");
+
+  std::thread delayedApplyWorker;
+  {
+    std::lock_guard<std::mutex> lock(g_delayed_apply_worker_thread_mutex);
+    delayedApplyWorker = std::move(g_delayed_apply_worker_thread);
   }
+
+  if (animationFollowupWorker.joinable()) {
+    animationFollowupWorker.join();
+  }
+  if (delayedApplyWorker.joinable()) {
+    delayedApplyWorker.join();
+  }
+
+  g_animation_followup_worker_running = false;
+  g_delayed_apply_worker_running = false;
 }
 void DelayedApplyWorker() {
   struct DelayedWorkerGuard {
-    bool active = true;
     ~DelayedWorkerGuard() {
-      if (active) {
-        g_delayed_apply_worker_running = false;
-      }
+      g_delayed_apply_worker_running = false;
     }
   } delayedWorkerGuard;
+
+  std::unique_lock<std::mutex> waitLock(g_delayed_apply_worker_wait_mutex);
   try {
-  for (;;) {
-    if (g_unloading) {
-      break;
-    }
-    int64_t dueMs = g_delayed_apply_due_ms.load();
-    if (dueMs <= 0) {
-      break;
-    }
-    int64_t nowMs = DelayedApplyNowMs();
-    if (nowMs < dueMs) {
-      DWORD sleepMs = static_cast<DWORD>(std::min<int64_t>(kDelayedWorkerMaxSleepMs, std::max<int64_t>(1, dueMs - nowMs)));
-      Sleep(sleepMs);
-      continue;
-    }
-    unsigned long long generation = g_delayed_apply_generation.load();
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
-      Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
-      g_delayed_apply_generation.fetch_add(1);
-      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
-      continue;
-    }
-    g_scheduled_low_priority_update = false;
-    Wh_Log(L"Delayed apply triggered");
-       const bool initialStyleApply = !g_initial_style_apply_completed.load();
-    if (initialStyleApply) {
-           ArmStyleFollowupPasses(hTaskbarWnd, true);
-    }
-    if (!g_initial_style_apply_completed.load() &&
-        !g_initial_taskbar_size_apply_done.exchange(true)) {
-      ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
-    }
-    ApplySettings(hTaskbarWnd);
-    if (!g_initial_style_apply_completed.load() && !g_unloading) {
-      Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
-      g_delayed_apply_generation.fetch_add(1);
-      g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
-      continue;
-    }
-    int64_t expectedDueMs = dueMs;
-    if (g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0)) {
-      if (g_delayed_apply_generation.load() == generation) {
+    for (;;) {
+      if (g_unloading || g_worker_threads_stopping.load()) {
         break;
       }
+
+      int64_t dueMs = g_delayed_apply_due_ms.load();
+      if (dueMs <= 0) {
+        g_delayed_apply_worker_wake.wait(waitLock, [] {
+          return g_unloading || g_worker_threads_stopping.load() ||
+                 g_delayed_apply_due_ms.load() > 0;
+        });
+        continue;
+      }
+
+      int64_t nowMs = DelayedApplyNowMs();
+      if (nowMs < dueMs) {
+        g_delayed_apply_worker_wake.wait_for(
+            waitLock,
+            std::chrono::milliseconds(std::max<int64_t>(1, dueMs - nowMs)),
+            [dueMs] {
+              return g_unloading || g_worker_threads_stopping.load() ||
+                     g_delayed_apply_due_ms.load() != dueMs;
+            });
+        continue;
+      }
+
+      unsigned long long generation = g_delayed_apply_generation.load();
+      waitLock.unlock();
+
+      HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+      if (!hTaskbarWnd || !IsWindow(hTaskbarWnd)) {
+        Wh_Log(L"Delayed apply postponed: taskbar window is not ready");
+        g_delayed_apply_generation.fetch_add(1);
+        g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
+        waitLock.lock();
+        continue;
+      }
+
+      g_scheduled_low_priority_update = false;
+      Wh_Log(L"Delayed apply triggered");
+      const bool initialStyleApply = !g_initial_style_apply_completed.load();
+      if (initialStyleApply) {
+        ArmStyleFollowupPasses(hTaskbarWnd, true);
+      }
+      if (!g_initial_style_apply_completed.load() &&
+          !g_initial_taskbar_size_apply_done.exchange(true)) {
+        ApplySettingsTBIconSize(g_settings_tbiconsize.taskbarHeight);
+      }
+      ApplySettings(hTaskbarWnd);
+      if (!g_initial_style_apply_completed.load() && !g_unloading) {
+        Wh_Log(L"Initial ApplyStyle did not complete; retrying delayed apply");
+        g_delayed_apply_generation.fetch_add(1);
+        g_delayed_apply_due_ms = DelayedApplyNowMs() + kInitialExplorerStyleRetryDelayMs;
+        waitLock.lock();
+        continue;
+      }
+
+      if (g_delayed_apply_generation.load() == generation) {
+        int64_t expectedDueMs = dueMs;
+        g_delayed_apply_due_ms.compare_exchange_strong(expectedDueMs, 0);
+      }
+      waitLock.lock();
     }
-  }
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"Delayed apply worker failed %08X: %s", ex.code(), ex.message().c_str());
   } catch (...) {
     Wh_Log(L"Delayed apply worker failed: %08X", winrt::to_hresult());
-  }
-  g_delayed_apply_worker_running = false;
-  delayedWorkerGuard.active = false;
-  if (!g_unloading && g_delayed_apply_due_ms.load() > 0) {
-    EnsureDelayedApplyWorker();
   }
 }
 void ApplySettingsDebounced(int delayMs) {
@@ -3742,6 +3810,7 @@ BOOL Wh_ModInit() {
     return true;
   }
   g_unloading = false;
+  g_worker_threads_stopping = false;
   InitMinimizeAnimationCorrectionTai();
   ArmInitialExplorerStyleApplyDelay();
   if (!Wh_ModInitTBIconSize()) {
@@ -3773,6 +3842,7 @@ void Wh_ModBeforeUninit() {
     return;
   }
   g_unloading = true;
+  CleanupDebounce();
   UninitMinimizeAnimationCorrectionTai();
   Wh_ModBeforeUninitTBIconSize();
   Wh_ModBeforeUninitStartButtonPosition();
