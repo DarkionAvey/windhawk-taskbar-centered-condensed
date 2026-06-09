@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.189
+// @version         1.5.191
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -362,9 +362,15 @@ bool GetUserDefinedAlignFlyoutInner() {
   std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
   return g_settings.userDefinedAlignFlyoutInner;
 }
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
+struct TaskbarChildStyleCache {
+  uint64_t generation{0};
+  uint64_t signature{0};
+  bool valid{false};
+};
 struct TaskbarState {
   std::recursive_mutex mutex;
   std::chrono::steady_clock::time_point lastApplyStyleTime{};
@@ -424,6 +430,8 @@ struct TaskbarState {
   int64_t backgroundAnimationStartMs{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
   uint64_t lastDimensionInvalidationGeneration{0};
+  TaskbarChildStyleCache taskbarChildStyleCache;
+  TaskbarChildStyleCache trayChildStyleCache;
 };
 struct TaskbarFlyoutStateSnapshot {
   float lastStartButtonXCalculated{0.0f};
@@ -435,6 +443,7 @@ struct TaskbarFlyoutStateSnapshot {
 static std::mutex g_taskbarStatesMutex;
 static std::unordered_map<std::wstring, std::shared_ptr<TaskbarState>> g_taskbarStates;
 static std::atomic<uint64_t> g_dimensionInvalidationGeneration{1};
+static std::atomic<uint64_t> g_taskbarChildStyleGeneration{1};
 std::shared_ptr<TaskbarState> GetOrCreateTaskbarState(const std::wstring& monitorName) {
   std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
   auto& state = g_taskbarStates[monitorName];
@@ -483,6 +492,9 @@ void ClearTaskbarStates() {
 }
 void RequestTaskbarDimensionInvalidation() {
   g_dimensionInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+}
+void RequestTaskbarChildStyleRefresh() {
+  g_taskbarChildStyleGeneration.fetch_add(1, std::memory_order_acq_rel);
 }
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
@@ -6275,79 +6287,142 @@ bool ApplyTaskbarButtonSizeToElement(FrameworkElement const& child,
   }
   return changed;
 }
-double CalculateValidChildrenWidth(FrameworkElement element,
-                                   int& childrenCount,
-                                   TaskbarState& state,
-                                   double* leftMostEdge = nullptr,
-                                   double* rightMostEdge = nullptr,
-                                   FrameworkElement boundsRelativeTo = nullptr,
-                                   double* startButtonLeft = nullptr,
-                                   double* startButtonTop = nullptr,
-                                   double* startButtonWidth = nullptr,
-                                   double* startButtonHeight = nullptr) {
+struct ChildLayoutObservationTai {
+  FrameworkElement element{nullptr};
+  winrt::hstring className;
+  winrt::Windows::Foundation::Rect rect{};
+  std::wstring automationName;
+  bool hasValidRect{false};
+};
+struct ChildrenLayoutMeasurementTai {
+  std::vector<ChildLayoutObservationTai> children;
+  double totalWidth{0.0};
+  double leftMostEdge{0.0};
+  double rightMostEdge{0.0};
+  int validChildrenCount{0};
+};
+ChildrenLayoutMeasurementTai MeasureValidChildren(
+    FrameworkElement const& element,
+    FrameworkElement const& boundsRelativeTo = nullptr) {
+  ChildrenLayoutMeasurementTai measurement;
   if (!element) {
-    if (leftMostEdge) *leftMostEdge = 0.0;
-    if (rightMostEdge) *rightMostEdge = 0.0;
-       if (startButtonLeft) *startButtonLeft = 0.0;
-    if (startButtonTop) *startButtonTop = 0.0;
-    if (startButtonWidth) *startButtonWidth = 0.0;
-    if (startButtonHeight) *startButtonHeight = 0.0;
-    return 0.0;
+    return measurement;
   }
-  const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
-  auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
-  auto userDefinedTaskbarIconSize = std::to_wstring(g_settings.userDefinedTaskbarIconSize);
-  double totalWidth = 0.0;
+  auto transformTarget = boundsRelativeTo ? boundsRelativeTo : element;
+  int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+  measurement.children.reserve(static_cast<size_t>(std::max(0, childrenCount)));
   double minEdge = std::numeric_limits<double>::infinity();
   double maxEdge = -std::numeric_limits<double>::infinity();
-    double startLeft = 0.0;
-  double startTop = 0.0;
-  double startWidth = 0.0;
-  double startHeight = 0.0;
-  bool foundStartButton = false;
-  auto transformTarget = boundsRelativeTo ? boundsRelativeTo : element;
-  childrenCount = 0;
-  int childrenCountTentative = Media::VisualTreeHelper::GetChildrenCount(element);
-  for (int i = 0; i < childrenCountTentative; i++) {
-    auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
-    if (!child) {
-      Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCountTentative);
+  for (int i = 0; i < childrenCount; i++) {
+    ChildLayoutObservationTai observation;
+    observation.element =
+        Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+    if (!observation.element) {
+      Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
       continue;
     }
-    auto className = winrt::get_class_name(child);
-    const bool taskbarButtonSizeChanged = ApplyTaskbarButtonSizeToElement(child, className);
-    winrt::Windows::Foundation::Rect rect{};
-    try {
-      if (taskbarButtonSizeChanged) {
-        child.UpdateLayout();
+    observation.className = winrt::get_class_name(observation.element);
+    if (observation.className == L"Taskbar.TaskListButton") {
+      try {
+        auto value = observation.element.GetValue(
+            Automation::AutomationProperties::NameProperty());
+        observation.automationName =
+            winrt::unbox_value_or<winrt::hstring>(value, L"").c_str();
+      } catch (...) {
+        observation.automationName.clear();
       }
-     auto transform = child.TransformToVisual(transformTarget);
-      rect = transform.TransformBounds(
-          winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
+    }
+    try {
+      auto transform = observation.element.TransformToVisual(transformTarget);
+      observation.rect = transform.TransformBounds(
+          winrt::Windows::Foundation::Rect(
+              0,
+              0,
+              observation.element.ActualWidth(),
+              observation.element.ActualHeight()));
+      observation.hasValidRect =
+          observation.rect.Width > 0.0 &&
+          observation.rect.Height > 0.0 &&
+          observation.rect.X >= -kLayoutToleranceDip &&
+          observation.rect.Y >= -kLayoutToleranceDip;
     } catch (...) {
-      // A taskbar child can be present in the tree while being recycled during
-      // overflow transitions. Skip the transient child for this pass.
+      observation.hasValidRect = false;
+    }
+    if (observation.hasValidRect &&
+        observation.className != L"Taskbar.AugmentedEntryPointButton") {
+      measurement.totalWidth += observation.rect.Width;
+      minEdge = std::min(minEdge, static_cast<double>(observation.rect.X));
+      maxEdge = std::max(
+          maxEdge,
+          static_cast<double>(observation.rect.X + observation.rect.Width));
+      measurement.validChildrenCount++;
+    }
+    measurement.children.push_back(std::move(observation));
+  }
+  if (measurement.validChildrenCount > 0 &&
+      minEdge != std::numeric_limits<double>::infinity()) {
+    measurement.leftMostEdge = minEdge;
+    measurement.rightMostEdge = maxEdge;
+  }
+  return measurement;
+}
+uint64_t AppendChildStyleSignatureTai(
+    uint64_t signature,
+    std::wstring_view value) {
+  constexpr uint64_t kFnvPrime = 1099511628211ULL;
+  for (wchar_t ch : value) {
+    signature ^= static_cast<uint64_t>(ch);
+    signature *= kFnvPrime;
+  }
+  return signature;
+}
+uint64_t GetChildStyleSignatureTai(
+    ChildrenLayoutMeasurementTai const& measurement) {
+  constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+  constexpr uint64_t kFnvPrime = 1099511628211ULL;
+  uint64_t signature = kFnvOffsetBasis;
+  for (const auto& child : measurement.children) {
+    signature ^= static_cast<uint64_t>(
+        reinterpret_cast<uintptr_t>(winrt::get_abi(child.element)));
+    signature *= kFnvPrime;
+    signature = AppendChildStyleSignatureTai(
+        signature,
+        std::wstring_view(child.className.c_str(), child.className.size()));
+    signature = AppendChildStyleSignatureTai(signature, child.automationName);
+    signature ^= child.hasValidRect ? 1ULL : 0ULL;
+    signature *= kFnvPrime;
+  }
+  signature ^= static_cast<uint64_t>(measurement.children.size());
+  signature *= kFnvPrime;
+  return signature;
+}
+bool ApplyTaskbarButtonSizing(
+    ChildrenLayoutMeasurementTai const& measurement) {
+  bool layoutChanged = false;
+  for (const auto& child : measurement.children) {
+    layoutChanged =
+        ApplyTaskbarButtonSizeToElement(child.element, child.className) ||
+        layoutChanged;
+  }
+  return layoutChanged;
+}
+void ApplyMeasuredChildStyles(
+    ChildrenLayoutMeasurementTai const& measurement) {
+  const float tbHeightFloat = static_cast<float>(g_settings.userDefinedTaskbarHeight);
+  auto userDefinedTaskButtonCornerRadius = std::to_wstring(g_settings.userDefinedTaskButtonCornerRadius);
+  for (const auto& observation : measurement.children) {
+    if (!observation.hasValidRect) {
       continue;
     }
-    // Exclude recycled/transient rectangles, but don't assume that the valid
-    // task button group is centered inside TaskbarFrameRepeater. Near overflow,
-    // Explorer intentionally lays it out off-center before the overflow button
-    // appears, so we measure the real bounds below and translate from them.
-    if (rect.Width <= 0.0 || rect.Height <= 0.0 || rect.X < -kLayoutToleranceDip || rect.Y < -kLayoutToleranceDip) {
-      continue;
-    }
-    SetElementPropertyFromString(child, className.c_str(), L"CornerRadius", userDefinedTaskButtonCornerRadius);
+    auto const& child = observation.element;
+    auto const& className = observation.className;
+    SetElementPropertyFromString(
+        child,
+        className.c_str(),
+        L"CornerRadius",
+        userDefinedTaskButtonCornerRadius);
     if (className == L"Taskbar.SearchBoxButton") {
       // Search only needs the common sizing helper above.
-    } else if (className == L"Taskbar.ExperienceToggleButton") {
-       if (IsStartButtonElement(child, className)) {
-        startLeft = rect.X;
-        startTop = rect.Y;
-        startWidth = rect.Width;
-        startHeight = rect.Height;
-        foundStartButton = true;
-        state.lastStartButtonXActual = static_cast<float>(rect.X);
-      }
     } else if (className == L"Taskbar.TaskListButton") {
       auto innerElementChild = FindChildByClassName(child, L"Taskbar.TaskListLabeledButtonPanel");
       if (innerElementChild) {
@@ -6355,13 +6430,10 @@ double CalculateValidChildrenWidth(FrameworkElement element,
         if (iconElementChild) {
           iconElementChild.Width(g_settings.userDefinedTaskbarIconSize);
           iconElementChild.Height(g_settings.userDefinedTaskbarIconSize);
-          auto currentIconAppName = child.GetValue(winrt::Windows::UI::Xaml::Automation::AutomationProperties::NameProperty());
-          const std::wstring currentIconAppNameStr = winrt::unbox_value<winrt::hstring>(currentIconAppName).c_str();
-          // Wh_Log(L"bbwi: %s", currentIconAppNameStr);
           SetDividerForElement(child, tbHeightFloat, false);
-          if (!currentIconAppNameStr.empty()) {
+          if (!observation.automationName.empty()) {
             for (const auto& pat : g_settings.userDefinedDividedAppNames) {
-              if (RegexMatchInsensitive(currentIconAppNameStr, pat)) {
+              if (RegexMatchInsensitive(observation.automationName, pat)) {
                 SetDividerForElement(child, tbHeightFloat, true);
                 break;
               }
@@ -6409,30 +6481,31 @@ double CalculateValidChildrenWidth(FrameworkElement element,
         runningIndicator.Opacity(1);
       }
     }
-    totalWidth += rect.Width;
-     minEdge = std::min(static_cast<double>(minEdge),static_cast<double>( rect.X));
-    maxEdge = std::max(static_cast<double>(maxEdge), static_cast<double>(rect.X + rect.Width));
-    childrenCount++;
   }
-  if (childrenCount > 0 && minEdge != std::numeric_limits<double>::infinity()) {
-    if (leftMostEdge) *leftMostEdge = minEdge;
-    if (rightMostEdge) *rightMostEdge = maxEdge;
-  } else {
-    if (leftMostEdge) *leftMostEdge = 0.0;
-    if (rightMostEdge) *rightMostEdge = 0.0;
-    }
-  if (foundStartButton && startWidth > 0.0 && startHeight > 0.0) {
-    if (startButtonLeft) *startButtonLeft = startLeft;
-    if (startButtonTop) *startButtonTop = startTop;
-    if (startButtonWidth) *startButtonWidth = startWidth;
-    if (startButtonHeight) *startButtonHeight = startHeight;
-  } else {
-    if (startButtonLeft) *startButtonLeft = 0.0;
-    if (startButtonTop) *startButtonTop = 0.0;
-    if (startButtonWidth) *startButtonWidth = 0.0;
-    if (startButtonHeight) *startButtonHeight = 0.0;
+}
+void ApplyChildStylesIfRequired(
+    FrameworkElement const& container,
+    ChildrenLayoutMeasurementTai* measurement,
+    TaskbarChildStyleCache* cache,
+    uint64_t styleGeneration) {
+  if (!container || !measurement || !cache) {
+    return;
   }
-  return totalWidth;
+  uint64_t signature = GetChildStyleSignatureTai(*measurement);
+  if (cache->valid &&
+      cache->generation == styleGeneration &&
+      cache->signature == signature) {
+    return;
+  }
+  if (ApplyTaskbarButtonSizing(*measurement)) {
+    container.UpdateLayout();
+    *measurement = MeasureValidChildren(container);
+    signature = GetChildStyleSignatureTai(*measurement);
+  }
+  ApplyMeasuredChildStyles(*measurement);
+  cache->generation = styleGeneration;
+  cache->signature = signature;
+  cache->valid = true;
 }
 bool TryGetStartButtonRectRelativeTo(FrameworkElement const& taskbarFrameRepeater,
                                      FrameworkElement const& relativeTo,
@@ -7321,8 +7394,20 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   double startButtonTop = 0.0;
   double startButtonWidth = 0.0;
   double startButtonHeight = 0.0;
-  const double childrenWidthTaskbarDbl = CalculateValidChildrenWidth(
-      taskbarFrameRepeater, childrenCountTaskbar, state, &taskbarLeftEdge, &taskbarRightEdge);
+  const uint64_t childStyleGeneration =
+      g_taskbarChildStyleGeneration.load(std::memory_order_acquire);
+  auto taskbarChildrenMeasurement =
+      MeasureValidChildren(taskbarFrameRepeater);
+  ApplyChildStylesIfRequired(
+      taskbarFrameRepeater,
+      &taskbarChildrenMeasurement,
+      &state.taskbarChildStyleCache,
+      childStyleGeneration);
+  const double childrenWidthTaskbarDbl =
+      taskbarChildrenMeasurement.totalWidth;
+  childrenCountTaskbar = taskbarChildrenMeasurement.validChildrenCount;
+  taskbarLeftEdge = taskbarChildrenMeasurement.leftMostEdge;
+  taskbarRightEdge = taskbarChildrenMeasurement.rightMostEdge;
   winrt::Windows::Foundation::Rect startButtonAnchorRect{};
   auto startButtonElement = FindStartButtonElement(taskbarFrameRepeater);
   if (TryGetStartButtonRectRelativeTo(taskbarFrameRepeater, rootGridTaskBar, startButtonAnchorRect)) {
@@ -7330,6 +7415,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     startButtonTop = startButtonAnchorRect.Y;
     startButtonWidth = startButtonAnchorRect.Width;
     startButtonHeight = startButtonAnchorRect.Height;
+    state.lastStartButtonXActual = static_cast<float>(startButtonAnchorRect.X);
   }
   if (!g_unloading && childrenWidthTaskbarDbl <= 0) {
     Wh_Log(L"Error: childrenWidthTaskbarDbl <= 0");
@@ -7381,7 +7467,15 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     trayFrame.SetValue(FrameworkElement::HorizontalAlignmentProperty(), winrt::box_value(HorizontalAlignment::Right));
   }
   int childrenCountTray = 0;
-  double trayFrameWidthDbl = CalculateValidChildrenWidth(systemTrayFrameGrid, childrenCountTray, state);
+  auto trayChildrenMeasurement =
+      MeasureValidChildren(systemTrayFrameGrid);
+  ApplyChildStylesIfRequired(
+      systemTrayFrameGrid,
+      &trayChildrenMeasurement,
+      &state.trayChildStyleCache,
+      childStyleGeneration);
+  double trayFrameWidthDbl = trayChildrenMeasurement.totalWidth;
+  childrenCountTray = trayChildrenMeasurement.validChildrenCount;
   if (!g_unloading && trayFrameWidthDbl <= 0) {
     Wh_Log(L"Error: trayFrameWidthDbl <= 0");
     return false;
@@ -8016,6 +8110,7 @@ void RefreshSettings() {
   Wh_ModSettingsChangedTBIconSize();
   Wh_ModSettingsChangedStartButtonPosition();
   UpdateGlobalSettings();
+  RequestTaskbarChildStyleRefresh();
   RequestTaskbarDimensionInvalidation();
   unsigned int newTaskbarButtonSize;
   {

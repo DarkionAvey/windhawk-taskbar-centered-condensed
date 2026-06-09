@@ -1,6 +1,13 @@
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
+
+struct TaskbarChildStyleCache {
+  uint64_t generation{0};
+  uint64_t signature{0};
+  bool valid{false};
+};
 
 struct TaskbarState {
   std::recursive_mutex mutex;
@@ -61,6 +68,8 @@ struct TaskbarState {
   int64_t backgroundAnimationStartMs{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
   uint64_t lastDimensionInvalidationGeneration{0};
+  TaskbarChildStyleCache taskbarChildStyleCache;
+  TaskbarChildStyleCache trayChildStyleCache;
 };
 
 struct TaskbarFlyoutStateSnapshot {
@@ -74,6 +83,7 @@ struct TaskbarFlyoutStateSnapshot {
 static std::mutex g_taskbarStatesMutex;
 static std::unordered_map<std::wstring, std::shared_ptr<TaskbarState>> g_taskbarStates;
 static std::atomic<uint64_t> g_dimensionInvalidationGeneration{1};
+static std::atomic<uint64_t> g_taskbarChildStyleGeneration{1};
 
 std::shared_ptr<TaskbarState> GetOrCreateTaskbarState(const std::wstring& monitorName) {
   std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
@@ -129,6 +139,10 @@ void ClearTaskbarStates() {
 
 void RequestTaskbarDimensionInvalidation() {
   g_dimensionInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void RequestTaskbarChildStyleRefresh() {
+  g_taskbarChildStyleGeneration.fetch_add(1, std::memory_order_acq_rel);
 }
 
 
