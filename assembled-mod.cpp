@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.197
+// @version         1.5.200
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -78,6 +78,8 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `TaskbarBorderThickness` | Taskbar border thickness scale (%) | Set the scale of the taskbar border. Range 0-100. Default is 8 | unsigned int percentage |
 | `AppsDividerThickness` | Apps divider thickness scale (%) | Set the thickness scale of the taskbar dividers. Range 0-100. Default is 8 | unsigned int percentage |
 | `AppsDividerVerticalScale` | Apps divider vertical scale (%) | Set the vertical scale of the taskbar dividers. Range 0-100. Default is 40 | unsigned int percentage |
+| `AppsDividerAlignment` | Choose the side on which the app dividers should appear |  |  |
+| `DividedAppNames` | App names for divider placement | Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex. | string regex |
 | `TrayAreaDivider` | Tray area divider | When enabled, the tray area will be separated by a divider. Default is on | Boolean (true/false) |
 | `StyleTrayArea` | Modify the tray area appearance | When enabled, the options for tray icon size will take effect. Default is off | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Set the width and height of tray icons. Minimum is 15. Default is 15 | Non-negative integer |
@@ -168,6 +170,14 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - AppsDividerVerticalScale: 40
   $name: Apps divider vertical scale (%)
   $description: Set the vertical scale of the taskbar dividers. Range 0-100. Default is 40
+- AppsDividerAlignment: ""
+  $name: Choose the side on which the app dividers should appear
+  $options:
+  - left: Left side
+  - right: Right side
+- DividedAppNames: ""
+  $name: App names for divider placement
+  $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
 - TrayAreaDivider: true
   $name: Tray area divider
   $description: When enabled, the tray area will be separated by a divider. Default is on
@@ -321,6 +331,7 @@ typedef enum MONITOR_DPI_TYPE {
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
 #include <mutex>
+#include <regex>
 struct ModSettings {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
@@ -348,7 +359,7 @@ struct ModSettings {
   bool userDefinedStyleTrayArea;
   bool userDefinedTrayAreaDivider;
   unsigned int borderColorR, borderColorG, borderColorB;
-  std::vector<std::wstring> userDefinedDividedAppNames;
+  std::vector<std::wregex> compiledDividedAppPatterns;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
   bool userDefinedDisableCustomBlurBackground;
@@ -4652,6 +4663,7 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <mutex>
 #include <condition_variable>
+#include <memory>
 using namespace winrt::Windows::UI::Xaml;
 #ifndef HSHELL_GETMINRECT
 #define HSHELL_GETMINRECT 5
@@ -4662,7 +4674,7 @@ struct SHELLHOOKINFO_TAI {
 };
 struct MinimizeAnimationMeasuredButtonTai {
   RECT visibleRectPx{};
-  std::wstring automationName;
+  std::wstring matchName;
 };
 struct MinimizeAnimationCorrectionTai {
   double layoutOffsetXDip{0.0};
@@ -4675,7 +4687,10 @@ struct MinimizeAnimationCorrectionTai {
   std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons;
 };
 static std::mutex g_minimizeAnimationCorrectionMutexTai;
-static std::unordered_map<std::wstring, MinimizeAnimationCorrectionTai> g_minimizeAnimationCorrectionByMonitorNameTai;
+static std::unordered_map<
+    std::wstring,
+    std::shared_ptr<const MinimizeAnimationCorrectionTai>>
+    g_minimizeAnimationCorrectionByMonitorNameTai;
 static std::atomic_bool g_minimizeAnimationCorrectionReadyTai{false};
 static std::atomic_bool g_minimizeAnimationCorrectionUninitializingTai{false};
 static thread_local LPARAM g_minimizeAnimationLastCorrectedLParamTai = 0;
@@ -4770,12 +4785,6 @@ static void ClampRectCenterXToBoundsTai(RECT* rect, const RECT& bounds) {
   const int newCenterX = ClampIntTai(currentCenterX, minCenterX, maxCenterX);
   OffsetRect(rect, newCenterX - currentCenterX, 0);
 }
-static std::wstring ToLowerTai(std::wstring value) {
-  std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) {
-    return static_cast<wchar_t>(towlower(ch));
-  });
-  return value;
-}
 static std::wstring TrimTai(const std::wstring& value) {
   const auto first = value.find_first_not_of(L" \t\r\n");
   if (first == std::wstring::npos) {
@@ -4826,8 +4835,40 @@ static bool TryGetTargetWindowProcessBaseNameTai(HWND hwnd, std::wstring* proces
 static bool IsUsableMeasuredButtonRectTai(const RECT& rect) {
   return rect.right > rect.left && rect.bottom > rect.top;
 }
-static bool TextContainsTai(const std::wstring& haystack, const std::wstring& needle) {
-  return !haystack.empty() && !needle.empty() && haystack.find(needle) != std::wstring::npos;
+static bool TextEqualsOrdinalIgnoreCaseTai(
+    std::wstring_view left,
+    std::wstring_view right) {
+  if (left.size() != right.size() ||
+      left.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    return false;
+  }
+  return CompareStringOrdinal(
+             left.data(),
+             static_cast<int>(left.size()),
+             right.data(),
+             static_cast<int>(right.size()),
+             TRUE) == CSTR_EQUAL;
+}
+static bool TextContainsOrdinalIgnoreCaseTai(
+    std::wstring_view haystack,
+    std::wstring_view needle) {
+  if (haystack.empty() || needle.empty() || needle.size() > haystack.size() ||
+      needle.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    return false;
+  }
+  const int needleLength = static_cast<int>(needle.size());
+  const size_t lastStart = haystack.size() - needle.size();
+  for (size_t start = 0; start <= lastStart; ++start) {
+    if (CompareStringOrdinal(
+            haystack.data() + start,
+            needleLength,
+            needle.data(),
+            needleLength,
+            TRUE) == CSTR_EQUAL) {
+      return true;
+    }
+  }
+  return false;
 }
 static const MinimizeAnimationMeasuredButtonTai* FindMeasuredButtonForTargetWindowTai(
     HWND targetWindow,
@@ -4837,35 +4878,18 @@ static const MinimizeAnimationMeasuredButtonTai* FindMeasuredButtonForTargetWind
   if (!targetWindow || !IsWindow(targetWindow) || correction.measuredButtons.empty()) {
     return nullptr;
   }
-  const std::wstring titleLower = ToLowerTai(GetWindowTextSafeTai(targetWindow));
-  std::wstring processLower;
-  std::wstring processBaseName;
-  if (TryGetTargetWindowProcessBaseNameTai(targetWindow, &processBaseName)) {
-    processLower = ToLowerTai(processBaseName);
+  if (matchTier) {
+    *matchTier = 0;
   }
+  const std::wstring title = GetWindowTextSafeTai(targetWindow);
   const int currentCenterX = currentRect.left + std::max(1, RectWidthTai(currentRect)) / 2;
   const MinimizeAnimationMeasuredButtonTai* best = nullptr;
   int bestTier = 0;
   LONG bestDistance = LONG_MAX;
-  for (const auto& button : correction.measuredButtons) {
-    if (!IsUsableMeasuredButtonRectTai(button.visibleRectPx)) {
-      continue;
-    }
-    const std::wstring nameLower = ToLowerTai(TrimTai(button.automationName));
-    if (nameLower.empty()) {
-      continue;
-    }
-    int tier = 0;
-    if (!titleLower.empty() && nameLower == titleLower) {
-      tier = 3;
-    } else if (!titleLower.empty() &&
-               (TextContainsTai(nameLower, titleLower) || TextContainsTai(titleLower, nameLower))) {
-      tier = 2;
-    } else if (!processLower.empty() && TextContainsTai(nameLower, processLower)) {
-      tier = 1;
-    }
+  auto considerButton = [&](const MinimizeAnimationMeasuredButtonTai& button,
+                            int tier) {
     if (tier <= 0) {
-      continue;
+      return;
     }
     const int buttonCenterX = button.visibleRectPx.left + RectWidthTai(button.visibleRectPx) / 2;
     const LONG distance = buttonCenterX >= currentCenterX ? buttonCenterX - currentCenterX : currentCenterX - buttonCenterX;
@@ -4873,6 +4897,44 @@ static const MinimizeAnimationMeasuredButtonTai* FindMeasuredButtonForTargetWind
       best = &button;
       bestTier = tier;
       bestDistance = distance;
+    }
+  };
+  if (!title.empty()) {
+    for (const auto& button : correction.measuredButtons) {
+      if (!IsUsableMeasuredButtonRectTai(button.visibleRectPx) ||
+          button.matchName.empty()) {
+        continue;
+      }
+      if (TextEqualsOrdinalIgnoreCaseTai(button.matchName, title)) {
+        considerButton(button, 3);
+      } else if (
+          TextContainsOrdinalIgnoreCaseTai(button.matchName, title) ||
+          TextContainsOrdinalIgnoreCaseTai(title, button.matchName)) {
+        considerButton(button, 2);
+      }
+    }
+  }
+  if (best) {
+    if (matchTier) {
+      *matchTier = bestTier;
+    }
+    return best;
+  }
+  std::wstring processBaseName;
+  if (!TryGetTargetWindowProcessBaseNameTai(
+          targetWindow,
+          &processBaseName)) {
+    return nullptr;
+  }
+  for (const auto& button : correction.measuredButtons) {
+    if (!IsUsableMeasuredButtonRectTai(button.visibleRectPx) ||
+        button.matchName.empty()) {
+      continue;
+    }
+    if (TextContainsOrdinalIgnoreCaseTai(
+            button.matchName,
+            processBaseName)) {
+      considerButton(button, 1);
     }
   }
   if (matchTier) {
@@ -4905,32 +4967,30 @@ static LONG TransformMinimizeRectXTai(LONG xPx, const MinimizeAnimationCorrectio
   xDip = correction.scaleCenterXDip + ((xDip - correction.scaleCenterXDip) * correction.visualScale);
   return static_cast<LONG>(std::lround(static_cast<double>(correction.monitorRect.left) + xDip * dpiScale));
 }
-static bool GetMinimizeAnimationCorrectionForWindowTai(
-    HWND targetWindow,
-    MinimizeAnimationCorrectionTai* correction) {
-  if (!targetWindow || !correction ||
+static std::shared_ptr<const MinimizeAnimationCorrectionTai>
+GetMinimizeAnimationCorrectionForWindowTai(HWND targetWindow) {
+  if (!targetWindow ||
       !g_minimizeAnimationCorrectionReadyTai.load(std::memory_order_acquire) ||
       g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
-    return false;
+    return nullptr;
   }
   if (!IsWindow(targetWindow)) {
-    return false;
+    return nullptr;
   }
   HMONITOR monitor = MonitorFromWindow(targetWindow, MONITOR_DEFAULTTONEAREST);
   if (!monitor) {
-    return false;
+    return nullptr;
   }
   const std::wstring monitorName = GetMonitorName(monitor);
   if (monitorName.empty()) {
-    return false;
+    return nullptr;
   }
   std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
   auto it = g_minimizeAnimationCorrectionByMonitorNameTai.find(monitorName);
   if (it == g_minimizeAnimationCorrectionByMonitorNameTai.end()) {
-    return false;
+    return nullptr;
   }
-  *correction = it->second;
-  return true;
+  return it->second;
 }
 static bool WasMinimizeAnimationPayloadAlreadyCorrectedTai(
     LPARAM lParam,
@@ -5015,13 +5075,14 @@ static void CorrectMinimizeAnimationRectTai(HWND targetWindow, RECT* rect) {
   if (!targetWindow || !rect || IsRectEmpty(rect)) {
     return;
   }
-  MinimizeAnimationCorrectionTai correction{};
-  if (!GetMinimizeAnimationCorrectionForWindowTai(targetWindow, &correction)) {
+  auto correction =
+      GetMinimizeAnimationCorrectionForWindowTai(targetWindow);
+  if (!correction) {
     return;
   }
   RECT before = *rect;
-  LONG transformedLeft = TransformMinimizeRectXTai(rect->left, correction);
-  LONG transformedRight = TransformMinimizeRectXTai(rect->right, correction);
+  LONG transformedLeft = TransformMinimizeRectXTai(rect->left, *correction);
+  LONG transformedRight = TransformMinimizeRectXTai(rect->right, *correction);
   if (transformedRight < transformedLeft) {
     std::swap(transformedLeft, transformedRight);
   }
@@ -5029,9 +5090,13 @@ static void CorrectMinimizeAnimationRectTai(HWND targetWindow, RECT* rect) {
   rect->right = transformedRight;
   int measuredMatchTier = 0;
   const bool usedMeasuredButtonRect =
-      TryUseMeasuredTaskbarButtonRectTai(targetWindow, rect, correction, &measuredMatchTier);
-  if (correction.hasClampXRect) {
-    ClampRectCenterXToBoundsTai(rect, correction.clampXRect);
+      TryUseMeasuredTaskbarButtonRectTai(
+          targetWindow,
+          rect,
+          *correction,
+          &measuredMatchTier);
+  if (correction->hasClampXRect) {
+    ClampRectCenterXToBoundsTai(rect, correction->clampXRect);
   }
   if (!EqualRect(&before, rect)) {
     Wh_Log(L"[MinRectFix] hwnd=%p before=(%ld,%ld,%ld,%ld) after=(%ld,%ld,%ld,%ld) mode=%s matchTier=%d offsetDip=%.2f scale=%.4f centerDip=%.2f dpiScale=%.3f measuredButtons=%zu",
@@ -5046,11 +5111,11 @@ static void CorrectMinimizeAnimationRectTai(HWND targetWindow, RECT* rect) {
            rect->bottom,
            usedMeasuredButtonRect ? L"measured" : L"transform",
            measuredMatchTier,
-           correction.layoutOffsetXDip,
-           correction.visualScale,
-           correction.scaleCenterXDip,
-           correction.rasterizationScale,
-           correction.measuredButtons.size());
+           correction->layoutOffsetXDip,
+           correction->visualScale,
+           correction->scaleCenterXDip,
+           correction->rasterizationScale,
+           correction->measuredButtons.size());
   }
 }
 static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM lParam) {
@@ -5126,8 +5191,15 @@ static void ClearMinimizeAnimationCorrectionForMonitorTai(const std::wstring& mo
   if (monitorName.empty()) {
     return;
   }
-  std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
-  g_minimizeAnimationCorrectionByMonitorNameTai.erase(monitorName);
+  std::shared_ptr<const MinimizeAnimationCorrectionTai> removedCorrection;
+  {
+    std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
+    auto it = g_minimizeAnimationCorrectionByMonitorNameTai.find(monitorName);
+    if (it != g_minimizeAnimationCorrectionByMonitorNameTai.end()) {
+      removedCorrection = std::move(it->second);
+      g_minimizeAnimationCorrectionByMonitorNameTai.erase(it);
+    }
+  }
 }
 static void SetMinimizeAnimationCorrectionForMonitorTai(
     const std::wstring& monitorName,
@@ -5136,7 +5208,7 @@ static void SetMinimizeAnimationCorrectionForMonitorTai(
     double scaleCenterXDip,
     double rasterizationScale,
     const RECT* clampXRect,
-    const std::vector<MinimizeAnimationMeasuredButtonTai>* measuredButtons) {
+    std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons) {
   if (monitorName.empty() ||
       g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
     return;
@@ -5151,54 +5223,53 @@ static void SetMinimizeAnimationCorrectionForMonitorTai(
       !std::isfinite(rasterizationScale)) {
     return;
   }
-  MinimizeAnimationCorrectionTai correction{};
-  correction.layoutOffsetXDip = layoutOffsetXDip;
-  correction.visualScale = std::clamp(visualScale, 0.01, 4.0);
-  correction.scaleCenterXDip = scaleCenterXDip;
-  correction.rasterizationScale = std::clamp(rasterizationScale, 0.25, 8.0);
-  correction.monitorRect = monitorRect;
+  auto correction = std::make_shared<MinimizeAnimationCorrectionTai>();
+  correction->layoutOffsetXDip = layoutOffsetXDip;
+  correction->visualScale = std::clamp(visualScale, 0.01, 4.0);
+  correction->scaleCenterXDip = scaleCenterXDip;
+  correction->rasterizationScale = std::clamp(rasterizationScale, 0.25, 8.0);
+  correction->monitorRect = monitorRect;
   if (clampXRect && !IsRectEmpty(clampXRect) &&
       clampXRect->right > clampXRect->left) {
-    correction.clampXRect = *clampXRect;
-    correction.hasClampXRect = true;
+    correction->clampXRect = *clampXRect;
+    correction->hasClampXRect = true;
   }
-  if (measuredButtons) {
-    correction.measuredButtons.reserve(measuredButtons->size());
-    for (const auto& button : *measuredButtons) {
-      if (IsUsableMeasuredButtonRectTai(button.visibleRectPx)) {
-        correction.measuredButtons.push_back(button);
-      }
-    }
-  }
-  bool shouldLog = true;
+  correction->measuredButtons = std::move(measuredButtons);
+  std::shared_ptr<const MinimizeAnimationCorrectionTai> previousCorrection;
   {
     std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
     auto it = g_minimizeAnimationCorrectionByMonitorNameTai.find(monitorName);
-    if (it != g_minimizeAnimationCorrectionByMonitorNameTai.end()) {
-      const auto& previous = it->second;
-      shouldLog =
-          std::abs(previous.layoutOffsetXDip - correction.layoutOffsetXDip) > 0.01 ||
-          std::abs(previous.visualScale - correction.visualScale) > 0.0001 ||
-          std::abs(previous.scaleCenterXDip - correction.scaleCenterXDip) > 0.01 ||
-          std::abs(previous.rasterizationScale - correction.rasterizationScale) > 0.0001 ||
-          previous.hasClampXRect != correction.hasClampXRect ||
-          previous.measuredButtons.size() != correction.measuredButtons.size() ||
-          !EqualRect(&previous.monitorRect, &correction.monitorRect) ||
-          (correction.hasClampXRect && !EqualRect(&previous.clampXRect, &correction.clampXRect));
+    if (it != g_minimizeAnimationCorrectionByMonitorNameTai.end() &&
+        it->second) {
+      previousCorrection = it->second;
     }
     g_minimizeAnimationCorrectionByMonitorNameTai[monitorName] = correction;
+  }
+  bool shouldLog = true;
+  if (previousCorrection) {
+    const auto& previous = *previousCorrection;
+    shouldLog =
+        std::abs(previous.layoutOffsetXDip - correction->layoutOffsetXDip) > 0.01 ||
+        std::abs(previous.visualScale - correction->visualScale) > 0.0001 ||
+        std::abs(previous.scaleCenterXDip - correction->scaleCenterXDip) > 0.01 ||
+        std::abs(previous.rasterizationScale - correction->rasterizationScale) > 0.0001 ||
+        previous.hasClampXRect != correction->hasClampXRect ||
+        previous.measuredButtons.size() != correction->measuredButtons.size() ||
+        !EqualRect(&previous.monitorRect, &correction->monitorRect) ||
+        (correction->hasClampXRect &&
+         !EqualRect(&previous.clampXRect, &correction->clampXRect));
   }
   if (shouldLog) {
     Wh_Log(L"[MinRectFix] correction monitor=%s offsetDip=%.2f scale=%.4f centerDip=%.2f dpiScale=%.3f clamp=%d [%ld..%ld] measuredButtons=%zu",
            monitorName.c_str(),
-           correction.layoutOffsetXDip,
-           correction.visualScale,
-           correction.scaleCenterXDip,
-           correction.rasterizationScale,
-           correction.hasClampXRect ? 1 : 0,
-           correction.hasClampXRect ? correction.clampXRect.left : 0,
-           correction.hasClampXRect ? correction.clampXRect.right : 0,
-           correction.measuredButtons.size());
+           correction->layoutOffsetXDip,
+           correction->visualScale,
+           correction->scaleCenterXDip,
+           correction->rasterizationScale,
+           correction->hasClampXRect ? 1 : 0,
+           correction->hasClampXRect ? correction->clampXRect.left : 0,
+           correction->hasClampXRect ? correction->clampXRect.right : 0,
+           correction->measuredButtons.size());
   }
 }
 static LRESULT WINAPI SendMessageW_HookTai(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
@@ -5231,9 +5302,11 @@ static void InitMinimizeAnimationCorrectionTai() {
 static void UninitMinimizeAnimationCorrectionTai() {
   g_minimizeAnimationCorrectionUninitializingTai.store(true, std::memory_order_release);
   g_minimizeAnimationCorrectionReadyTai.store(false, std::memory_order_release);
+  decltype(g_minimizeAnimationCorrectionByMonitorNameTai) correctionsToDestroy;
   {
     std::lock_guard<std::mutex> lock(g_minimizeAnimationCorrectionMutexTai);
-    g_minimizeAnimationCorrectionByMonitorNameTai.clear();
+    correctionsToDestroy.swap(
+        g_minimizeAnimationCorrectionByMonitorNameTai);
   }
   g_shellHookMessageTai = 0;
 }
@@ -5337,10 +5410,26 @@ std::vector<std::wstring> SplitAndTrim(PCWSTR input) {
   }
   return result;
 }
-bool RegexMatchInsensitive(const std::wstring& haystack, const std::wstring& pattern) {
+void CompileDividedAppPatternsTai(
+    std::vector<std::wstring> const& patterns) {
+  g_settings.compiledDividedAppPatterns.clear();
+  g_settings.compiledDividedAppPatterns.reserve(patterns.size());
+  for (const auto& pattern : patterns) {
+    try {
+      g_settings.compiledDividedAppPatterns.emplace_back(
+          pattern,
+          std::regex_constants::icase |
+              std::regex_constants::optimize);
+    } catch (const std::regex_error&) {
+      Wh_Log(L"Invalid DividedAppNames regex ignored: %s", pattern.c_str());
+    }
+  }
+}
+bool MatchesDividedAppPatternTai(
+    std::wstring const& value,
+    std::wregex const& pattern) {
   try {
-    std::wregex regexPattern(pattern, std::regex_constants::icase);
-    return std::regex_search(haystack, regexPattern);
+    return std::regex_search(value, pattern);
   } catch (const std::regex_error&) {
     return false;
   }
@@ -6505,8 +6594,11 @@ void ApplyMeasuredChildStyles(
           iconElementChild.Height(g_settings.userDefinedTaskbarIconSize);
           SetDividerForElement(child, tbHeightFloat, false);
           if (!observation.automationName.empty()) {
-            for (const auto& pat : g_settings.userDefinedDividedAppNames) {
-              if (RegexMatchInsensitive(observation.automationName, pat)) {
+            for (const auto& pattern :
+                 g_settings.compiledDividedAppPatterns) {
+              if (MatchesDividedAppPatternTai(
+                      observation.automationName,
+                      pattern)) {
                 SetDividerForElement(child, tbHeightFloat, true);
                 break;
               }
@@ -6848,7 +6940,7 @@ static void UpdateMinimizeAnimationCorrectionForMonitorTai(
       targetScaleCenterScreenXDip,
       rasterizationScale,
       haveMonitorRect ? &taskbarClampRect : nullptr,
-      &measuredButtons);
+      std::move(measuredButtons));
 }
 void LogDebugRect(PCWSTR label, bool ok, winrt::Windows::Foundation::Rect const& rect) {
   if (!ok) {
@@ -7146,7 +7238,7 @@ void UpdateGlobalSettings() {
   }
   // String list
   PCWSTR dividerAppNames = Wh_GetStringSetting(L"DividedAppNames");
-  g_settings.userDefinedDividedAppNames = SplitAndTrim(dividerAppNames);
+  CompileDividedAppPatternsTai(SplitAndTrim(dividerAppNames));
   if (dividerAppNames) {
     Wh_FreeStringSetting(dividerAppNames);
   }
@@ -8316,7 +8408,7 @@ void Wh_ModUninit() {
   ClearTaskbarStates();
   {
     std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
-    g_settings.userDefinedDividedAppNames.clear();
+    g_settings.compiledDividedAppPatterns.clear();
   }
   Wh_Log(L"... detached");
 }

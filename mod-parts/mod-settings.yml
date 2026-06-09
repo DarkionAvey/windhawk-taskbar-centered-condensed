@@ -128,6 +128,17 @@
   $description: Set the vertical scale of the taskbar dividers. Range 0-100. Default is 40
   $type: unsigned int percentage
 
+- AppsDividerAlignment: ""
+  $name: Choose the side on which the app dividers should appear
+  $options:
+  - left: Left side
+  - right: Right side
+
+- DividedAppNames: ""
+  $name: App names for divider placement
+  $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
+  $type: string regex
+
 - TrayAreaDivider: true
   $name: Tray area divider
   $description: When enabled, the tray area will be separated by a divider. Default is on

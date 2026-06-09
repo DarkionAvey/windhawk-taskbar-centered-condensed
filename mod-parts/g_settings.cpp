@@ -1,4 +1,5 @@
 #include <mutex>
+#include <regex>
 
 struct ModSettings {
   int userDefinedTrayTaskGap;
@@ -27,7 +28,7 @@ struct ModSettings {
   bool userDefinedStyleTrayArea;
   bool userDefinedTrayAreaDivider;
   unsigned int borderColorR, borderColorG, borderColorB;
-  std::vector<std::wstring> userDefinedDividedAppNames;
+  std::vector<std::wregex> compiledDividedAppPatterns;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
   bool userDefinedDisableCustomBlurBackground;

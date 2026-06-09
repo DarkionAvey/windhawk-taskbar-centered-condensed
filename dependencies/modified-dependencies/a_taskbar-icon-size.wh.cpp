@@ -125,6 +125,7 @@ typedef enum MONITOR_DPI_TYPE {
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
 #include <mutex>
+#include <regex>
 struct ModSettings {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
@@ -152,7 +153,7 @@ struct ModSettings {
   bool userDefinedStyleTrayArea;
   bool userDefinedTrayAreaDivider;
   unsigned int borderColorR, borderColorG, borderColorB;
-  std::vector<std::wstring> userDefinedDividedAppNames;
+  std::vector<std::wregex> compiledDividedAppPatterns;
   bool userDefinedAlignFlyoutInner;
   bool userDefinedCustomizeTaskbarBackground;
   bool userDefinedDisableCustomBlurBackground;
