@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.187
+// @version         1.5.189
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -6735,6 +6735,60 @@ static bool BuildMeasuredMinimizeAnimationButtonsTai(
   }
   return !measuredButtons->empty();
 }
+static void UpdateMinimizeAnimationCorrectionForMonitorTai(
+    const std::wstring& monitorName,
+    FrameworkElement const& taskbarFrameRepeater,
+    FrameworkElement const& rootGridTaskBar,
+    bool useVirtualTaskbarSurface,
+    double targetTaskRootOffsetXDip,
+    double targetTaskbarIslandScale,
+    double targetScaleCenterScreenXDip,
+    double rasterizationScale,
+    double scaledBackgroundLeftScreenDip,
+    double scaledBackgroundRightScreenDip) {
+  if (g_unloading ||
+      (!useVirtualTaskbarSurface &&
+       targetTaskbarIslandScale >= static_cast<double>(0.999f))) {
+    ClearMinimizeAnimationCorrectionForMonitorTai(monitorName);
+    return;
+  }
+  RECT monitorRect{};
+  RECT taskbarClampRect{};
+  const bool haveMonitorRect = GetMonitorRectByNameTai(monitorName, &monitorRect);
+  if (haveMonitorRect) {
+    taskbarClampRect.left = monitorRect.left +
+        static_cast<LONG>(std::lround(scaledBackgroundLeftScreenDip * rasterizationScale));
+    taskbarClampRect.right = monitorRect.left +
+        static_cast<LONG>(std::lround(scaledBackgroundRightScreenDip * rasterizationScale));
+    taskbarClampRect.top = monitorRect.top;
+    taskbarClampRect.bottom = monitorRect.bottom;
+    if (taskbarClampRect.right <= taskbarClampRect.left) {
+      taskbarClampRect = monitorRect;
+    }
+  }
+  std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons;
+  if (haveMonitorRect) {
+    BuildMeasuredMinimizeAnimationButtonsTai(
+        taskbarFrameRepeater,
+        rootGridTaskBar,
+        monitorRect,
+        targetTaskRootOffsetXDip,
+        targetTaskbarIslandScale,
+        targetScaleCenterScreenXDip,
+        rasterizationScale,
+        &measuredButtons);
+  }
+  // The transform remains the fallback for shell payloads that can't be
+  // matched to a freshly measured taskbar button.
+  SetMinimizeAnimationCorrectionForMonitorTai(
+      monitorName,
+      targetTaskRootOffsetXDip,
+      targetTaskbarIslandScale,
+      targetScaleCenterScreenXDip,
+      rasterizationScale,
+      haveMonitorRect ? &taskbarClampRect : nullptr,
+      &measuredButtons);
+}
 void LogDebugRect(PCWSTR label, bool ok, winrt::Windows::Foundation::Rect const& rect) {
   if (!ok) {
     Wh_Log(L"    %-18s unavailable", label);
@@ -7514,6 +7568,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       g_dimensionInvalidationGeneration.load(std::memory_order_acquire);
   const bool invalidateDimensionsThisPass =
       state.lastDimensionInvalidationGeneration != dimensionInvalidationGeneration;
+  UpdateMinimizeAnimationCorrectionForMonitorTai(
+      monitorName,
+      taskbarFrameRepeater,
+      rootGridTaskBar,
+      useVirtualTaskbarSurface,
+      static_cast<double>(targetTaskRootOffsetX),
+      static_cast<double>(targetTaskbarIslandScale),
+      static_cast<double>(targetScaleCenterScreenX),
+      static_cast<double>(rasterizationScale),
+      static_cast<double>(scaledBackgroundLeftScreen),
+      static_cast<double>(scaledBackgroundRightScreen));
   if (!forceStyleApply && !invalidateDimensionsThisPass && !g_unloading &&
       std::abs(targetOffsetXTray - systemTrayFrameGridVisual.Offset().x) <= visualOffsetTolerance &&
       childrenWidthTaskbar == state.lastChildrenWidthTaskbar &&
@@ -7763,50 +7828,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   if (!g_unloading && targetHeightPrelim <= 0) {
     Wh_Log(L"Error: targetHeightPrelim<=0");
     return false;
-  }
-   if (!g_unloading && (useVirtualTaskbarSurface || targetTaskbarIslandScale < 0.999f)) {
-    RECT monitorRectForMinRectFix{};
-    RECT taskbarClampRectForMinRectFix{};
-    const bool haveMonitorRectForMinRectFix = GetMonitorRectByNameTai(monitorName, &monitorRectForMinRectFix);
-    if (haveMonitorRectForMinRectFix) {
-      taskbarClampRectForMinRectFix.left = monitorRectForMinRectFix.left +
-          static_cast<LONG>(std::lround(static_cast<double>(scaledBackgroundLeftScreen) * rasterizationScale));
-      taskbarClampRectForMinRectFix.right = monitorRectForMinRectFix.left +
-          static_cast<LONG>(std::lround(static_cast<double>(scaledBackgroundRightScreen) * rasterizationScale));
-      taskbarClampRectForMinRectFix.top = monitorRectForMinRectFix.top;
-      taskbarClampRectForMinRectFix.bottom = monitorRectForMinRectFix.bottom;
-      if (taskbarClampRectForMinRectFix.right <= taskbarClampRectForMinRectFix.left) {
-        taskbarClampRectForMinRectFix = monitorRectForMinRectFix;
-      }
-    }
-    std::vector<MinimizeAnimationMeasuredButtonTai> measuredMinRectButtons;
-    if (haveMonitorRectForMinRectFix) {
-      BuildMeasuredMinimizeAnimationButtonsTai(
-          taskbarFrameRepeater,
-          rootGridTaskBar,
-          monitorRectForMinRectFix,
-          static_cast<double>(targetTaskRootOffsetX),
-          static_cast<double>(targetTaskbarIslandScale),
-          static_cast<double>(targetScaleCenterScreenX),
-          static_cast<double>(rasterizationScale),
-          &measuredMinRectButtons);
-    }
-    // targetTaskRootOffsetX is kept as a fallback transform only. The preferred
-    // path above uses freshly measured TaskListButton XAML rectangles, converted
-    // through the actual RootGrid offset/scale for this ApplyStyle pass, and
-    // matches them to the target HWND by dynamic window/button metadata. This
-    // avoids guessing with constants when Explorer returns a packed min-rect
-    // whose X coordinate has collapsed or drifted inside the fake-wide surface.
-    SetMinimizeAnimationCorrectionForMonitorTai(
-        monitorName,
-        static_cast<double>(targetTaskRootOffsetX),
-        static_cast<double>(targetTaskbarIslandScale),
-        static_cast<double>(targetScaleCenterScreenX),
-        static_cast<double>(rasterizationScale),
-        haveMonitorRectForMinRectFix ? &taskbarClampRectForMinRectFix : nullptr,
-        &measuredMinRectButtons);
-  } else {
-    ClearMinimizeAnimationCorrectionForMonitorTai(monitorName);
   }
   const auto clipHeight = static_cast<float>(targetHeightPrelim + ((g_settings.userDefinedFlatTaskbarBottomCorners) ? (targetHeightPrelim - g_settings.userDefinedTaskbarCornerRadius) : 0.0f));
   if (!g_unloading && clipHeight <= 0) {
