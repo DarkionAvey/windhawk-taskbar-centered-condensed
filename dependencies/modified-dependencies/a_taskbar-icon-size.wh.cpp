@@ -1709,9 +1709,8 @@ void LoadSettingsTBIconSize() {
     const int requestedHeight =
         ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight);
     int taskbarHeight = ClampInt(abs(requestedHeight), kMinTaskbarHeight, kMaxTaskbarHeight);
-    const int requestedOffsetY =
-        ReadPositiveIntSettingOrDefault(L"TaskbarOffsetY", kDefaultTaskbarOffsetY);
-    const int taskbarOffsetY = abs(requestedOffsetY);
+    const int taskbarOffsetY =
+        std::max(0, Wh_GetIntSetting(L"TaskbarOffsetY"));
     const int heightExpansion =
         ((Wh_GetIntSetting(L"FlatTaskbarBottomCorners") ||
           Wh_GetIntSetting(L"FullWidthTaskbarBackground"))

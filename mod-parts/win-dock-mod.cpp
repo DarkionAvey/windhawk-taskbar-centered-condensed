@@ -1921,8 +1921,11 @@ struct ChildLayoutObservationTai {
   FrameworkElement element{nullptr};
   winrt::hstring className;
   winrt::Windows::Foundation::Rect rect{};
+  winrt::Windows::Foundation::Rect rootRect{};
   std::wstring automationName;
   bool hasValidRect{false};
+  bool hasValidRootRect{false};
+  bool isStartButton{false};
 };
 
 struct ChildrenLayoutMeasurementTai {
@@ -1931,22 +1934,20 @@ struct ChildrenLayoutMeasurementTai {
   double leftMostEdge{0.0};
   double rightMostEdge{0.0};
   int validChildrenCount{0};
+  int visualChildCount{0};
 };
 
-ChildrenLayoutMeasurementTai MeasureValidChildren(
-    FrameworkElement const& element,
-    FrameworkElement const& boundsRelativeTo = nullptr) {
+ChildrenLayoutMeasurementTai CaptureChildrenLayoutTai(
+    FrameworkElement const& element) {
   ChildrenLayoutMeasurementTai measurement;
   if (!element) {
     return measurement;
   }
 
-  auto transformTarget = boundsRelativeTo ? boundsRelativeTo : element;
   int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+  measurement.visualChildCount = childrenCount;
   measurement.children.reserve(static_cast<size_t>(std::max(0, childrenCount)));
 
-  double minEdge = std::numeric_limits<double>::infinity();
-  double maxEdge = -std::numeric_limits<double>::infinity();
   for (int i = 0; i < childrenCount; i++) {
     ChildLayoutObservationTai observation;
     observation.element =
@@ -1957,6 +1958,8 @@ ChildrenLayoutMeasurementTai MeasureValidChildren(
     }
 
     observation.className = winrt::get_class_name(observation.element);
+    observation.isStartButton =
+        IsStartButtonElement(observation.element, observation.className);
     if (observation.className == L"Taskbar.TaskListButton") {
       try {
         auto value = observation.element.GetValue(
@@ -1968,43 +1971,122 @@ ChildrenLayoutMeasurementTai MeasureValidChildren(
       }
     }
 
+    measurement.children.push_back(std::move(observation));
+  }
+
+  return measurement;
+}
+
+bool IsValidChildLayoutRectTai(
+    winrt::Windows::Foundation::Rect const& rect) {
+  return rect.Width > 0.0 &&
+         rect.Height > 0.0 &&
+         std::isfinite(rect.X) &&
+         std::isfinite(rect.Y) &&
+         std::isfinite(rect.Width) &&
+         std::isfinite(rect.Height) &&
+         rect.X >= -kLayoutToleranceDip &&
+         rect.Y >= -kLayoutToleranceDip;
+}
+
+void RefreshChildrenLayoutMeasurementTai(
+    FrameworkElement const& boundsRelativeTo,
+    FrameworkElement const& rootBoundsRelativeTo,
+    ChildrenLayoutMeasurementTai* measurement) {
+  if (!boundsRelativeTo || !measurement) {
+    return;
+  }
+
+  measurement->totalWidth = 0.0;
+  measurement->leftMostEdge = 0.0;
+  measurement->rightMostEdge = 0.0;
+  measurement->validChildrenCount = 0;
+
+  double minEdge = std::numeric_limits<double>::infinity();
+  double maxEdge = -std::numeric_limits<double>::infinity();
+  for (auto& observation : measurement->children) {
+    observation.hasValidRect = false;
+    observation.hasValidRootRect = false;
+
     try {
-      auto transform = observation.element.TransformToVisual(transformTarget);
+      auto transform =
+          observation.element.TransformToVisual(boundsRelativeTo);
       observation.rect = transform.TransformBounds(
           winrt::Windows::Foundation::Rect(
               0,
               0,
               observation.element.ActualWidth(),
               observation.element.ActualHeight()));
-      observation.hasValidRect =
-          observation.rect.Width > 0.0 &&
-          observation.rect.Height > 0.0 &&
-          observation.rect.X >= -kLayoutToleranceDip &&
-          observation.rect.Y >= -kLayoutToleranceDip;
+      observation.hasValidRect = IsValidChildLayoutRectTai(observation.rect);
     } catch (...) {
       observation.hasValidRect = false;
     }
 
+    if (rootBoundsRelativeTo) {
+      try {
+        auto transform =
+            observation.element.TransformToVisual(rootBoundsRelativeTo);
+        observation.rootRect = transform.TransformBounds(
+            winrt::Windows::Foundation::Rect(
+                0,
+                0,
+                observation.element.ActualWidth(),
+                observation.element.ActualHeight()));
+        observation.hasValidRootRect =
+            IsValidChildLayoutRectTai(observation.rootRect);
+      } catch (...) {
+        observation.hasValidRootRect = false;
+      }
+    }
+
     if (observation.hasValidRect &&
         observation.className != L"Taskbar.AugmentedEntryPointButton") {
-      measurement.totalWidth += observation.rect.Width;
+      measurement->totalWidth += observation.rect.Width;
       minEdge = std::min(minEdge, static_cast<double>(observation.rect.X));
       maxEdge = std::max(
           maxEdge,
           static_cast<double>(observation.rect.X + observation.rect.Width));
-      measurement.validChildrenCount++;
+      measurement->validChildrenCount++;
     }
-
-    measurement.children.push_back(std::move(observation));
   }
 
-  if (measurement.validChildrenCount > 0 &&
+  if (measurement->validChildrenCount > 0 &&
       minEdge != std::numeric_limits<double>::infinity()) {
-    measurement.leftMostEdge = minEdge;
-    measurement.rightMostEdge = maxEdge;
+    measurement->leftMostEdge = minEdge;
+    measurement->rightMostEdge = maxEdge;
   }
+}
 
+ChildrenLayoutMeasurementTai MeasureValidChildren(
+    FrameworkElement const& element,
+    FrameworkElement const& boundsRelativeTo = nullptr) {
+  auto measurement = CaptureChildrenLayoutTai(element);
+  RefreshChildrenLayoutMeasurementTai(
+      boundsRelativeTo ? boundsRelativeTo : element,
+      nullptr,
+      &measurement);
   return measurement;
+}
+
+FrameworkElement FindCapturedChildByClassNameTai(
+    ChildrenLayoutMeasurementTai const& measurement,
+    PCWSTR className) {
+  for (const auto& observation : measurement.children) {
+    if (observation.className == className) {
+      return observation.element;
+    }
+  }
+  return nullptr;
+}
+
+const ChildLayoutObservationTai* FindCapturedStartButtonTai(
+    ChildrenLayoutMeasurementTai const& measurement) {
+  for (const auto& observation : measurement.children) {
+    if (observation.isStartButton) {
+      return &observation;
+    }
+  }
+  return nullptr;
 }
 
 uint64_t AppendChildStyleSignatureTai(
@@ -2131,6 +2213,7 @@ void ApplyMeasuredChildStyles(
 
 void ApplyChildStylesIfRequired(
     FrameworkElement const& container,
+    FrameworkElement const& rootBoundsRelativeTo,
     ChildrenLayoutMeasurementTai* measurement,
     TaskbarChildStyleCache* cache,
     uint64_t styleGeneration) {
@@ -2147,7 +2230,11 @@ void ApplyChildStylesIfRequired(
 
   if (ApplyTaskbarButtonSizing(*measurement)) {
     container.UpdateLayout();
-    *measurement = MeasureValidChildren(container);
+    *measurement = CaptureChildrenLayoutTai(container);
+    RefreshChildrenLayoutMeasurementTai(
+        container,
+        rootBoundsRelativeTo,
+        measurement);
     signature = GetChildStyleSignatureTai(*measurement);
   }
 
@@ -2155,39 +2242,6 @@ void ApplyChildStylesIfRequired(
   cache->generation = styleGeneration;
   cache->signature = signature;
   cache->valid = true;
-}
-
-bool TryGetStartButtonRectRelativeTo(FrameworkElement const& taskbarFrameRepeater,
-                                     FrameworkElement const& relativeTo,
-                                     winrt::Windows::Foundation::Rect& rect) {
-  if (!taskbarFrameRepeater || !relativeTo) {
-    return false;
-  }
-  int childrenCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
-  for (int i = 0; i < childrenCount; ++i) {
-    auto child = Media::VisualTreeHelper::GetChild(taskbarFrameRepeater, i).try_as<FrameworkElement>();
-    if (!child) {
-      continue;
-    }
-    auto className = winrt::get_class_name(child);
-    if (!IsStartButtonElement(child, className)) {
-      continue;
-    }
-    try {
-      auto transform = child.TransformToVisual(relativeTo);
-      rect = transform.TransformBounds(
-          winrt::Windows::Foundation::Rect(0, 0, child.ActualWidth(), child.ActualHeight()));
-      return rect.Width > 0.0 &&
-             rect.Height > 0.0 &&
-             std::isfinite(rect.X) &&
-             std::isfinite(rect.Y) &&
-             rect.X > -kLayoutToleranceDip &&
-             rect.Y > -kLayoutToleranceDip;
-    } catch (...) {
-      return false;
-    }
-  }
-  return false;
 }
 
 
@@ -2241,18 +2295,11 @@ bool SetVirtualLayoutWidth(FrameworkElement const& element, double width) {
   }
   return changed;
 }
-double CalculateDynamicTaskbarVirtualSurfaceWidth(FrameworkElement const& taskbarFrameRepeater,
-                                                 double rootWidth,
-                                                 bool isOverflowing) {
+double CalculateDynamicTaskbarVirtualSurfaceWidth(int visualChildCount,
+                                                  double rootWidth,
+                                                  bool isOverflowing) {
   if (g_unloading || !std::isfinite(rootWidth) || rootWidth <= 0.0) {
     return rootWidth;
-  }
-
-  int visualChildCount = 0;
-  try {
-    visualChildCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
-  } catch (...) {
-    visualChildCount = 0;
   }
 
   const double buttonSize = std::max<double>(
@@ -2332,24 +2379,6 @@ constexpr bool kDebugTaskbarGeometry = true;
 constexpr int64_t kDebugTaskbarGeometryMinIntervalMs = 250;
 std::atomic<int64_t> g_lastTaskbarGeometryDebugLogMs = 0;
 
-FrameworkElement FindStartButtonElement(FrameworkElement const& taskbarFrameRepeater) {
-  if (!taskbarFrameRepeater) {
-    return nullptr;
-  }
-  int childrenCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
-  for (int i = 0; i < childrenCount; ++i) {
-    auto child = Media::VisualTreeHelper::GetChild(taskbarFrameRepeater, i).try_as<FrameworkElement>();
-    if (!child) {
-      continue;
-    }
-    auto className = winrt::get_class_name(child);
-    if (IsStartButtonElement(child, className)) {
-      return child;
-    }
-  }
-  return nullptr;
-}
-
 bool ShouldLogTaskbarGeometry(bool interesting) {
   if constexpr (!kDebugTaskbarGeometry) {
     return false;
@@ -2386,15 +2415,14 @@ bool TryGetDebugBoundsRelativeTo(FrameworkElement const& element,
   }
 }
 static bool BuildMeasuredMinimizeAnimationButtonsTai(
-    FrameworkElement const& taskbarFrameRepeater,
-    FrameworkElement const& rootGridTaskBar,
+    ChildrenLayoutMeasurementTai const& taskbarChildrenMeasurement,
     const RECT& monitorRect,
     double targetTaskRootOffsetXDip,
     double targetTaskbarIslandScale,
     double targetScaleCenterScreenXDip,
     double rasterizationScale,
     std::vector<MinimizeAnimationMeasuredButtonTai>* measuredButtons) {
-  if (!taskbarFrameRepeater || !rootGridTaskBar || !measuredButtons ||
+  if (!measuredButtons ||
       IsRectEmpty(&monitorRect) ||
       !std::isfinite(targetTaskRootOffsetXDip) ||
       !std::isfinite(targetTaskbarIslandScale) ||
@@ -2405,48 +2433,15 @@ static bool BuildMeasuredMinimizeAnimationButtonsTai(
   }
 
   measuredButtons->clear();
+  measuredButtons->reserve(taskbarChildrenMeasurement.children.size());
 
-  int childrenCount = 0;
-  try {
-    childrenCount = Media::VisualTreeHelper::GetChildrenCount(taskbarFrameRepeater);
-  } catch (...) {
-    return false;
-  }
-
-  measuredButtons->reserve(static_cast<size_t>(std::max(0, childrenCount)));
-
-  for (int i = 0; i < childrenCount; ++i) {
-    FrameworkElement child = nullptr;
-    try {
-      child = Media::VisualTreeHelper::GetChild(taskbarFrameRepeater, i).try_as<FrameworkElement>();
-    } catch (...) {
-      child = nullptr;
-    }
-
-    if (!child) {
+  for (const auto& observation : taskbarChildrenMeasurement.children) {
+    if (observation.className != L"Taskbar.TaskListButton" ||
+        !observation.hasValidRootRect) {
       continue;
     }
 
-    winrt::hstring className;
-    try {
-      className = winrt::get_class_name(child);
-    } catch (...) {
-      continue;
-    }
-
-    if (className != L"Taskbar.TaskListButton") {
-      continue;
-    }
-
-    winrt::Windows::Foundation::Rect layoutRect{};
-    if (!TryGetDebugBoundsRelativeTo(child, rootGridTaskBar, layoutRect) ||
-        layoutRect.Width <= 0.0 ||
-        layoutRect.Height <= 0.0 ||
-        layoutRect.X < -kLayoutToleranceDip ||
-        layoutRect.Y < -kLayoutToleranceDip) {
-      continue;
-    }
-
+    auto const& layoutRect = observation.rootRect;
     const double unscaledLeftDip = layoutRect.X + targetTaskRootOffsetXDip;
     const double unscaledRightDip = layoutRect.X + layoutRect.Width + targetTaskRootOffsetXDip;
     const double visibleLeftDip = ApplyScaleToScreenX(
@@ -2475,15 +2470,9 @@ static bool BuildMeasuredMinimizeAnimationButtonsTai(
       continue;
     }
 
-    std::wstring automationName;
-    try {
-      auto value = child.GetValue(Automation::AutomationProperties::NameProperty());
-      automationName = winrt::unbox_value_or<winrt::hstring>(value, L"").c_str();
-    } catch (...) {
-      automationName.clear();
-    }
-
-    measuredButtons->push_back(MinimizeAnimationMeasuredButtonTai{visibleRectPx, TrimTai(automationName)});
+    measuredButtons->push_back(MinimizeAnimationMeasuredButtonTai{
+        visibleRectPx,
+        TrimTai(observation.automationName)});
   }
 
   return !measuredButtons->empty();
@@ -2491,8 +2480,7 @@ static bool BuildMeasuredMinimizeAnimationButtonsTai(
 
 static void UpdateMinimizeAnimationCorrectionForMonitorTai(
     const std::wstring& monitorName,
-    FrameworkElement const& taskbarFrameRepeater,
-    FrameworkElement const& rootGridTaskBar,
+    ChildrenLayoutMeasurementTai const& taskbarChildrenMeasurement,
     bool useVirtualTaskbarSurface,
     double targetTaskRootOffsetXDip,
     double targetTaskbarIslandScale,
@@ -2525,8 +2513,7 @@ static void UpdateMinimizeAnimationCorrectionForMonitorTai(
   std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons;
   if (haveMonitorRect) {
     BuildMeasuredMinimizeAnimationButtonsTai(
-        taskbarFrameRepeater,
-        rootGridTaskBar,
+        taskbarChildrenMeasurement,
         monitorRect,
         targetTaskRootOffsetXDip,
         targetTaskbarIslandScale,
@@ -2782,9 +2769,12 @@ void UpdateGlobalSettings() {
   // Gaps & Padding (non-negative)
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : std::max(0, getInt(L"TrayTaskGap"));
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : std::max(0, getInt(L"TaskbarBackgroundHorizontalPadding"));
-  // Offset Y (negative up, zero if flat or unloading)
-  int offsetY = abs(getInt(L"TaskbarOffsetY"));
-  g_settings.userDefinedTaskbarOffsetY = (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners) ? 0 : -offsetY;
+  // Offset Y (negative up; non-positive settings sit on the screen edge)
+  const int offsetY = std::max(0, getInt(L"TaskbarOffsetY"));
+  g_settings.userDefinedTaskbarOffsetY =
+      (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners)
+          ? 0
+          : -offsetY;
   // Height & Sizes
   int h = ClampInt(abs(ReadPositiveIntSettingOrDefault(L"TaskbarHeight", kDefaultTaskbarHeight)),
                    kMinTaskbarHeight,
@@ -3029,8 +3019,14 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Failed to find StackPanel in itemsPresenter");
     return false;
   }
+  auto taskbarChildrenMeasurement =
+      CaptureChildrenLayoutTai(taskbarFrameRepeater);
   bool widgetPresent = IsTaskbarWidgetsEnabled();
-  auto widgetElement = widgetPresent ? FindChildByClassName(taskbarFrameRepeater, L"Taskbar.AugmentedEntryPointButton") : nullptr;
+  auto widgetElement = widgetPresent
+      ? FindCapturedChildByClassNameTai(
+            taskbarChildrenMeasurement,
+            L"Taskbar.AugmentedEntryPointButton")
+      : nullptr;
   auto widgetMainView = widgetElement ? FindChildByName(widgetElement, L"ExperienceToggleButtonRootPanel") : widgetElement;
   widgetPresent = widgetPresent && widgetMainView != nullptr;
   auto widgetElementWidth = widgetPresent && widgetMainView ? widgetMainView.ActualWidth() : 0;
@@ -3049,7 +3045,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: widgetElementInnerChild && widgetElementVisibleHeight<=0");
     return false;
   }
-  auto overflowButton = FindChildByClassName(taskbarFrameRepeater, L"Taskbar.OverflowToggleButton");
+  auto overflowButton = FindCapturedChildByClassNameTai(
+      taskbarChildrenMeasurement,
+      L"Taskbar.OverflowToggleButton");
   bool isOverflowing = overflowButton != nullptr && !IsWeirdFrameworkElement(overflowButton);
   double rootWidth = xamlRootContent.ActualWidth();
   state.lastRootWidth = static_cast<float>(rootWidth);
@@ -3061,9 +3059,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   }
    const double taskbarVirtualSurfaceWidth = g_unloading
       ? rootWidth
-      : CalculateDynamicTaskbarVirtualSurfaceWidth(taskbarFrameRepeater,
-                                                  rootWidth,
-                                                  isOverflowing);
+      : CalculateDynamicTaskbarVirtualSurfaceWidth(
+            taskbarChildrenMeasurement.visualChildCount,
+            rootWidth,
+            isOverflowing);
   const bool useVirtualTaskbarSurface =
       !g_unloading &&
       std::isfinite(taskbarVirtualSurfaceWidth) &&
@@ -3094,10 +3093,13 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   double startButtonHeight = 0.0;
   const uint64_t childStyleGeneration =
       g_taskbarChildStyleGeneration.load(std::memory_order_acquire);
-  auto taskbarChildrenMeasurement =
-      MeasureValidChildren(taskbarFrameRepeater);
+  RefreshChildrenLayoutMeasurementTai(
+      taskbarFrameRepeater,
+      rootGridTaskBar,
+      &taskbarChildrenMeasurement);
   ApplyChildStylesIfRequired(
       taskbarFrameRepeater,
+      rootGridTaskBar,
       &taskbarChildrenMeasurement,
       &state.taskbarChildStyleCache,
       childStyleGeneration);
@@ -3107,8 +3109,13 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   taskbarLeftEdge = taskbarChildrenMeasurement.leftMostEdge;
   taskbarRightEdge = taskbarChildrenMeasurement.rightMostEdge;
   winrt::Windows::Foundation::Rect startButtonAnchorRect{};
-  auto startButtonElement = FindStartButtonElement(taskbarFrameRepeater);
-  if (TryGetStartButtonRectRelativeTo(taskbarFrameRepeater, rootGridTaskBar, startButtonAnchorRect)) {
+  auto startButtonObservation =
+      FindCapturedStartButtonTai(taskbarChildrenMeasurement);
+  auto startButtonElement = startButtonObservation
+      ? startButtonObservation->element
+      : nullptr;
+  if (startButtonObservation && startButtonObservation->hasValidRootRect) {
+    startButtonAnchorRect = startButtonObservation->rootRect;
     startButtonLeft = startButtonAnchorRect.X;
     startButtonTop = startButtonAnchorRect.Y;
     startButtonWidth = startButtonAnchorRect.Width;
@@ -3169,6 +3176,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       MeasureValidChildren(systemTrayFrameGrid);
   ApplyChildStylesIfRequired(
       systemTrayFrameGrid,
+      nullptr,
       &trayChildrenMeasurement,
       &state.trayChildStyleCache,
       childStyleGeneration);
@@ -3362,8 +3370,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       state.lastDimensionInvalidationGeneration != dimensionInvalidationGeneration;
   UpdateMinimizeAnimationCorrectionForMonitorTai(
       monitorName,
-      taskbarFrameRepeater,
-      rootGridTaskBar,
+      taskbarChildrenMeasurement,
       useVirtualTaskbarSurface,
       static_cast<double>(targetTaskRootOffsetX),
       static_cast<double>(targetTaskbarIslandScale),
@@ -3450,7 +3457,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       ApplyScaleToScreenX(unscaledStartButtonScreenX,
                           targetScaleCenterScreenX,
                           targetTaskbarIslandScale));
-  auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY < 0 ? (userDefinedTaskbarOffsetY * 2) : 0));
+  auto heightValue = (g_settings.userDefinedTaskbarHeight + abs(userDefinedTaskbarOffsetY * 2));
   if (heightValue < g_settings.userDefinedTaskbarHeight / 2) {
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
@@ -3689,7 +3696,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         // coordinates so the island background and task/tray content stay in
         // the same coordinate system.
         const float offsetXRect = snapPx(targetBackgroundLeftScreen - targetTaskRootOffsetX);
-        const float newOffsetYRect = snapPx(userDefinedTaskbarOffsetY <= 0 ? static_cast<float>(abs(userDefinedTaskbarOffsetY)) : 0.0f);
+        const float newOffsetYRect = snapPx(static_cast<float>(abs(userDefinedTaskbarOffsetY)) );
         const bool backgroundShapeTargetChanged =
             invalidateDimensionsThisPass ||
             std::abs(state.lastBackgroundShapeTargetWidth - targetWidthRect) > visualOffsetTolerance ||
