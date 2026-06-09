@@ -614,6 +614,7 @@ ParsedWindhawkColorSetting ParseWindhawkColorSetting(std::wstring value, winrt::
 }
 
 bool ShouldUseSolidTaskbarBackgroundFill() {
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   return g_settings.userDefinedDisableCustomBlurBackground ||
          g_settings.userDefinedTaskbarBackgroundTint >= 100 ||
          g_settings.userDefinedTaskbarBackgroundBlurAmount == 0 ||
@@ -665,6 +666,7 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
 
 void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
   if (!backgroundFillChild) return;
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
   if (!rectangle) {
     Wh_Log(L"WindhawkBlur: BackgroundFill is not a Rectangle");

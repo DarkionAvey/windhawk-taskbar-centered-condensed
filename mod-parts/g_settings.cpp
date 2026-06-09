@@ -1,4 +1,6 @@
-struct {
+#include <mutex>
+
+struct ModSettings {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
   unsigned int userDefinedTaskbarOffsetY;
@@ -32,4 +34,12 @@ struct {
   double userDefinedAppsDividerThickness;
   float userDefinedAppsDividerVerticalScale{0.7};
   bool userDefinedDividerLeftAligned=false;
-} g_settings;
+};
+
+ModSettings g_settings;
+std::recursive_mutex g_settingsMutex;
+
+bool GetUserDefinedAlignFlyoutInner() {
+  std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
+  return g_settings.userDefinedAlignFlyoutInner;
+}

@@ -124,7 +124,8 @@ typedef enum MONITOR_DPI_TYPE {
     MDT_RAW_DPI = 2,
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
-struct {
+#include <mutex>
+struct ModSettings {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
   unsigned int userDefinedTaskbarOffsetY;
@@ -158,8 +159,18 @@ struct {
   double userDefinedAppsDividerThickness;
   float userDefinedAppsDividerVerticalScale{0.7};
   bool userDefinedDividerLeftAligned=false;
-} g_settings;
+};
+ModSettings g_settings;
+std::recursive_mutex g_settingsMutex;
+bool GetUserDefinedAlignFlyoutInner() {
+  std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
+  return g_settings.userDefinedAlignFlyoutInner;
+}
+#include <memory>
+#include <mutex>
+#include <vector>
 struct TaskbarState {
+  std::recursive_mutex mutex;
   std::chrono::steady_clock::time_point lastApplyStyleTime{};
   struct Data {
     int childrenCount;
@@ -216,8 +227,67 @@ struct TaskbarState {
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
+  uint64_t lastDimensionInvalidationGeneration{0};
 };
-static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
+struct TaskbarFlyoutStateSnapshot {
+  float lastStartButtonXCalculated{0.0f};
+  float lastRootWidth{0.0f};
+  float lastTargetWidth{0.0f};
+  float lastLeftMostEdgeTray{0.0f};
+  int lastRightMostEdgeTray{0};
+};
+static std::mutex g_taskbarStatesMutex;
+static std::unordered_map<std::wstring, std::shared_ptr<TaskbarState>> g_taskbarStates;
+static std::atomic<uint64_t> g_dimensionInvalidationGeneration{1};
+std::shared_ptr<TaskbarState> GetOrCreateTaskbarState(const std::wstring& monitorName) {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  auto& state = g_taskbarStates[monitorName];
+  if (!state) {
+    state = std::make_shared<TaskbarState>();
+  }
+  return state;
+}
+std::vector<std::shared_ptr<TaskbarState>> GetTaskbarStatesSnapshot() {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  std::vector<std::shared_ptr<TaskbarState>> states;
+  states.reserve(g_taskbarStates.size());
+  for (const auto& [monitorName, state] : g_taskbarStates) {
+    if (state) {
+      states.push_back(state);
+    }
+  }
+  return states;
+}
+bool TryGetTaskbarFlyoutStateSnapshot(
+    const std::wstring& monitorName,
+    TaskbarFlyoutStateSnapshot* snapshot) {
+  if (!snapshot) {
+    return false;
+  }
+  std::shared_ptr<TaskbarState> state;
+  {
+    std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+    auto it = g_taskbarStates.find(monitorName);
+    if (it == g_taskbarStates.end() || !it->second) {
+      return false;
+    }
+    state = it->second;
+  }
+  std::lock_guard<std::recursive_mutex> lock(state->mutex);
+  snapshot->lastStartButtonXCalculated = state->lastStartButtonXCalculated;
+  snapshot->lastRootWidth = state->lastRootWidth;
+  snapshot->lastTargetWidth = state->lastTargetWidth;
+  snapshot->lastLeftMostEdgeTray = state->lastLeftMostEdgeTray;
+  snapshot->lastRightMostEdgeTray = state->lastRightMostEdgeTray;
+  return true;
+}
+void ClearTaskbarStates() {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  g_taskbarStates.clear();
+}
+void RequestTaskbarDimensionInvalidation() {
+  g_dimensionInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+}
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
@@ -227,7 +297,6 @@ extern std::atomic<int> g_high_priority_dispatch_passes;
 void RequestTaskbarButtonSizeRelayout();
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
-bool g_invalidateDimensions =true;
 int g_lastRecordedStartMenuWidth=0;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
@@ -249,6 +318,7 @@ bool IsStartMenuOrbLeftAligned() {
     return false;
 }
 int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     if (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners ||
         g_settings.userDefinedFullWidthTaskbarBackground) {
         return 0;
@@ -260,6 +330,7 @@ int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
     return static_cast<int>((-offsetY * dpiScaleY) + 0.5f);
 }
 int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
     if (taskbarHeight <= 0) {
         taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : kSystemMediumTaskbarButtonSize;
@@ -267,6 +338,7 @@ int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
     return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
 }
 int GetFlyoutInnerPaddingPx(float dpiScale) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     if (dpiScale <= 0.0f) {
         dpiScale = 1.0f;
     }

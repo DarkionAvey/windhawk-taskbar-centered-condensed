@@ -1,5 +1,6 @@
 float dpiScale = monitorDpiX / 96.0f;
 float dpiScaleY = monitorDpiY / 96.0f;
+const bool alignFlyoutInner = GetUserDefinedAlignFlyoutInner();
 float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
 float absRootWidth = taskbarState.lastRootWidth * dpiScale;
 float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
@@ -19,7 +20,7 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_startMenuWnd = hwnd;
     g_startMenuOriginalWidth = cx;
-    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (g_settings.userDefinedAlignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
+    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (alignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
     x = std::min(0, std::max(static_cast<int>(((-absRootWidth + startMenuWidthPx) / 2.0f) + flyoutInnerPaddingPx), x));
      if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
@@ -36,7 +37,7 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_searchMenuWnd = hwnd;
     g_searchMenuOriginalX = x;
-    x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
+    x = static_cast<int>(absStartX - (alignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
     if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
@@ -53,7 +54,7 @@ if (target == DwmTarget::StartMenu) {
     return original();
   }
   if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
+    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (alignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
   } else {
     x = static_cast<int>(absRootWidth - cx);

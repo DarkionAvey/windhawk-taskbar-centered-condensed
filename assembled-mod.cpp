@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.183
+// @version         1.5.185
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -320,7 +320,8 @@ typedef enum MONITOR_DPI_TYPE {
     MDT_RAW_DPI = 2,
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
-struct {
+#include <mutex>
+struct ModSettings {
   int userDefinedTrayTaskGap;
   int userDefinedTaskbarBackgroundHorizontalPadding;
   unsigned int userDefinedTaskbarOffsetY;
@@ -354,8 +355,18 @@ struct {
   double userDefinedAppsDividerThickness;
   float userDefinedAppsDividerVerticalScale{0.7};
   bool userDefinedDividerLeftAligned=false;
-} g_settings;
+};
+ModSettings g_settings;
+std::recursive_mutex g_settingsMutex;
+bool GetUserDefinedAlignFlyoutInner() {
+  std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
+  return g_settings.userDefinedAlignFlyoutInner;
+}
+#include <memory>
+#include <mutex>
+#include <vector>
 struct TaskbarState {
+  std::recursive_mutex mutex;
   std::chrono::steady_clock::time_point lastApplyStyleTime{};
   struct Data {
     int childrenCount;
@@ -412,8 +423,67 @@ struct TaskbarState {
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
+  uint64_t lastDimensionInvalidationGeneration{0};
 };
-static std::unordered_map<std::wstring, TaskbarState> g_taskbarStates;
+struct TaskbarFlyoutStateSnapshot {
+  float lastStartButtonXCalculated{0.0f};
+  float lastRootWidth{0.0f};
+  float lastTargetWidth{0.0f};
+  float lastLeftMostEdgeTray{0.0f};
+  int lastRightMostEdgeTray{0};
+};
+static std::mutex g_taskbarStatesMutex;
+static std::unordered_map<std::wstring, std::shared_ptr<TaskbarState>> g_taskbarStates;
+static std::atomic<uint64_t> g_dimensionInvalidationGeneration{1};
+std::shared_ptr<TaskbarState> GetOrCreateTaskbarState(const std::wstring& monitorName) {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  auto& state = g_taskbarStates[monitorName];
+  if (!state) {
+    state = std::make_shared<TaskbarState>();
+  }
+  return state;
+}
+std::vector<std::shared_ptr<TaskbarState>> GetTaskbarStatesSnapshot() {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  std::vector<std::shared_ptr<TaskbarState>> states;
+  states.reserve(g_taskbarStates.size());
+  for (const auto& [monitorName, state] : g_taskbarStates) {
+    if (state) {
+      states.push_back(state);
+    }
+  }
+  return states;
+}
+bool TryGetTaskbarFlyoutStateSnapshot(
+    const std::wstring& monitorName,
+    TaskbarFlyoutStateSnapshot* snapshot) {
+  if (!snapshot) {
+    return false;
+  }
+  std::shared_ptr<TaskbarState> state;
+  {
+    std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+    auto it = g_taskbarStates.find(monitorName);
+    if (it == g_taskbarStates.end() || !it->second) {
+      return false;
+    }
+    state = it->second;
+  }
+  std::lock_guard<std::recursive_mutex> lock(state->mutex);
+  snapshot->lastStartButtonXCalculated = state->lastStartButtonXCalculated;
+  snapshot->lastRootWidth = state->lastRootWidth;
+  snapshot->lastTargetWidth = state->lastTargetWidth;
+  snapshot->lastLeftMostEdgeTray = state->lastLeftMostEdgeTray;
+  snapshot->lastRightMostEdgeTray = state->lastRightMostEdgeTray;
+  return true;
+}
+void ClearTaskbarStates() {
+  std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
+  g_taskbarStates.clear();
+}
+void RequestTaskbarDimensionInvalidation() {
+  g_dimensionInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+}
 void ApplySettingsDebounced(int delayMs);
 void ApplySettingsDebounced();
 void ApplySettingsFromTaskbarThreadIfRequired();
@@ -423,7 +493,6 @@ extern std::atomic<int> g_high_priority_dispatch_passes;
 void RequestTaskbarButtonSizeRelayout();
 void ArmInitialExplorerStyleApplyDelay();
 void ScheduleInitialExplorerStyleApply();
-bool g_invalidateDimensions =true;
 int g_lastRecordedStartMenuWidth=0;
 std::atomic<bool> g_already_requested_debounce_initializing = false;
 STDAPI GetDpiForMonitor(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT* dpiX, UINT* dpiY);
@@ -445,6 +514,7 @@ bool IsStartMenuOrbLeftAligned() {
     return false;
 }
 int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     if (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners ||
         g_settings.userDefinedFullWidthTaskbarBackground) {
         return 0;
@@ -456,6 +526,7 @@ int GetFlyoutTaskbarBottomGapPx(float dpiScaleY) {
     return static_cast<int>((-offsetY * dpiScaleY) + 0.5f);
 }
 int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     int taskbarHeight = static_cast<int>(g_settings.userDefinedTaskbarHeight);
     if (taskbarHeight <= 0) {
         taskbarHeight = g_taskbarHeight > 0 ? g_taskbarHeight : kSystemMediumTaskbarButtonSize;
@@ -463,6 +534,7 @@ int GetFlyoutTaskbarHeightPx(float dpiScaleY) {
     return std::max(1, static_cast<int>((taskbarHeight * dpiScaleY) + 0.5f));
 }
 int GetFlyoutInnerPaddingPx(float dpiScale) {
+    std::lock_guard<std::recursive_mutex> lock(g_settingsMutex);
     if (dpiScale <= 0.0f) {
         dpiScale = 1.0f;
     }
@@ -3155,7 +3227,7 @@ void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
                if (TrayUI__OnDPIChanged_WithoutArgs_Original) {
                    TrayUI__OnDPIChanged_WithoutArgs_Original(pThis);
                }
-               g_invalidateDimensions = true;
+               RequestTaskbarDimensionInvalidation();
             }
 bool HookTaskbarDllSymbolsStartButtonPosition() {
     bool loadedTaskbarDllForHooking = false;
@@ -3430,11 +3502,10 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     };
     GetMonitorInfo(monitor, &monitorInfo);
 auto monitorName = GetMonitorName(monitor);
-auto iterationTbStates = g_taskbarStates.find(monitorName);
-if (iterationTbStates == g_taskbarStates.end()) {
+TaskbarFlyoutStateSnapshot taskbarState;
+if (!TryGetTaskbarFlyoutStateSnapshot(monitorName, &taskbarState)) {
     return original();
 }
-TaskbarState& taskbarState = iterationTbStates->second;
     RECT targetRect;
     if (!GetWindowRect(hwnd, &targetRect)) {
         return original();
@@ -3445,6 +3516,7 @@ TaskbarState& taskbarState = iterationTbStates->second;
     int cy = targetRect.bottom - targetRect.top;
     float dpiScale = monitorDpiX / 96.0f;
 float dpiScaleY = monitorDpiY / 96.0f;
+const bool alignFlyoutInner = GetUserDefinedAlignFlyoutInner();
 float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
 float absRootWidth = taskbarState.lastRootWidth * dpiScale;
 float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
@@ -3464,7 +3536,7 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_startMenuWnd = hwnd;
     g_startMenuOriginalWidth = cx;
-    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (g_settings.userDefinedAlignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
+    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (alignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
     x = std::min(0, std::max(static_cast<int>(((-absRootWidth + startMenuWidthPx) / 2.0f) + flyoutInnerPaddingPx), x));
      if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
@@ -3481,7 +3553,7 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_searchMenuWnd = hwnd;
     g_searchMenuOriginalX = x;
-    x = static_cast<int>(absStartX - (g_settings.userDefinedAlignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
+    x = static_cast<int>(absStartX - (alignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
     if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
@@ -3497,7 +3569,7 @@ if (target == DwmTarget::StartMenu) {
     return original();
   }
   if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (g_settings.userDefinedAlignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
+    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (alignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
     x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
   } else {
     x = static_cast<int>(absRootWidth - cx);
@@ -4413,6 +4485,7 @@ ParsedWindhawkColorSetting ParseWindhawkColorSetting(std::wstring value, winrt::
   return {fallbackColor, L""};
 }
 bool ShouldUseSolidTaskbarBackgroundFill() {
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   return g_settings.userDefinedDisableCustomBlurBackground ||
          g_settings.userDefinedTaskbarBackgroundTint >= 100 ||
          g_settings.userDefinedTaskbarBackgroundBlurAmount == 0 ||
@@ -4459,6 +4532,7 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
 }
 void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
   if (!backgroundFillChild) return;
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
   if (!rectangle) {
     Wh_Log(L"WindhawkBlur: BackgroundFill is not a Rectangle");
@@ -6862,6 +6936,7 @@ void LogTaskbarGeometryProbe(PCWSTR reason,
   Wh_Log(L"[TBGEOM] ===== end =====");
 }
 void UpdateGlobalSettings() {
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   auto getInt = [&](PCWSTR key) { return Wh_GetIntSetting(key); };
   auto clamp = [](int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; };
   // Booleans
@@ -6961,6 +7036,7 @@ void UpdateGlobalSettings() {
   }
 }
 bool HasInvalidSettings() {
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
   if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
@@ -6982,6 +7058,7 @@ bool HasInvalidSettings() {
   return false;
 }
 void LogAllSettings() {
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   Wh_Log(L"setting %d %s", g_settings.userDefinedTrayTaskGap, L"userDefinedTrayTaskGap");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarBackgroundHorizontalPadding, L"userDefinedTaskbarBackgroundHorizontalPadding");
   Wh_Log(L"setting %d %s", g_settings.userDefinedTaskbarOffsetY, L"userDefinedTaskbarOffsetY");
@@ -7019,7 +7096,14 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     return false;
   }
   try {
-  auto& state = g_taskbarStates[monitorName];
+  std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
+  auto stateHandle = GetOrCreateTaskbarState(monitorName);
+  if (!stateHandle) {
+    Wh_Log(L"Failed to get taskbar state for monitor: %s", monitorName.c_str());
+    return false;
+  }
+  std::lock_guard<std::recursive_mutex> stateLock(stateHandle->mutex);
+  auto& state = *stateHandle;
   Wh_Log(L"ApplyStyle for monitor: %s", monitorName.c_str());
   g_scheduled_low_priority_update = false;
   bool forceStyleApply = false;
@@ -7057,7 +7141,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Taskbar display geometry changed; invalidating cached layout targets");
     ResetAnimationTargetCache(state);
     forceStyleApply = true;
-    g_invalidateDimensions = true;
+    RequestTaskbarDimensionInvalidation();
     if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
       ArmStyleFollowupPasses(hTaskbarWnd, true);
     }
@@ -7428,7 +7512,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       !state.hasLastTargetTaskbarIslandScale ||
       std::abs(state.lastTargetTaskbarIslandScale - targetTaskbarIslandScale) > 0.001f ||
       std::abs(state.lastTaskbarIslandScaleCenterX - targetScaleCenterScreenX) > visualOffsetTolerance;
-  if (!forceStyleApply && !g_invalidateDimensions && !g_unloading &&
+  const uint64_t dimensionInvalidationGeneration =
+      g_dimensionInvalidationGeneration.load(std::memory_order_acquire);
+  const bool invalidateDimensionsThisPass =
+      state.lastDimensionInvalidationGeneration != dimensionInvalidationGeneration;
+  if (!forceStyleApply && !invalidateDimensionsThisPass && !g_unloading &&
       std::abs(targetOffsetXTray - systemTrayFrameGridVisual.Offset().x) <= visualOffsetTolerance &&
       childrenWidthTaskbar == state.lastChildrenWidthTaskbar &&
       trayFrameWidth == state.lastTrayFrameWidth &&
@@ -7448,7 +7536,6 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   } else {
     state.lastTrayFrameWidth = static_cast<unsigned int>(trayFrameWidth);
   }
-  const bool invalidateDimensionsThisPass = g_invalidateDimensions;
   signed int userDefinedTaskbarOffsetY = (g_settings.userDefinedFlatTaskbarBottomCorners || g_settings.userDefinedFullWidthTaskbarBackground) ? 0 : g_settings.userDefinedTaskbarOffsetY;
   if (ShouldLogTaskbarGeometry(isOverflowing || taskbarLayoutIsEdgeClamped || taskbarLayoutIsTrayConstrained || useStableStartButtonAnchor || targetTaskbarIslandScale < 0.999f || forceStyleApply)) {
     Wh_Log(L"[TBGEOM] virtualSurface=%d virtualWidth=%.2f actualRepeaterWidth=%.2f layoutSurfaceWidth=%.2f overflowSuppressed=%d",
@@ -7513,8 +7600,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     Wh_Log(L"Error: heightValue<g_settings.userDefinedTaskbarHeight/2");
     return false;
   }
-  if (g_invalidateDimensions) {
-    g_invalidateDimensions = false;
+  if (invalidateDimensionsThisPass) {
     if (g_settings.userDefinedTaskbarHeight <= 0) {
       Wh_Log(L"Invalid size detected! Panel Height");
       return false;
@@ -7537,6 +7623,7 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
                                      backgroundFillParent,
                                      backgroundFillChild,
                                      taskbarVirtualSurfaceWidth);
+    state.lastDimensionInvalidationGeneration = dimensionInvalidationGeneration;
   }
   // Any previous version of the mod may have left a horizontal Offset
   // animation on the repeater. Clear only X so RootGrid owns task-area X
@@ -7902,19 +7989,29 @@ void ApplySettings(HWND hTaskbarWnd) {
   }
 }
 void RefreshSettings() {
-  g_invalidateDimensions = true;
-  const unsigned int oldTaskbarButtonSize = g_settings.userDefinedTaskbarButtonSize;
+  unsigned int oldTaskbarButtonSize;
+  {
+    std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
+    oldTaskbarButtonSize = g_settings.userDefinedTaskbarButtonSize;
+  }
   Wh_ModSettingsChangedTBIconSize();
   Wh_ModSettingsChangedStartButtonPosition();
   UpdateGlobalSettings();
+  RequestTaskbarDimensionInvalidation();
+  unsigned int newTaskbarButtonSize;
+  {
+    std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
+    newTaskbarButtonSize = g_settings.userDefinedTaskbarButtonSize;
+  }
   if (!g_unloading && oldTaskbarButtonSize > 0 &&
-      oldTaskbarButtonSize != g_settings.userDefinedTaskbarButtonSize) {
+      oldTaskbarButtonSize != newTaskbarButtonSize) {
     RequestTaskbarButtonSizeRelayout();
   }
 }
 void ResetGlobalVars() {
-  g_invalidateDimensions = true;
-  for (auto& [key, state] : g_taskbarStates) {
+  for (const auto& stateHandle : GetTaskbarStatesSnapshot()) {
+    std::lock_guard<std::recursive_mutex> stateLock(stateHandle->mutex);
+    auto& state = *stateHandle;
     state.lastTaskbarData.childrenCount = 0;
     state.lastTaskbarData.rightMostEdge = 0;
     // state.lastTaskbarData.childrenWidth = 0;
@@ -7922,6 +8019,7 @@ void ResetGlobalVars() {
     // state.lastTrayFrameWidth = 0;
     state.wasOverflowing = false;
   }
+  RequestTaskbarDimensionInvalidation();
 }
 bool g_PartialMode = false;
 void Wh_ModSettingsChanged() {
@@ -7931,7 +8029,7 @@ void Wh_ModSettingsChanged() {
   Wh_Log(L"Settings Changed");
   ResetGlobalVars();
   RefreshSettings();
-  ApplySettingsFromTaskbarThread();
+  ApplySettings(FindCurrentProcessTaskbarWnd());
 }
 bool IsExplorer() {
   wchar_t processPath[MAX_PATH];
@@ -8093,7 +8191,10 @@ void Wh_ModUninit() {
   CleanupDebounce();
   Wh_ModUninitTBIconSize();
   ResetGlobalVars();
-  g_taskbarStates.clear();
-  g_settings.userDefinedDividedAppNames.clear();
+  ClearTaskbarStates();
+  {
+    std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
+    g_settings.userDefinedDividedAppNames.clear();
+  }
   Wh_Log(L"... detached");
 }

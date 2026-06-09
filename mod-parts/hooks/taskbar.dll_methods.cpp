@@ -225,5 +225,5 @@ void WINAPI TrayUI__OnDPIChanged_WithoutArgs_Hook(void* pThis) {
                if (TrayUI__OnDPIChanged_WithoutArgs_Original) {
                    TrayUI__OnDPIChanged_WithoutArgs_Original(pThis);
                }
-               g_invalidateDimensions = true;
+               RequestTaskbarDimensionInvalidation();
             }
