@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.204
+// @version         1.5.205
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -5458,9 +5458,8 @@ std::thread g_animation_followup_worker_thread;
 constexpr int kDefaultStyleDebounceDelayMs = 150;
 constexpr int kTaskbarIslandAnimationDurationMs = 250;
 constexpr int kStartButtonAnchorStablePassesRequired = 2;
-constexpr double kTaskbarRepeaterVirtualWidthMultiplier = 4.0;
-constexpr int kTaskbarVirtualExtraButtonReserve = 128;
-constexpr int kTaskbarVirtualOverflowRecoveryButtonReserve = 512;
+constexpr double kTaskbarVirtualSurfaceMaxPhysicalWidth =
+    static_cast<double>(std::numeric_limits<SHORT>::max()) / 2.0;
 constexpr int kLowPriorityStyleDelayMs =
     kDefaultStyleDebounceDelayMs + (kTaskbarIslandAnimationDurationMs * 3);
 constexpr int kExplorerStartupSettleAnimationWindows = 6;
@@ -6388,6 +6387,7 @@ struct ChildLayoutObservationTai {
 };
 struct ChildrenLayoutMeasurementTai {
   std::vector<ChildLayoutObservationTai> children;
+  double capturedContentWidth{0.0};
   double totalWidth{0.0};
   double leftMostEdge{0.0};
   double rightMostEdge{0.0};
@@ -6414,6 +6414,12 @@ ChildrenLayoutMeasurementTai CaptureChildrenLayoutTai(
     observation.className = winrt::get_class_name(observation.element);
     observation.isStartButton =
         IsStartButtonElement(observation.element, observation.className);
+    if (observation.className != L"Taskbar.AugmentedEntryPointButton") {
+      const double actualWidth = observation.element.ActualWidth();
+      if (std::isfinite(actualWidth) && actualWidth > 0.0) {
+        measurement.capturedContentWidth += actualWidth;
+      }
+    }
     if (observation.className == L"Taskbar.TaskListButton") {
       try {
         auto value = observation.element.GetValue(
@@ -6726,24 +6732,38 @@ bool SetVirtualLayoutWidth(FrameworkElement const& element, double width) {
   return changed;
 }
 double CalculateDynamicTaskbarVirtualSurfaceWidth(int visualChildCount,
+                                                  double capturedContentWidth,
                                                   double rootWidth,
-                                                  bool isOverflowing) {
-  if (g_unloading || !std::isfinite(rootWidth) || rootWidth <= 0.0) {
+                                                  double rasterizationScale) {
+  if (g_unloading ||
+      !std::isfinite(rootWidth) ||
+      rootWidth <= 0.0 ||
+      !std::isfinite(rasterizationScale) ||
+      rasterizationScale <= 0.0) {
     return rootWidth;
   }
   const double buttonSize = std::max<double>(
       1.0, static_cast<double>(g_settings.userDefinedTaskbarButtonSize));
-  const int reserveButtons = isOverflowing
-      ? kTaskbarVirtualOverflowRecoveryButtonReserve
-      : kTaskbarVirtualExtraButtonReserve;
-  const double buttonReserveWidth =
-      static_cast<double>(std::max(visualChildCount, 1) + reserveButtons) *
-      buttonSize;
-  const double screenReserveWidth =
-      rootWidth * kTaskbarRepeaterVirtualWidthMultiplier;
-  const double virtualWidth = std::max({rootWidth,
-                                        screenReserveWidth,
-                                        buttonReserveWidth});
+  const double childCountEstimate =
+      static_cast<double>(std::max(visualChildCount, 1)) * buttonSize;
+  const double measuredContentWidth =
+      std::isfinite(capturedContentWidth) && capturedContentWidth > 0.0
+          ? capturedContentWidth
+          : 0.0;
+  const double requiredContentWidth =
+      std::max(measuredContentWidth, childCountEstimate);
+  // Keep one monitor width free so ItemsRepeater can realize newly added or
+  // previously overflowed buttons on subsequent layout passes.
+  const double requestedVirtualWidth = requiredContentWidth + rootWidth;
+  // Packed HSHELL_GETMINRECT coordinates use signed 16-bit components. Limit
+  // the virtual surface to half that physical span so centering and scaling
+  // retain coordinate headroom on either side of the island.
+  const double coordinateSafeWidth =
+      kTaskbarVirtualSurfaceMaxPhysicalWidth / rasterizationScale;
+  const double maximumVirtualWidth =
+      std::max(rootWidth, coordinateSafeWidth);
+  const double virtualWidth =
+      std::clamp(requestedVirtualWidth, rootWidth, maximumVirtualWidth);
   return std::isfinite(virtualWidth) && virtualWidth > rootWidth
       ? virtualWidth
       : rootWidth;
@@ -7476,8 +7496,9 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
       ? rootWidth
       : CalculateDynamicTaskbarVirtualSurfaceWidth(
             taskbarChildrenMeasurement.visualChildCount,
+            taskbarChildrenMeasurement.capturedContentWidth,
             rootWidth,
-            isOverflowing);
+            rasterizationScale);
   const bool useVirtualTaskbarSurface =
       !g_unloading &&
       std::isfinite(taskbarVirtualSurfaceWidth) &&
