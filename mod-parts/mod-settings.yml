@@ -8,9 +8,9 @@
   $description: Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42
   $type: unsigned int
 
-- TaskbarButtonSize: 74
+- TaskbarButtonSize: 72
   $name: Taskbar button size
-  $description: Set the size (width and height) of taskbar buttons. Default is 74
+  $description: Set the size (width and height) of taskbar buttons. Default is 72
   $type: unsigned int
 
 - TaskbarOffsetY: 6
@@ -139,9 +139,9 @@
   $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
   $type: string regex
 
-- TrayAreaDivider: true
+- TrayAreaDivider: false
   $name: Tray area divider
-  $description: When enabled, the tray area will be separated by a divider. Default is on
+  $description: When enabled, the tray area will be separated by a divider. Default is off
   $type: bool
 
 - StyleTrayArea: false

@@ -2433,12 +2433,27 @@ void ApplyVirtualTaskbarLayoutSurface(FrameworkElement const& xamlRootContent,
   SetVirtualLayoutWidth(backgroundFillChild, virtualWidth);
 }
 
-void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, bool suppress) {
+void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton,
+                                        bool suppress,
+                                        TaskbarState* state) {
+  if (!state) {
+    return;
+  }
+
   if (!overflowButton) {
+    state->lastOverflowButtonIdentity = 0;
+    state->overflowButtonSuppressionKnown = false;
     return;
   }
 
   try {
+    const uintptr_t overflowButtonIdentity =
+        reinterpret_cast<uintptr_t>(winrt::get_abi(overflowButton));
+    const bool suppressionTransition =
+        !state->overflowButtonSuppressionKnown ||
+        state->lastOverflowButtonIdentity != overflowButtonIdentity ||
+        state->overflowButtonSuppressed != suppress;
+
     if (suppress) {
       overflowButton.Opacity(0.0);
       overflowButton.IsHitTestVisible(false);
@@ -2446,9 +2461,11 @@ void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, 
       overflowButton.MaxWidth(0.0);
       overflowButton.Width(0.0);
       overflowButton.Clip(nullptr);
-      overflowButton.InvalidateMeasure();
-      overflowButton.InvalidateArrange();
-      overflowButton.UpdateLayout();
+      if (suppressionTransition) {
+        overflowButton.InvalidateMeasure();
+        overflowButton.InvalidateArrange();
+        overflowButton.UpdateLayout();
+      }
     } else {
       overflowButton.Opacity(1.0);
       overflowButton.IsHitTestVisible(true);
@@ -2456,6 +2473,10 @@ void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, 
       overflowButton.ClearValue(FrameworkElement::MinWidthProperty());
       overflowButton.ClearValue(FrameworkElement::MaxWidthProperty());
     }
+
+    state->lastOverflowButtonIdentity = overflowButtonIdentity;
+    state->overflowButtonSuppressionKnown = true;
+    state->overflowButtonSuppressed = suppress;
   } catch (...) {
   }
 }
@@ -3165,10 +3186,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
                                      backgroundFillParent,
                                      backgroundFillChild,
                                      taskbarVirtualSurfaceWidth);
-    SetTaskbarOverflowButtonSuppressed(overflowButton, true);
+    SetTaskbarOverflowButtonSuppressed(overflowButton, true, &state);
     isOverflowing = false;
   } else {
-    SetTaskbarOverflowButtonSuppressed(overflowButton, false);
+    SetTaskbarOverflowButtonSuppressed(overflowButton, false, &state);
   }
   const double taskbarLayoutSurfaceWidth = useVirtualTaskbarSurface
       ? std::max(rootWidth, taskbarFrameRepeater.ActualWidth())

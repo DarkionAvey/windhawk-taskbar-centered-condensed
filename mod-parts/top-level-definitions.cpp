@@ -24,6 +24,9 @@ struct TaskbarState {
   float lastTargetOffsetY{0};
   float initOffsetX{-1};
   bool wasOverflowing{false};
+  uintptr_t lastOverflowButtonIdentity{0};
+  bool overflowButtonSuppressionKnown{false};
+  bool overflowButtonSuppressed{false};
   float lastStartButtonXCalculated=0.0f;
   float lastStartButtonXActual=0.0f;
   float lastStartButtonAnchorLeft{0.0f};

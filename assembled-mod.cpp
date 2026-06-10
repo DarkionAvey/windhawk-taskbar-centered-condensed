@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.200
+// @version         1.5.202
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -54,7 +54,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | --- | --- | --- | --- |
 | `TaskbarHeight` | Taskbar height | Set the height of the taskbar. Default is 74 | Non-negative integer |
 | `TaskbarIconSize` | Taskbar icon size | Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42 | Non-negative integer |
-| `TaskbarButtonSize` | Taskbar button size | Set the size (width and height) of taskbar buttons. Default is 74 | Non-negative integer |
+| `TaskbarButtonSize` | Taskbar button size | Set the size (width and height) of taskbar buttons. Default is 72 | Non-negative integer |
 | `TaskbarOffsetY` | Taskbar vertical offset | Move the taskbar up or down. Padding of the same value is applied to the top. Default is 6 | Non-negative integer |
 | `TrayTaskGap` | Tray task gap | Adjust the space between the task area and the tray area. Default is 10 | Non-negative integer |
 | `TaskbarBackgroundHorizontalPadding` | Taskbar background horizontal padding | Set the horizontal padding on both sides of the taskbar background. Default is 2 | Non-negative integer |
@@ -80,7 +80,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `AppsDividerVerticalScale` | Apps divider vertical scale (%) | Set the vertical scale of the taskbar dividers. Range 0-100. Default is 40 | unsigned int percentage |
 | `AppsDividerAlignment` | Choose the side on which the app dividers should appear |  |  |
 | `DividedAppNames` | App names for divider placement | Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex. | string regex |
-| `TrayAreaDivider` | Tray area divider | When enabled, the tray area will be separated by a divider. Default is on | Boolean (true/false) |
+| `TrayAreaDivider` | Tray area divider | When enabled, the tray area will be separated by a divider. Default is off | Boolean (true/false) |
 | `StyleTrayArea` | Modify the tray area appearance | When enabled, the options for tray icon size will take effect. Default is off | Boolean (true/false) |
 | `TrayIconSize` | Tray icon size | Set the width and height of tray icons. Minimum is 15. Default is 15 | Non-negative integer |
 | `TrayButtonSize` | Tray button size | Set the size (width and height) of tray buttons. Minimum is 20. Default is 30 | Non-negative integer |
@@ -98,9 +98,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarIconSize: 42
   $name: Taskbar icon size
   $description: Set the width and height of taskbar icons. Values below 8 are clamped to 8; values above the current taskbar/button size are clamped to fit. Default is 42
-- TaskbarButtonSize: 74
+- TaskbarButtonSize: 72
   $name: Taskbar button size
-  $description: Set the size (width and height) of taskbar buttons. Default is 74
+  $description: Set the size (width and height) of taskbar buttons. Default is 72
 - TaskbarOffsetY: 6
   $name: Taskbar vertical offset
   $description: Move the taskbar up or down. Padding of the same value is applied to the top. Default is 6
@@ -178,9 +178,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - DividedAppNames: ""
   $name: App names for divider placement
   $description: Type partial app names where you'd like a divider to appear. Use ; to separate multiple entries (e.g., Steam; Notepad\+\+; Settings). Case-insensitive and supports regex.
-- TrayAreaDivider: true
+- TrayAreaDivider: false
   $name: Tray area divider
-  $description: When enabled, the tray area will be separated by a divider. Default is on
+  $description: When enabled, the tray area will be separated by a divider. Default is off
 - StyleTrayArea: false
   $name: Modify the tray area appearance
   $description: When enabled, the options for tray icon size will take effect. Default is off
@@ -397,6 +397,9 @@ struct TaskbarState {
   float lastTargetOffsetY{0};
   float initOffsetX{-1};
   bool wasOverflowing{false};
+  uintptr_t lastOverflowButtonIdentity{0};
+  bool overflowButtonSuppressionKnown{false};
+  bool overflowButtonSuppressed{false};
   float lastStartButtonXCalculated=0.0f;
   float lastStartButtonXActual=0.0f;
   float lastStartButtonAnchorLeft{0.0f};
@@ -6770,11 +6773,24 @@ void ApplyVirtualTaskbarLayoutSurface(FrameworkElement const& xamlRootContent,
   SetVirtualLayoutWidth(backgroundFillParent, virtualWidth);
   SetVirtualLayoutWidth(backgroundFillChild, virtualWidth);
 }
-void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, bool suppress) {
+void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton,
+                                        bool suppress,
+                                        TaskbarState* state) {
+  if (!state) {
+    return;
+  }
   if (!overflowButton) {
+    state->lastOverflowButtonIdentity = 0;
+    state->overflowButtonSuppressionKnown = false;
     return;
   }
   try {
+    const uintptr_t overflowButtonIdentity =
+        reinterpret_cast<uintptr_t>(winrt::get_abi(overflowButton));
+    const bool suppressionTransition =
+        !state->overflowButtonSuppressionKnown ||
+        state->lastOverflowButtonIdentity != overflowButtonIdentity ||
+        state->overflowButtonSuppressed != suppress;
     if (suppress) {
       overflowButton.Opacity(0.0);
       overflowButton.IsHitTestVisible(false);
@@ -6782,9 +6798,11 @@ void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, 
       overflowButton.MaxWidth(0.0);
       overflowButton.Width(0.0);
       overflowButton.Clip(nullptr);
-      overflowButton.InvalidateMeasure();
-      overflowButton.InvalidateArrange();
-      overflowButton.UpdateLayout();
+      if (suppressionTransition) {
+        overflowButton.InvalidateMeasure();
+        overflowButton.InvalidateArrange();
+        overflowButton.UpdateLayout();
+      }
     } else {
       overflowButton.Opacity(1.0);
       overflowButton.IsHitTestVisible(true);
@@ -6792,6 +6810,9 @@ void SetTaskbarOverflowButtonSuppressed(FrameworkElement const& overflowButton, 
       overflowButton.ClearValue(FrameworkElement::MinWidthProperty());
       overflowButton.ClearValue(FrameworkElement::MaxWidthProperty());
     }
+    state->lastOverflowButtonIdentity = overflowButtonIdentity;
+    state->overflowButtonSuppressionKnown = true;
+    state->overflowButtonSuppressed = suppress;
   } catch (...) {
   }
 }
@@ -7471,10 +7492,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
                                      backgroundFillParent,
                                      backgroundFillChild,
                                      taskbarVirtualSurfaceWidth);
-    SetTaskbarOverflowButtonSuppressed(overflowButton, true);
+    SetTaskbarOverflowButtonSuppressed(overflowButton, true, &state);
     isOverflowing = false;
   } else {
-    SetTaskbarOverflowButtonSuppressed(overflowButton, false);
+    SetTaskbarOverflowButtonSuppressed(overflowButton, false, &state);
   }
   const double taskbarLayoutSurfaceWidth = useVirtualTaskbarSurface
       ? std::max(rootWidth, taskbarFrameRepeater.ActualWidth())
