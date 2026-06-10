@@ -69,6 +69,10 @@ class StartButtonPosition(URLProcessor):
     return true;""",
                 in_function="bool HookTaskbarDllSymbolsStartButtonPosition()",
             )
+            .insert_before_literal(
+                r"using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);",
+                read_patch("startbuttonposition_notification_center_hack.cpp"),
+            )
             .text()
         )
 
@@ -235,6 +239,10 @@ class StartButtonPosition(URLProcessor):
     } else if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
         target = DwmTarget::SearchHost;
     }else if (_wcsicmp(processFileName.c_str(), L"ShellExperienceHost.exe") == 0) {
+        if (_wcsicmp(windowClassName.c_str(), L"Windows.UI.Core.CoreWindow") != 0 ||
+            !IsNotificationCenterShellExperienceHostWindowTai(hwnd)) {
+            return original();
+        }
         target = DwmTarget::ShellExperienceHost;
     }  else {
         return original();
