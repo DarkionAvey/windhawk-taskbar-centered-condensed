@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.202
+// @version         1.5.204
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -5206,6 +5206,7 @@ static void ClearMinimizeAnimationCorrectionForMonitorTai(const std::wstring& mo
 }
 static void SetMinimizeAnimationCorrectionForMonitorTai(
     const std::wstring& monitorName,
+    const RECT& monitorRect,
     double layoutOffsetXDip,
     double visualScale,
     double scaleCenterXDip,
@@ -5213,11 +5214,8 @@ static void SetMinimizeAnimationCorrectionForMonitorTai(
     const RECT* clampXRect,
     std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons) {
   if (monitorName.empty() ||
+      IsRectEmpty(&monitorRect) ||
       g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
-    return;
-  }
-  RECT monitorRect{};
-  if (!GetMonitorRectByNameTai(monitorName, &monitorRect) || IsRectEmpty(&monitorRect)) {
     return;
   }
   if (!std::isfinite(layoutOffsetXDip) ||
@@ -6956,6 +6954,7 @@ static void UpdateMinimizeAnimationCorrectionForMonitorTai(
   // matched to a freshly measured taskbar button.
   SetMinimizeAnimationCorrectionForMonitorTai(
       monitorName,
+      monitorRect,
       targetTaskRootOffsetXDip,
       targetTaskbarIslandScale,
       targetScaleCenterScreenXDip,

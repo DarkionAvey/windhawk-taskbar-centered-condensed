@@ -699,6 +699,7 @@ static void ClearMinimizeAnimationCorrectionForMonitorTai(const std::wstring& mo
 
 static void SetMinimizeAnimationCorrectionForMonitorTai(
     const std::wstring& monitorName,
+    const RECT& monitorRect,
     double layoutOffsetXDip,
     double visualScale,
     double scaleCenterXDip,
@@ -706,12 +707,8 @@ static void SetMinimizeAnimationCorrectionForMonitorTai(
     const RECT* clampXRect,
     std::vector<MinimizeAnimationMeasuredButtonTai> measuredButtons) {
   if (monitorName.empty() ||
+      IsRectEmpty(&monitorRect) ||
       g_minimizeAnimationCorrectionUninitializingTai.load(std::memory_order_acquire)) {
-    return;
-  }
-
-  RECT monitorRect{};
-  if (!GetMonitorRectByNameTai(monitorName, &monitorRect) || IsRectEmpty(&monitorRect)) {
     return;
   }
 
@@ -2636,6 +2633,7 @@ static void UpdateMinimizeAnimationCorrectionForMonitorTai(
   // matched to a freshly measured taskbar button.
   SetMinimizeAnimationCorrectionForMonitorTai(
       monitorName,
+      monitorRect,
       targetTaskRootOffsetXDip,
       targetTaskbarIslandScale,
       targetScaleCenterScreenXDip,
