@@ -184,6 +184,24 @@ class StartButtonPosition(URLProcessor):
         )
 
     def _patch_dwm_targeting(self, patch: CppPatcher) -> None:
+        patch.replace_literal(
+            "HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);",
+            "HMONITOR monitor = ResolveFlyoutMonitorTai(hwnd);",
+            count=1,
+            label="resolve flyout monitor from taskbar invocation",
+        )
+        patch.replace_literal(
+            "GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);",
+            """if (!monitor ||
+        FAILED(GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX,
+                                &monitorDpiY)) ||
+        monitorDpiX == 0 || monitorDpiY == 0) {
+        monitorDpiX = 96;
+        monitorDpiY = 96;
+    }""",
+            count=1,
+            label="validate target monitor dpi",
+        )
         patch.insert_after_literal(
             "enum class DwmTarget {",
             "\n        ShellExperienceHost,",

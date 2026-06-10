@@ -255,6 +255,114 @@ static std::mutex g_taskbarStatesMutex;
 static std::unordered_map<std::wstring, std::shared_ptr<TaskbarState>> g_taskbarStates;
 static std::atomic<uint64_t> g_dimensionInvalidationGeneration{1};
 static std::atomic<uint64_t> g_taskbarChildStyleGeneration{1};
+static std::atomic<uintptr_t> g_recentTaskbarInvocationMonitor{0};
+static std::atomic<ULONGLONG> g_recentTaskbarInvocationTime{0};
+bool IsTaskbarWindowClassTai(HWND window) {
+  if (!window) {
+    return false;
+  }
+  wchar_t className[64]{};
+  if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
+    return false;
+  }
+  return _wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+         _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+HMONITOR GetTaskbarMonitorFromPointTai(POINT point) {
+  for (HWND window = WindowFromPoint(point); window;
+       window = GetParent(window)) {
+    if (IsTaskbarWindowClassTai(window)) {
+      return MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+    }
+  }
+  struct EnumContext {
+    POINT point;
+    HMONITOR monitor;
+  } context{point, nullptr};
+  EnumWindows(
+      [](HWND window, LPARAM lParam) -> BOOL {
+        auto* context = reinterpret_cast<EnumContext*>(lParam);
+        if (!context || !IsTaskbarWindowClassTai(window)) {
+          return TRUE;
+        }
+        RECT rect{};
+        if (GetWindowRect(window, &rect) &&
+            PtInRect(&rect, context->point)) {
+          context->monitor =
+              MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+          return FALSE;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&context));
+  return context.monitor;
+}
+bool IsTaskbarInvocationInputMessageTai(UINT message) {
+  switch (message) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONUP:
+    case WM_POINTERDOWN:
+    case WM_POINTERUP:
+    case WM_TOUCH:
+      return true;
+    default:
+      return false;
+  }
+}
+POINT GetCurrentMessagePointTai() {
+  const DWORD messagePosition = GetMessagePos();
+  return {
+      static_cast<short>(LOWORD(messagePosition)),
+      static_cast<short>(HIWORD(messagePosition)),
+  };
+}
+void RecordTaskbarInvocationMonitorTai(HWND taskbarWindow, UINT message) {
+  if (!IsTaskbarInvocationInputMessageTai(message)) {
+    return;
+  }
+  HMONITOR monitor =
+      GetTaskbarMonitorFromPointTai(GetCurrentMessagePointTai());
+  if (!monitor && taskbarWindow) {
+    monitor =
+        MonitorFromWindow(taskbarWindow, MONITOR_DEFAULTTONEAREST);
+  }
+  if (!monitor) {
+    return;
+  }
+  g_recentTaskbarInvocationMonitor.store(
+      reinterpret_cast<uintptr_t>(monitor), std::memory_order_release);
+  g_recentTaskbarInvocationTime.store(GetTickCount64(),
+                                      std::memory_order_release);
+}
+HMONITOR ResolveFlyoutMonitorTai(HWND flyoutWindow) {
+  constexpr DWORD kInvocationMessageTtlMs = 2500;
+  const DWORD messageTime = static_cast<DWORD>(GetMessageTime());
+  if (messageTime &&
+      GetTickCount() - messageTime <= kInvocationMessageTtlMs) {
+    if (HMONITOR monitor =
+            GetTaskbarMonitorFromPointTai(GetCurrentMessagePointTai())) {
+      return monitor;
+    }
+  }
+  constexpr ULONGLONG kInvocationMonitorTtlMs = 2500;
+  const ULONGLONG invocationTime =
+      g_recentTaskbarInvocationTime.load(std::memory_order_acquire);
+  const ULONGLONG now = GetTickCount64();
+  if (invocationTime && now >= invocationTime &&
+      now - invocationTime <= kInvocationMonitorTtlMs) {
+    HMONITOR monitor = reinterpret_cast<HMONITOR>(
+        g_recentTaskbarInvocationMonitor.load(std::memory_order_acquire));
+    MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+    if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
+      return monitor;
+    }
+  }
+  return flyoutWindow
+             ? MonitorFromWindow(flyoutWindow, MONITOR_DEFAULTTONEAREST)
+             : nullptr;
+}
 std::shared_ptr<TaskbarState> GetOrCreateTaskbarState(const std::wstring& monitorName) {
   std::lock_guard<std::mutex> lock(g_taskbarStatesMutex);
   auto& state = g_taskbarStates[monitorName];

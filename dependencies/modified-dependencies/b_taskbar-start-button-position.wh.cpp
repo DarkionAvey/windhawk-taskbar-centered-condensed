@@ -450,6 +450,7 @@ static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
 TrayUI_WndProc_t TrayUI_WndProc_Original;
 LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag) {
+  RecordTaskbarInvocationMonitorTai(hWnd, Msg);
   LRESULT ret = TrayUI_WndProc_Original
       ? TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag)
       : 0;
@@ -466,6 +467,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wPar
 using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
 LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+  RecordTaskbarInvocationMonitorTai(hWnd, Msg);
   LRESULT ret = CSecondaryTray_v_WndProc_Original
       ? CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam)
       : 0;
@@ -519,6 +521,7 @@ void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int 
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
 __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CImpWndProc__WndProc_Original
       ? CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -531,6 +534,7 @@ __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int 
 using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskBand__WndProc_t CTaskBand__WndProc_Original;
 __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CTaskBand__WndProc_Original
       ? CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -547,6 +551,7 @@ __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int ms
 using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
 __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CTaskListWnd__WndProc_Original
       ? CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -563,6 +568,7 @@ __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int
 using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
 __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CSecondaryTaskBand__WndProc_Original
       ? CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -579,6 +585,7 @@ __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsign
 using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
 __int64 WINAPI CTraySearchControl__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   ApplySettingsFromTaskbarThreadIfRequired();
   return CTraySearchControl__WndProc_Original
       ? CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
@@ -905,14 +912,33 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }  else {
         return original();
     }
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    HMONITOR monitor = ResolveFlyoutMonitorTai(hwnd);
     UINT monitorDpiX = 96;
     UINT monitorDpiY = 96;
-    GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+    if (!monitor ||
+        FAILED(GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX,
+                                &monitorDpiY)) ||
+        monitorDpiX == 0 || monitorDpiY == 0) {
+        monitorDpiX = 96;
+        monitorDpiY = 96;
+    }
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),
     };
-    GetMonitorInfo(monitor, &monitorInfo);
+    if (!GetMonitorInfo(monitor, &monitorInfo)) {
+    return original();
+}
+HMONITOR windowMonitor =
+    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+UINT windowDpiX = monitorDpiX;
+UINT windowDpiY = monitorDpiY;
+if (windowMonitor &&
+    (FAILED(GetDpiForMonitor(windowMonitor, MDT_DEFAULT, &windowDpiX,
+                             &windowDpiY)) ||
+     windowDpiX == 0 || windowDpiY == 0)) {
+    windowDpiX = monitorDpiX;
+    windowDpiY = monitorDpiY;
+}
 auto monitorName = GetMonitorName(monitor);
 TaskbarFlyoutStateSnapshot taskbarState;
 if (!TryGetTaskbarFlyoutStateSnapshot(monitorName, &taskbarState)) {
@@ -928,13 +954,20 @@ if (!TryGetTaskbarFlyoutStateSnapshot(monitorName, &taskbarState)) {
     int cy = targetRect.bottom - targetRect.top;
     float dpiScale = monitorDpiX / 96.0f;
 float dpiScaleY = monitorDpiY / 96.0f;
+if (windowDpiX != monitorDpiX) {
+  cx = MulDiv(cx, monitorDpiX, windowDpiX);
+}
+if (windowDpiY != monitorDpiY) {
+  cy = MulDiv(cy, monitorDpiY, windowDpiY);
+}
 const bool alignFlyoutInner = GetUserDefinedAlignFlyoutInner();
 float absStartX = taskbarState.lastStartButtonXCalculated * dpiScale;
 float absRootWidth = taskbarState.lastRootWidth * dpiScale;
 float absTargetWidth = taskbarState.lastTargetWidth * dpiScale;
+const int monitorLeft = monitorInfo.rcMonitor.left;
 int taskbarAlignedY = y;
 bool hasTaskbarAlignedY = TryCalculateFlyoutYAboveTaskbar(monitorInfo, cy, dpiScaleY, taskbarAlignedY);
-Wh_Log(L"original: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
+Wh_Log(L"original: monitor=%s left=%d sourceDpi=%ux%u targetDpi=%ux%u taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", monitorName.c_str(), monitorLeft, windowDpiX, windowDpiY, monitorDpiX, monitorDpiY, taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
 const int flyoutInnerPaddingPx = GetFlyoutInnerPaddingPx(dpiScale);
 if (target == DwmTarget::StartMenu) {
   const int recordedStartMenuWidthDip = Wh_GetIntValue(L"lastRecordedStartMenuWidth", g_lastRecordedStartMenuWidth);
@@ -948,9 +981,22 @@ if (target == DwmTarget::StartMenu) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_startMenuWnd = hwnd;
     g_startMenuOriginalWidth = cx;
-    x = static_cast<int>(absRootWidth / 2.0f - absStartX - absTargetWidth + (alignFlyoutInner ? startMenuWidthPx / 2.0f : 0.0f));
-    x = std::min(0, std::max(static_cast<int>(((-absRootWidth + startMenuWidthPx) / 2.0f) + flyoutInnerPaddingPx), x));
-     if (hasTaskbarAlignedY) {
+    cx = startMenuWidthPx;
+    constexpr int kStartMenuTransparentInsetDip = 12;
+    const int startMenuTransparentInsetPx = static_cast<int>(
+        (kStartMenuTransparentInsetDip * dpiScale) + 0.5f);
+    int localX = static_cast<int>(
+        absStartX -
+        (alignFlyoutInner ? flyoutInnerPaddingPx
+                          : (startMenuWidthPx / 2.0f))) +
+        startMenuTransparentInsetPx;
+    localX = std::max(
+        -startMenuTransparentInsetPx,
+        std::min(localX,
+                 static_cast<int>(absRootWidth - startMenuWidthPx) +
+                     startMenuTransparentInsetPx));
+    x = monitorLeft + localX;
+    if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
     }
   } else {
@@ -959,19 +1005,22 @@ if (target == DwmTarget::StartMenu) {
     }
     g_startMenuWnd = nullptr;
     g_startMenuOriginalWidth = 0;
-    x = 0;
+    x = monitorLeft;
   }
 } else if (target == DwmTarget::SearchHost) {
   if (g_settings_startbuttonposition.startMenuOnTheLeft && !g_unloading) {
     g_searchMenuWnd = hwnd;
     g_searchMenuOriginalX = x;
-    x = static_cast<int>(absStartX - (alignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
-    x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+    int localX = static_cast<int>(absStartX - (alignFlyoutInner ? flyoutInnerPaddingPx : (cx / 2.0f)));
+    localX = std::max(0, std::min(localX, static_cast<int>(absRootWidth - cx)));
+    x = monitorLeft + localX;
     if (hasTaskbarAlignedY) {
       y = taskbarAlignedY;
     }
   } else {
-    x = g_unloading && IsStartMenuOrbLeftAligned() ? g_searchMenuOriginalX : (absRootWidth - cx) / 2;
+    x = g_unloading && IsStartMenuOrbLeftAligned()
+            ? g_searchMenuOriginalX
+            : monitorLeft + static_cast<int>((absRootWidth - cx) / 2);
     g_searchMenuWnd = nullptr;
     g_searchMenuOriginalX = 0;
   }
@@ -981,13 +1030,14 @@ if (target == DwmTarget::StartMenu) {
     return original();
   }
   if (g_settings_startbuttonposition.MoveFlyoutNotificationCenter && !g_unloading) {
-    x = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (alignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
-    x = std::max(0, std::min(x, static_cast<int>(absRootWidth - cx)));
+    int localX = static_cast<int>(lastRecordedTrayRightMostEdgeForMonitor * dpiScale - (alignFlyoutInner ? (cx - flyoutInnerPaddingPx) : (cx / 2.0f)));
+    localX = std::max(0, std::min(localX, static_cast<int>(absRootWidth - cx)));
+    x = monitorLeft + localX;
   } else {
-    x = static_cast<int>(absRootWidth - cx);
+    x = monitorLeft + static_cast<int>(absRootWidth - cx);
   }
 }
-Wh_Log(L"Recalc: taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
+Wh_Log(L"Recalc: monitor=%s taskbarState.lastLeftMostEdgeTray: %f, lastStartButtonXCalculated: %f g_lastRootWidth %f cx: %d, x:%d;cy: %d; y: %d; target:%d g_lastTargetWidth: %f, absStartX: %f; absRootWidth: %f; absTargetWidth: %f", monitorName.c_str(), taskbarState.lastLeftMostEdgeTray, taskbarState.lastStartButtonXCalculated, taskbarState.lastRootWidth, cx, x, cy, y, target, taskbarState.lastTargetWidth, absStartX, absRootWidth, absTargetWidth);
 SetWindowPos(hwnd, nullptr, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
     return original();
 }

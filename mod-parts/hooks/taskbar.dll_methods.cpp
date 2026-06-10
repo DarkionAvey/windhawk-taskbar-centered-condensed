@@ -35,6 +35,7 @@ static bool TryCorrectShellHookMinRectMessageTai(UINT Msg, WPARAM wParam, LPARAM
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag);
 TrayUI_WndProc_t TrayUI_WndProc_Original;
 LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, bool* flag) {
+  RecordTaskbarInvocationMonitorTai(hWnd, Msg);
   LRESULT ret = TrayUI_WndProc_Original
       ? TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag)
       : 0;
@@ -51,6 +52,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wPar
 using CSecondaryTray_v_WndProc_t = LRESULT(WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
 LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+  RecordTaskbarInvocationMonitorTai(hWnd, Msg);
   LRESULT ret = CSecondaryTray_v_WndProc_Original
       ? CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam)
       : 0;
@@ -105,6 +107,7 @@ void WINAPI CTaskBand__TaskOrderChanged_Hook(void* pThis, void* pTaskGroup, int 
 using CImpWndProc__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CImpWndProc__WndProc_t CImpWndProc__WndProc_Original;
 __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CImpWndProc__WndProc_Original
       ? CImpWndProc__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -117,6 +120,7 @@ __int64 WINAPI CImpWndProc__WndProc_Hook(void* pThis, void* pHwnd, unsigned int 
 using CTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskBand__WndProc_t CTaskBand__WndProc_Original;
 __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CTaskBand__WndProc_Original
       ? CTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -133,6 +137,7 @@ __int64 WINAPI CTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int ms
 using CTaskListWnd__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTaskListWnd__WndProc_t CTaskListWnd__WndProc_Original;
 __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CTaskListWnd__WndProc_Original
       ? CTaskListWnd__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -149,6 +154,7 @@ __int64 WINAPI CTaskListWnd__WndProc_Hook(void* pThis, void* pHwnd, unsigned int
 using CSecondaryTaskBand__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CSecondaryTaskBand__WndProc_t CSecondaryTaskBand__WndProc_Original;
 __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   __int64 ret = CSecondaryTaskBand__WndProc_Original
       ? CSecondaryTaskBand__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
       : 0;
@@ -165,6 +171,7 @@ __int64 WINAPI CSecondaryTaskBand__WndProc_Hook(void* pThis, void* pHwnd, unsign
 using CTraySearchControl__WndProc_t = __int64(WINAPI*)(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam);
 CTraySearchControl__WndProc_t CTraySearchControl__WndProc_Original;
 __int64 WINAPI CTraySearchControl__WndProc_Hook(void* pThis, void* pHwnd, unsigned int msg, unsigned __int64 wParam, __int64 lParam) {
+  RecordTaskbarInvocationMonitorTai(reinterpret_cast<HWND>(pHwnd), msg);
   ApplySettingsFromTaskbarThreadIfRequired();
   return CTraySearchControl__WndProc_Original
       ? CTraySearchControl__WndProc_Original(pThis, pHwnd, msg, wParam, lParam)
