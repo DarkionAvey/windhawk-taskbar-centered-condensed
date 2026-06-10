@@ -43,9 +43,9 @@
   $description: Controls how rounded the taskbar corners appear. Default is 22
   $type: unsigned int
 
-- TaskButtonCornerRadius: 16
+- TaskButtonCornerRadius: 18
   $name: Task button corner radius
-  $description: Controls how rounded the corners of individual task buttons are. Default is 16
+  $description: Controls how rounded the corners of individual task buttons are. Default is 18
   $type: unsigned int
 
 - FlatTaskbarBottomCorners: false

@@ -664,17 +664,17 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
   }
 }
 
-void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
-  if (!backgroundFillChild) return;
+bool ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
+  if (!backgroundFillChild) return false;
   std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
   if (!rectangle) {
     Wh_Log(L"WindhawkBlur: BackgroundFill is not a Rectangle");
-    return;
+    return false;
   }
   if (g_unloading) {
     ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
-    return;
+    return false;
   }
   const float backgroundOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f, 0.0f, 1.0f);
   rectangle.Opacity(backgroundOpacity);
@@ -716,9 +716,11 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
           winrt::hstring(fallbackSetting.themeResourceKey));
       rectangle.Fill(blurBrush);
     }
+    return true;
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur failed %08X: %s", ex.code(), ex.message().c_str());
   } catch (...) {
     Wh_Log(L"WindhawkBlur failed: %08X", winrt::to_hresult());
   }
+  return false;
 }

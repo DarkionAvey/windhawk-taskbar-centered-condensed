@@ -227,6 +227,7 @@ struct TaskbarState {
   float lastLeftMostEdgeTray{0};
   int lastRightMostEdgeTray{0};
   float lastBackgroundShapeTargetWidth{0.0f};
+  float lastBackgroundShapeTargetHeight{0.0f};
   float lastBackgroundShapeTargetOffsetX{0.0f};
   float lastBackgroundShapeTargetOffsetY{0.0f};
   float backgroundAnimationFromWidth{0.0f};
@@ -236,6 +237,8 @@ struct TaskbarState {
   float backgroundAnimationFromOffsetY{0.0f};
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
+  uintptr_t backgroundFillIdentity{0};
+  uint64_t lastBackgroundStyleGeneration{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
   uint64_t lastDimensionInvalidationGeneration{0};
   TaskbarChildStyleCache taskbarChildStyleCache;

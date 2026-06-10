@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.205
+// @version         1.5.208
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -61,7 +61,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 | `FullWidthTaskbarBackground` | Full-width taskbar background | When enabled, the taskbar background fills the entire width of the screen, similar to the default Windows behavior. Default is off | Boolean (true/false) |
 | `IgnoreShowDesktopButton` | Ignore "Show Desktop" button | When enabled, the "Show Desktop" button is ignored in width calculations. Default is off | Boolean (true/false) |
 | `TaskbarCornerRadius` | Taskbar corner radius | Controls how rounded the taskbar corners appear. Default is 22 | Non-negative integer |
-| `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are. Default is 16 | Non-negative integer |
+| `TaskButtonCornerRadius` | Task button corner radius | Controls how rounded the corners of individual task buttons are. Default is 18 | Non-negative integer |
 | `FlatTaskbarBottomCorners` | Flat bottom corners | When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option. Default is off | Boolean (true/false) |
 | `CustomizeTaskbarBackground` | Stylize the taskbar background | When enabled, this mod applies its taskbar background visuals. When disabled, this mod skips all taskbar background changes so other Windhawk mods can provide their own background. Default is on | Boolean (true/false) |
 | `DisableCustomBlurBackground` | Disable custom blur background | When enabled, the WindhawkBlur brush is skipped and only the fallback color is used, producing a solid background. Background blur, tint, tint color, luminosity, saturation, and inversion settings are ignored. This also activates automatically when background tint is 100, background blur amount is 0, or background inversion is 100. Default is off | Boolean (true/false) |
@@ -119,9 +119,9 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 - TaskbarCornerRadius: 22
   $name: Taskbar corner radius
   $description: Controls how rounded the taskbar corners appear. Default is 22
-- TaskButtonCornerRadius: 16
+- TaskButtonCornerRadius: 18
   $name: Task button corner radius
-  $description: Controls how rounded the corners of individual task buttons are. Default is 16
+  $description: Controls how rounded the corners of individual task buttons are. Default is 18
 - FlatTaskbarBottomCorners: false
   $name: Flat bottom corners
   $description: When enabled, the bottom corners of the taskbar will be squared and the taskbar will dock to the screen edge. This overrides the taskbar offset; this is always on with the full-width taskbar background option. Default is off
@@ -433,6 +433,7 @@ struct TaskbarState {
   float lastLeftMostEdgeTray{0};
   int lastRightMostEdgeTray{0};
   float lastBackgroundShapeTargetWidth{0.0f};
+  float lastBackgroundShapeTargetHeight{0.0f};
   float lastBackgroundShapeTargetOffsetX{0.0f};
   float lastBackgroundShapeTargetOffsetY{0.0f};
   float backgroundAnimationFromWidth{0.0f};
@@ -442,6 +443,8 @@ struct TaskbarState {
   float backgroundAnimationFromOffsetY{0.0f};
   float backgroundAnimationToOffsetY{0.0f};
   int64_t backgroundAnimationStartMs{0};
+  uintptr_t backgroundFillIdentity{0};
+  uint64_t lastBackgroundStyleGeneration{0};
   bool hasCustomTaskbarBackgroundVisuals{false};
   uint64_t lastDimensionInvalidationGeneration{0};
   TaskbarChildStyleCache taskbarChildStyleCache;
@@ -4555,17 +4558,17 @@ void ClearWindhawkBlurFromBackgroundFill(FrameworkElement const& backgroundFillC
     Wh_Log(L"WindhawkBlur cleanup failed: %08X", winrt::to_hresult());
   }
 }
-void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
-  if (!backgroundFillChild) return;
+bool ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChild) {
+  if (!backgroundFillChild) return false;
   std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   auto rectangle = backgroundFillChild.try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
   if (!rectangle) {
     Wh_Log(L"WindhawkBlur: BackgroundFill is not a Rectangle");
-    return;
+    return false;
   }
   if (g_unloading) {
     ClearWindhawkBlurFromBackgroundFill(backgroundFillChild);
-    return;
+    return false;
   }
   const float backgroundOpacity = std::clamp(g_settings.userDefinedTaskbarBackgroundOpacity / 100.0f, 0.0f, 1.0f);
   rectangle.Opacity(backgroundOpacity);
@@ -4602,11 +4605,13 @@ void ApplyWindhawkBlurToBackgroundFill(FrameworkElement const& backgroundFillChi
           winrt::hstring(fallbackSetting.themeResourceKey));
       rectangle.Fill(blurBrush);
     }
+    return true;
   } catch (winrt::hresult_error const& ex) {
     Wh_Log(L"WindhawkBlur failed %08X: %s", ex.code(), ex.message().c_str());
   } catch (...) {
     Wh_Log(L"WindhawkBlur failed: %08X", winrt::to_hresult());
   }
+  return false;
 }
 //////////////////////////////////////////////////////
 //////////////////////////////////////////////////////
@@ -5636,8 +5641,9 @@ void SetVisualScaleCenterAndAnimate(
   visual.StopAnimation(L"Scale");
   visual.Scale({targetScale, targetScale, currentScale.z});
 }
-void ResetBackgroundVisualCache(TaskbarState& state) {
+void ResetBackgroundVisualTargetCache(TaskbarState& state) {
   state.lastBackgroundShapeTargetWidth = 0.0f;
+  state.lastBackgroundShapeTargetHeight = 0.0f;
   state.lastBackgroundShapeTargetOffsetX = 0.0f;
   state.lastBackgroundShapeTargetOffsetY = 0.0f;
   state.backgroundAnimationFromWidth = 0.0f;
@@ -5647,6 +5653,94 @@ void ResetBackgroundVisualCache(TaskbarState& state) {
   state.backgroundAnimationFromOffsetY = 0.0f;
   state.backgroundAnimationToOffsetY = 0.0f;
   state.backgroundAnimationStartMs = 0;
+}
+void ResetBackgroundVisualCache(TaskbarState& state) {
+  ResetBackgroundVisualTargetCache(state);
+  state.backgroundFillIdentity = 0;
+  state.lastBackgroundStyleGeneration = 0;
+}
+struct TaskbarBackgroundCompositionResourcesTai {
+  winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry clipGeometry{nullptr};
+  winrt::Windows::UI::Composition::CompositionGeometricClip clip{nullptr};
+  winrt::Windows::UI::Composition::ShapeVisual borderVisual{nullptr};
+  winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry borderGeometry{nullptr};
+  winrt::Windows::UI::Composition::CompositionSpriteShape borderShape{nullptr};
+  winrt::Windows::UI::Composition::CompositionColorBrush borderBrush{nullptr};
+};
+bool TryGetTaskbarBackgroundCompositionResourcesTai(
+    FrameworkElement const& backgroundFillChild,
+    winrt::Windows::UI::Composition::Visual const& backgroundFillVisual,
+    TaskbarBackgroundCompositionResourcesTai* resources) {
+  if (!backgroundFillChild || !backgroundFillVisual || !resources) {
+    return false;
+  }
+  try {
+    auto clip = backgroundFillVisual.Clip().try_as<
+        winrt::Windows::UI::Composition::CompositionGeometricClip>();
+    auto clipGeometry = clip
+        ? clip.Geometry().try_as<
+              winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry>()
+        : nullptr;
+    auto borderVisual =
+        winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
+            GetElementChildVisual(backgroundFillChild)
+                .try_as<winrt::Windows::UI::Composition::ShapeVisual>();
+    if (!clipGeometry || !borderVisual || borderVisual.Shapes().Size() != 1) {
+      return false;
+    }
+    auto borderShape = borderVisual.Shapes()
+        .GetAt(0)
+        .try_as<winrt::Windows::UI::Composition::CompositionSpriteShape>();
+    auto borderGeometry = borderShape
+        ? borderShape.Geometry().try_as<
+              winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry>()
+        : nullptr;
+    auto borderBrush = borderShape
+        ? borderShape.StrokeBrush().try_as<
+              winrt::Windows::UI::Composition::CompositionColorBrush>()
+        : nullptr;
+    if (!borderShape || !borderGeometry || !borderBrush) {
+      return false;
+    }
+    resources->clipGeometry = clipGeometry;
+    resources->clip = clip;
+    resources->borderVisual = borderVisual;
+    resources->borderGeometry = borderGeometry;
+    resources->borderShape = borderShape;
+    resources->borderBrush = borderBrush;
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+bool CreateTaskbarBackgroundCompositionResourcesTai(
+    FrameworkElement const& backgroundFillChild,
+    winrt::Windows::UI::Composition::Visual const& backgroundFillVisual,
+    winrt::Windows::UI::Composition::Compositor const& compositor,
+    TaskbarBackgroundCompositionResourcesTai* resources) {
+  if (!backgroundFillChild || !backgroundFillVisual || !compositor ||
+      !resources) {
+    return false;
+  }
+  try {
+    resources->clipGeometry = compositor.CreateRoundedRectangleGeometry();
+    resources->clip = compositor.CreateGeometricClip(resources->clipGeometry);
+    resources->borderVisual = compositor.CreateShapeVisual();
+    resources->borderGeometry = compositor.CreateRoundedRectangleGeometry();
+    resources->borderShape =
+        compositor.CreateSpriteShape(resources->borderGeometry);
+    resources->borderBrush = compositor.CreateColorBrush();
+    resources->borderShape.StrokeBrush(resources->borderBrush);
+    resources->borderShape.FillBrush(nullptr);
+    resources->borderVisual.Shapes().Append(resources->borderShape);
+    backgroundFillVisual.Clip(resources->clip);
+    winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
+        SetElementChildVisual(backgroundFillChild, resources->borderVisual);
+    return true;
+  } catch (...) {
+    *resources = {};
+    return false;
+  }
 }
 void ResetAnimationTargetCache(TaskbarState& state) {
   state.hasLastTargetTaskFrameOffsetX = false;
@@ -5658,7 +5752,7 @@ void ResetAnimationTargetCache(TaskbarState& state) {
   state.hasLastStartButtonAnchorRect = false;
   state.hasStableStartButtonAnchorRect = false;
   state.startButtonAnchorStablePasses = 0;
-  ResetBackgroundVisualCache(state);
+  ResetBackgroundVisualTargetCache(state);
 }
 bool CheckAndUpdateDisplayGeometrySignature(TaskbarState& state,
                                             FrameworkElement const& xamlRootContent,
@@ -8086,7 +8180,17 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
   auto screenEdgeStroke = FindChildByName(rootGridTaskBar, L"ScreenEdgeStroke");
   // you can also try SystemAccentColor
   auto backgroundFillVisual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild);
-  auto compositorTaskBackground = backgroundFillVisual.Compositor();
+  auto compositorTaskBackground = backgroundFillVisual
+      ? backgroundFillVisual.Compositor()
+      : nullptr;
+  const uintptr_t backgroundFillIdentity =
+      reinterpret_cast<uintptr_t>(winrt::get_abi(backgroundFillChild));
+  const bool backgroundFillChanged =
+      state.backgroundFillIdentity != backgroundFillIdentity;
+  const bool backgroundStyleChanged =
+      backgroundFillChanged ||
+      state.lastBackgroundStyleGeneration != childStyleGeneration;
+  bool backgroundBrushReady = true;
   if (shouldApplyCustomTaskbarBackground) {
     if (taskbarStroke) {
       taskbarStroke.Opacity(0.0);
@@ -8094,7 +8198,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     if (screenEdgeStroke) {
       screenEdgeStroke.Opacity(0.0);
     }
-    ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
+    if (!state.hasCustomTaskbarBackgroundVisuals || backgroundStyleChanged) {
+      backgroundBrushReady =
+          ApplyWindhawkBlurToBackgroundFill(backgroundFillChild);
+    }
+    state.backgroundFillIdentity = backgroundFillIdentity;
     state.hasCustomTaskbarBackgroundVisuals = true;
 //    For custom brush
 //    auto compositor = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(backgroundFillChild).Compositor();
@@ -8116,9 +8224,10 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
     if (backgroundFillVisual) {
       backgroundFillVisual.Clip(nullptr);
     }
-    if (compositorTaskBackground) {
-      winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, compositorTaskBackground.CreateShapeVisual());
-    }
+    winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
+        SetElementChildVisual(
+            backgroundFillChild,
+            winrt::Windows::UI::Composition::Visual{nullptr});
     ResetBackgroundVisualCache(state);
     state.hasCustomTaskbarBackgroundVisuals = false;
   }
@@ -8134,91 +8243,169 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
         const float offsetXRect = snapPx(targetBackgroundLeftScreen - targetTaskRootOffsetX);
         const float newOffsetYRect = snapPx(static_cast<float>(abs(userDefinedTaskbarOffsetY)) );
         const bool backgroundShapeTargetChanged =
-            invalidateDimensionsThisPass ||
             std::abs(state.lastBackgroundShapeTargetWidth - targetWidthRect) > visualOffsetTolerance ||
+            std::abs(state.lastBackgroundShapeTargetHeight - clipHeight) > visualOffsetTolerance ||
             std::abs(state.lastBackgroundShapeTargetOffsetX - offsetXRect) > visualOffsetTolerance ||
             std::abs(state.lastBackgroundShapeTargetOffsetY - newOffsetYRect) > visualOffsetTolerance;
-        if (backgroundShapeTargetChanged || g_settings.userDefinedFullWidthTaskbarBackground || state.lastBackgroundShapeTargetWidth <= 0.0f) {
-          auto roundedRect = compositorTaskBackground.CreateRoundedRectangleGeometry();
-          roundedRect.CornerRadius({g_settings.userDefinedTaskbarCornerRadius, g_settings.userDefinedTaskbarCornerRadius});
-          auto borderGeometry = compositorTaskBackground.CreateRoundedRectangleGeometry();
-          borderGeometry.CornerRadius({g_settings.userDefinedTaskbarCornerRadius - userDefinedTaskbarBorderThicknessFloat / 2.0f, g_settings.userDefinedTaskbarCornerRadius - userDefinedTaskbarBorderThicknessFloat / 2.0f});
-          borderGeometry.Offset({userDefinedTaskbarBorderThicknessFloat / 2.0f, userDefinedTaskbarBorderThicknessFloat / 2.0f});
-          float animationStartWidth = targetWidthRect;
-          float animationStartOffsetX = offsetXRect;
-          float animationStartOffsetY = newOffsetYRect;
-          const int64_t animationNowMs = DelayedApplyNowMs();
-          const bool canContinueRunningBackgroundAnimation =
-              !invalidateDimensionsThisPass &&
-              state.backgroundAnimationStartMs > 0 &&
-              animationNowMs - state.backgroundAnimationStartMs < kTaskbarIslandAnimationDurationMs;
-          if (!g_settings.userDefinedFullWidthTaskbarBackground) {
-            if (canContinueRunningBackgroundAnimation) {
-              animationStartWidth = EstimateAnimationValue(state.backgroundAnimationFromWidth, state.backgroundAnimationToWidth, state.backgroundAnimationStartMs, animationNowMs);
-              animationStartOffsetX = EstimateAnimationValue(state.backgroundAnimationFromOffsetX, state.backgroundAnimationToOffsetX, state.backgroundAnimationStartMs, animationNowMs);
-              animationStartOffsetY = EstimateAnimationValue(state.backgroundAnimationFromOffsetY, state.backgroundAnimationToOffsetY, state.backgroundAnimationStartMs, animationNowMs);
-            } else if (state.lastTargetWidth > static_cast<float>(minimumTaskbarChildrenWidth) && std::abs(state.lastTargetWidth - rootWidth) > visualOffsetTolerance) {
-              animationStartWidth = state.lastTargetWidth;
-              animationStartOffsetX = state.lastTargetOffsetX == 0.0f ? offsetXRect : snapPx(state.lastTargetOffsetX);
-              animationStartOffsetY = snapPx(state.lastTargetOffsetY);
+        TaskbarBackgroundCompositionResourcesTai backgroundResources;
+        bool createdBackgroundResources = false;
+        if (backgroundFillChanged ||
+            !TryGetTaskbarBackgroundCompositionResourcesTai(
+                backgroundFillChild,
+                backgroundFillVisual,
+                &backgroundResources)) {
+          createdBackgroundResources =
+              CreateTaskbarBackgroundCompositionResourcesTai(
+                  backgroundFillChild,
+                  backgroundFillVisual,
+                  compositorTaskBackground,
+                  &backgroundResources);
+        }
+        if (backgroundResources.clipGeometry &&
+            backgroundResources.borderVisual &&
+            backgroundResources.borderGeometry &&
+            backgroundResources.borderShape &&
+            backgroundResources.borderBrush) {
+          if (createdBackgroundResources || backgroundStyleChanged) {
+            const float borderCornerRadius =
+                g_settings.userDefinedTaskbarCornerRadius -
+                userDefinedTaskbarBorderThicknessFloat / 2.0f;
+            backgroundResources.clipGeometry.CornerRadius({
+                g_settings.userDefinedTaskbarCornerRadius,
+                g_settings.userDefinedTaskbarCornerRadius});
+            backgroundResources.borderGeometry.CornerRadius({
+                borderCornerRadius,
+                borderCornerRadius});
+            backgroundResources.borderGeometry.Offset({
+                userDefinedTaskbarBorderThicknessFloat / 2.0f,
+                userDefinedTaskbarBorderThicknessFloat / 2.0f});
+            backgroundResources.borderShape.StrokeThickness(
+                g_settings.userDefinedTaskbarBorderThickness);
+            backgroundResources.borderShape.FillBrush(nullptr);
+            backgroundResources.borderBrush.Color({
+                g_settings.userDefinedTaskbarBorderOpacity,
+                static_cast<BYTE>(g_settings.borderColorR),
+                static_cast<BYTE>(g_settings.borderColorG),
+                static_cast<BYTE>(g_settings.borderColorB)});
+            backgroundResources.borderGeometry.Size({
+                std::max(
+                    0.0f,
+                    targetWidthRect - userDefinedTaskbarBorderThicknessFloat),
+                std::max(
+                    0.0f,
+                    clipHeight - userDefinedTaskbarBorderThicknessFloat)});
+          }
+          if (createdBackgroundResources ||
+              backgroundShapeTargetChanged ||
+              backgroundStyleChanged) {
+            float animationStartWidth = targetWidthRect;
+            float animationStartOffsetX = offsetXRect;
+            float animationStartOffsetY = newOffsetYRect;
+            const int64_t animationNowMs = DelayedApplyNowMs();
+            const bool canContinueRunningBackgroundAnimation =
+                !invalidateDimensionsThisPass &&
+                state.backgroundAnimationStartMs > 0 &&
+                animationNowMs - state.backgroundAnimationStartMs <
+                    kTaskbarIslandAnimationDurationMs;
+            if (!g_settings.userDefinedFullWidthTaskbarBackground) {
+              if (canContinueRunningBackgroundAnimation) {
+                animationStartWidth = EstimateAnimationValue(state.backgroundAnimationFromWidth, state.backgroundAnimationToWidth, state.backgroundAnimationStartMs, animationNowMs);
+                animationStartOffsetX = EstimateAnimationValue(state.backgroundAnimationFromOffsetX, state.backgroundAnimationToOffsetX, state.backgroundAnimationStartMs, animationNowMs);
+                animationStartOffsetY = EstimateAnimationValue(state.backgroundAnimationFromOffsetY, state.backgroundAnimationToOffsetY, state.backgroundAnimationStartMs, animationNowMs);
+              } else if (state.lastTargetWidth > static_cast<float>(minimumTaskbarChildrenWidth) && std::abs(state.lastTargetWidth - rootWidth) > visualOffsetTolerance) {
+                animationStartWidth = state.lastTargetWidth;
+                animationStartOffsetX = state.lastTargetOffsetX == 0.0f ? offsetXRect : snapPx(state.lastTargetOffsetX);
+                animationStartOffsetY = snapPx(state.lastTargetOffsetY);
+              }
             }
+            backgroundResources.clipGeometry.StopAnimation(L"Size");
+            backgroundResources.clipGeometry.StopAnimation(L"Offset");
+            backgroundResources.borderVisual.StopAnimation(L"Size");
+            backgroundResources.borderVisual.StopAnimation(L"Offset");
+            backgroundResources.borderGeometry.StopAnimation(L"Size");
+            if (!g_settings.userDefinedFullWidthTaskbarBackground) {
+              backgroundResources.clipGeometry.Size(
+                  {animationStartWidth, clipHeight});
+              backgroundResources.borderVisual.Size(
+                  {animationStartWidth, clipHeight});
+              backgroundResources.borderGeometry.Size({
+                  std::max(
+                      0.0f,
+                      animationStartWidth -
+                          userDefinedTaskbarBorderThicknessFloat),
+                  std::max(
+                      0.0f,
+                      clipHeight - userDefinedTaskbarBorderThicknessFloat)});
+              backgroundResources.clipGeometry.Offset(
+                  {animationStartOffsetX, animationStartOffsetY});
+              backgroundResources.borderVisual.Offset(
+                  {animationStartOffsetX, animationStartOffsetY, 0.0f});
+              auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
+              ConfigureTaskbarIslandAnimation(sizeAnimationRect);
+              sizeAnimationRect.InsertKeyFrame(0.0f, {animationStartWidth, clipHeight});
+              InsertTaskbarIslandKeyFrame(sizeAnimationRect, 1.0f, winrt::Windows::Foundation::Numerics::float2{targetWidthRect, clipHeight});
+              auto sizeAnimationBorderGeometry = compositorTaskBackground.CreateVector2KeyFrameAnimation();
+              ConfigureTaskbarIslandAnimation(sizeAnimationBorderGeometry);
+              sizeAnimationBorderGeometry.InsertKeyFrame(0.0f, {animationStartWidth - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
+              InsertTaskbarIslandKeyFrame(sizeAnimationBorderGeometry, 1.0f, winrt::Windows::Foundation::Numerics::float2{targetWidthRect - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
+              backgroundResources.clipGeometry.StartAnimation(
+                  L"Size",
+                  sizeAnimationRect);
+              backgroundResources.borderVisual.StartAnimation(
+                  L"Size",
+                  sizeAnimationRect);
+              backgroundResources.borderGeometry.StartAnimation(
+                  L"Size",
+                  sizeAnimationBorderGeometry);
+              auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
+              ConfigureTaskbarIslandAnimation(offsetAnimationRect);
+              offsetAnimationRect.InsertKeyFrame(0.0f, {animationStartOffsetX, animationStartOffsetY});
+              InsertTaskbarIslandKeyFrame(offsetAnimationRect, 1.0f, winrt::Windows::Foundation::Numerics::float2{offsetXRect, newOffsetYRect});
+              auto offsetAnimationRect3V = compositorTaskBackground.CreateVector3KeyFrameAnimation();
+              ConfigureTaskbarIslandAnimation(offsetAnimationRect3V);
+              offsetAnimationRect3V.InsertKeyFrame(0.0f, {animationStartOffsetX, animationStartOffsetY, 0.0f});
+              InsertTaskbarIslandKeyFrame(offsetAnimationRect3V, 1.0f, winrt::Windows::Foundation::Numerics::float3{offsetXRect, newOffsetYRect, 0.0f});
+              backgroundResources.clipGeometry.StartAnimation(
+                  L"Offset",
+                  offsetAnimationRect);
+              backgroundResources.borderVisual.StartAnimation(
+                  L"Offset",
+                  offsetAnimationRect3V);
+              state.backgroundAnimationFromWidth = animationStartWidth;
+              state.backgroundAnimationToWidth = targetWidthRect;
+              state.backgroundAnimationFromOffsetX = animationStartOffsetX;
+              state.backgroundAnimationToOffsetX = offsetXRect;
+              state.backgroundAnimationFromOffsetY = animationStartOffsetY;
+              state.backgroundAnimationToOffsetY = newOffsetYRect;
+              state.backgroundAnimationStartMs = animationNowMs;
+              state.lastTargetOffsetX = offsetXRect;
+              state.lastTargetOffsetY = newOffsetYRect;
+            } else {
+              state.lastTargetOffsetX = 0;
+              state.lastTargetOffsetY = 0;
+              state.backgroundAnimationStartMs = 0;
+              backgroundResources.clipGeometry.Size(
+                  {targetWidthRect, clipHeight});
+              backgroundResources.clipGeometry.Offset({0.0f, 0.0f});
+              backgroundResources.borderVisual.Size(
+                  {targetWidthRect, clipHeight});
+              backgroundResources.borderVisual.Offset({0.0f, 0.0f, 0.0f});
+              backgroundResources.borderGeometry.Size({
+                  std::max(
+                      0.0f,
+                      targetWidthRect - userDefinedTaskbarBorderThicknessFloat),
+                  std::max(
+                      0.0f,
+                      clipHeight - userDefinedTaskbarBorderThicknessFloat)});
+            }
+            state.lastBackgroundShapeTargetWidth = targetWidthRect;
+            state.lastBackgroundShapeTargetHeight = clipHeight;
+            state.lastBackgroundShapeTargetOffsetX = offsetXRect;
+            state.lastBackgroundShapeTargetOffsetY = newOffsetYRect;
           }
-          roundedRect.Size({animationStartWidth, clipHeight});
-          auto shapeVisualBorderControl = compositorTaskBackground.CreateShapeVisual();
-          shapeVisualBorderControl.Size({animationStartWidth, clipHeight});
-          auto geometricClip = compositorTaskBackground.CreateGeometricClip(roundedRect);
-          auto borderShape = compositorTaskBackground.CreateSpriteShape(borderGeometry);
-          winrt::Windows::UI::Color borderColor = {g_settings.userDefinedTaskbarBorderOpacity, static_cast<BYTE>(g_settings.borderColorR), static_cast<BYTE>(g_settings.borderColorG), static_cast<BYTE>(g_settings.borderColorB)};
-          borderShape.StrokeBrush(compositorTaskBackground.CreateColorBrush(borderColor));
-          borderShape.StrokeThickness(g_settings.userDefinedTaskbarBorderThickness);
-          borderShape.FillBrush(nullptr);
-          borderGeometry.Size({static_cast<float>(animationStartWidth - userDefinedTaskbarBorderThicknessFloat), static_cast<float>(clipHeight - userDefinedTaskbarBorderThicknessFloat)});
-          backgroundFillVisual.Clip(geometricClip);
-          shapeVisualBorderControl.Shapes().Append(borderShape);
-          winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::SetElementChildVisual(backgroundFillChild, shapeVisualBorderControl);
-          if (!g_settings.userDefinedFullWidthTaskbarBackground) {
-            auto sizeAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-            ConfigureTaskbarIslandAnimation(sizeAnimationRect);
-            sizeAnimationRect.InsertKeyFrame(0.0f, {animationStartWidth, clipHeight});
-            InsertTaskbarIslandKeyFrame(sizeAnimationRect, 1.0f, winrt::Windows::Foundation::Numerics::float2{targetWidthRect, clipHeight});
-            auto sizeAnimationBorderGeometry = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-            ConfigureTaskbarIslandAnimation(sizeAnimationBorderGeometry);
-            sizeAnimationBorderGeometry.InsertKeyFrame(0.0f, {animationStartWidth - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
-            InsertTaskbarIslandKeyFrame(sizeAnimationBorderGeometry, 1.0f, winrt::Windows::Foundation::Numerics::float2{targetWidthRect - userDefinedTaskbarBorderThicknessFloat, clipHeight - userDefinedTaskbarBorderThicknessFloat});
-            roundedRect.StartAnimation(L"Size", sizeAnimationRect);
-            shapeVisualBorderControl.StartAnimation(L"Size", sizeAnimationRect);
-            borderGeometry.StartAnimation(L"Size", sizeAnimationBorderGeometry);
-            roundedRect.Offset({animationStartOffsetX, animationStartOffsetY});
-            shapeVisualBorderControl.Offset({animationStartOffsetX, animationStartOffsetY, 0.0f});
-            auto offsetAnimationRect = compositorTaskBackground.CreateVector2KeyFrameAnimation();
-            ConfigureTaskbarIslandAnimation(offsetAnimationRect);
-            offsetAnimationRect.InsertKeyFrame(0.0f, {animationStartOffsetX, animationStartOffsetY});
-            InsertTaskbarIslandKeyFrame(offsetAnimationRect, 1.0f, winrt::Windows::Foundation::Numerics::float2{offsetXRect, newOffsetYRect});
-            auto offsetAnimationRect3V = compositorTaskBackground.CreateVector3KeyFrameAnimation();
-            ConfigureTaskbarIslandAnimation(offsetAnimationRect3V);
-            offsetAnimationRect3V.InsertKeyFrame(0.0f, {animationStartOffsetX, animationStartOffsetY, 0.0f});
-            InsertTaskbarIslandKeyFrame(offsetAnimationRect3V, 1.0f, winrt::Windows::Foundation::Numerics::float3{offsetXRect, newOffsetYRect, 0.0f});
-            roundedRect.StartAnimation(L"Offset", offsetAnimationRect);
-            shapeVisualBorderControl.StartAnimation(L"Offset", offsetAnimationRect3V);
-            state.backgroundAnimationFromWidth = animationStartWidth;
-            state.backgroundAnimationToWidth = targetWidthRect;
-            state.backgroundAnimationFromOffsetX = animationStartOffsetX;
-            state.backgroundAnimationToOffsetX = offsetXRect;
-            state.backgroundAnimationFromOffsetY = animationStartOffsetY;
-            state.backgroundAnimationToOffsetY = newOffsetYRect;
-            state.backgroundAnimationStartMs = animationNowMs;
-            state.lastTargetOffsetX = offsetXRect;
-            state.lastTargetOffsetY = newOffsetYRect;
-          } else {
-            state.lastTargetOffsetX = 0;
-            state.lastTargetOffsetY = 0;
-            state.backgroundAnimationStartMs = 0;
-            roundedRect.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY});
-            shapeVisualBorderControl.Offset({state.lastTargetOffsetX, state.lastTargetOffsetY, 0.0f});
+          if (backgroundBrushReady) {
+            state.lastBackgroundStyleGeneration = childStyleGeneration;
           }
-          state.lastBackgroundShapeTargetWidth = targetWidthRect;
-          state.lastBackgroundShapeTargetOffsetX = offsetXRect;
-          state.lastBackgroundShapeTargetOffsetY = newOffsetYRect;
         }
       }
     }
