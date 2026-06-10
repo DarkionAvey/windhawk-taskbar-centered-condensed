@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
-// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.221
+// @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock.
+// @version         1.5.222
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -17,7 +17,7 @@
 // https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // ==WindhawkModReadme==
 /*
-![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.png)
+![Screenshot](https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/raw/main/screenshot.gif)
 # TAI (Taskbar as (an) island) for Windows 11
 TAI lets you transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
 ---
@@ -43,6 +43,7 @@ modify the source files in the `mod-parts` directory.
 Huge thanks to these awesome developers who made this mod possible -- your contributions to modding Windows are truly appreciated!:
 - [`Michael Maltsev (m417z)`](https://github.com/m417z)
 - [`Valentin Radu (valinet)`](https://github.com/valinet)
+- [`TranslucentTB team`](https://github.com/translucenttb/translucenttb)
 ---
 ## 🔥 Recommended Mods
 - [Smart Auto Hide for Taskbar](https://windhawk.net/mods/taskbar-auto-hide-when-maximized)
