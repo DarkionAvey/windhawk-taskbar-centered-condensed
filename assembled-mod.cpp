@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock. Based on m417z's code. For Windows 11.
-// @version         1.5.208
+// @version         1.5.209
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -7299,7 +7299,7 @@ void UpdateGlobalSettings() {
   g_settings.userDefinedTrayTaskGap = g_unloading ? 0 : std::max(0, getInt(L"TrayTaskGap"));
   g_settings.userDefinedTaskbarBackgroundHorizontalPadding = g_unloading ? 0 : std::max(0, getInt(L"TaskbarBackgroundHorizontalPadding"));
   // Offset Y (negative up; non-positive settings sit on the screen edge)
-  const int offsetY = std::max(0, getInt(L"TaskbarOffsetY"));
+  const int offsetY = std::max(-2, getInt(L"TaskbarOffsetY"));
   g_settings.userDefinedTaskbarOffsetY =
       (g_unloading || g_settings.userDefinedFlatTaskbarBottomCorners)
           ? 0
@@ -7381,7 +7381,7 @@ bool HasInvalidSettings() {
   std::lock_guard<std::recursive_mutex> settingsLock(g_settingsMutex);
   if (g_settings.userDefinedTrayTaskGap < 0) return true;
   if (g_settings.userDefinedTaskbarBackgroundHorizontalPadding < 0) return true;
-  if ((int)g_settings.userDefinedTaskbarOffsetY < 0 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
+  if ((int)g_settings.userDefinedTaskbarOffsetY < -2 && !g_settings.userDefinedFlatTaskbarBottomCorners) return true;
   if (g_settings.userDefinedTaskbarHeight < kMinTaskbarHeight || g_settings.userDefinedTaskbarHeight > kMaxTaskbarHeight) return true;
   if (g_settings.userDefinedTaskbarIconSize <= 0) return true;
   if (g_settings.userDefinedTrayIconSize <= 0) return true;
