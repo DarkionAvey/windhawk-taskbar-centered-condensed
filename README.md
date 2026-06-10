@@ -37,6 +37,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 
 - [`Michael Maltsev (m417z)`](https://github.com/m417z)
 - [`Valentin Radu (valinet)`](https://github.com/valinet)
+- [`TranslucentTB team`](https://github.com/translucenttb/translucenttb)
 
 ---
 
