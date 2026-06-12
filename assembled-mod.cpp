@@ -2,7 +2,7 @@
 // @id              taskbar-dock-like
 // @name            TAI (taskbar as island) for Windows 11
 // @description     Centers and floats the taskbar, moves the system tray next to the task area, and serves as an all-in-one, one-click mod to transform the taskbar into an animated dock.
-// @version         1.5.222
+// @version         1.5.223
 // @author          DarkionAvey
 // @github          https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed
 // @include         explorer.exe
@@ -8645,10 +8645,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
               state.backgroundAnimationStartMs = 0;
               backgroundResources.clipGeometry.Size(
                   {targetWidthRect, clipHeight});
-              backgroundResources.clipGeometry.Offset({0.0f, 0.0f});
-              backgroundResources.borderVisual.Size(
-                  {targetWidthRect, clipHeight});
-              backgroundResources.borderVisual.Offset({0.0f, 0.0f, 0.0f});
+              backgroundResources.borderVisual.Size({targetWidthRect, clipHeight});
+              if(rootGridTaskBarVisual){
+              backgroundResources.clipGeometry.Offset({static_cast<float>(-rootGridTaskBarVisual.Offset().x), 0.0f});
+              backgroundResources.borderVisual.Offset({static_cast<float>(-rootGridTaskBarVisual.Offset().x), 0.0f, 0.0f});
+              }
               backgroundResources.borderGeometry.Size({
                   std::max(
                       0.0f,

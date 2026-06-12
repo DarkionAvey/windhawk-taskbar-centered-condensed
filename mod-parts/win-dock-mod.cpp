@@ -4090,10 +4090,11 @@ bool ApplyStyle(FrameworkElement const& xamlRootContent, std::wstring monitorNam
               state.backgroundAnimationStartMs = 0;
               backgroundResources.clipGeometry.Size(
                   {targetWidthRect, clipHeight});
-              backgroundResources.clipGeometry.Offset({0.0f, 0.0f});
-              backgroundResources.borderVisual.Size(
-                  {targetWidthRect, clipHeight});
-              backgroundResources.borderVisual.Offset({0.0f, 0.0f, 0.0f});
+              backgroundResources.borderVisual.Size({targetWidthRect, clipHeight});
+              if(rootGridTaskBarVisual){
+              backgroundResources.clipGeometry.Offset({static_cast<float>(-rootGridTaskBarVisual.Offset().x), 0.0f});
+              backgroundResources.borderVisual.Offset({static_cast<float>(-rootGridTaskBarVisual.Offset().x), 0.0f, 0.0f});
+              }
               backgroundResources.borderGeometry.Size({
                   std::max(
                       0.0f,
