@@ -42,7 +42,7 @@ Huge thanks to these awesome developers who made this mod possible -- your contr
 ---
 
 ## 🔥 Recommended Mods
-
+- [Taskbar Fluent Media Player](https://windhawk.net/mods/taskbar-fluent-media-player) \[Set player position to Tray\]
 - [Smart Auto Hide for Taskbar](https://windhawk.net/mods/taskbar-auto-hide-when-maximized)
 - [Taskbar Auto-Hide Speed/Frame Rate](https://windhawk.net/mods/taskbar-auto-hide-speed)
 - [Show All Tray Icons](https://windhawk.net/mods/taskbar-notification-icons-show-all)
