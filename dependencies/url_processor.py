@@ -84,8 +84,9 @@ class URLProcessor(ABC):
         content = self.format_content(content)
 
         patch = CppPatcher(content, source_name=filename)
+
         content = (
-            patch.remove_line_comments()
+            patch
             .collapse_blank_lines(required=True)
             .prepend(generate_slash_block(self.name))
             .remove_whitespace_only_lines(required=False)
@@ -93,5 +94,4 @@ class URLProcessor(ABC):
             .strip_optional()
             .text()
         )
-
         self.save(content, filename)

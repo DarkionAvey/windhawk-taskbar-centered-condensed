@@ -118,6 +118,8 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     size_t taskbarElementIUnknownOffset = 0x48;
 #if defined(_M_X64)
     {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
         if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
@@ -127,6 +129,7 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         }
     }
 #elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
 #else
 #error "Unsupported architecture"
 #endif
@@ -357,6 +360,7 @@ if(true)return original();
                 }
             });
     }
+    // Force the start button to have X = 0.
     winrt::Windows::Foundation::Rect newRect = rect;
     newRect.X = 0;
     return IUIElement_Arrange_Original(pThis, newRect);
@@ -809,6 +813,7 @@ static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook
   return;
 }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK TaskbarViewDll_hooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
@@ -904,6 +909,9 @@ static bool IsNotificationCenterTitleForFlyoutTai(std::wstring_view title) {
     if (title.empty()) {
         return false;
     }
+    // Keep this intentionally conservative. ShellExperienceHost hosts other
+    // CoreWindow surfaces such as Share, and those must be left untouched.
+    // If a locale is missing, the window is ignored instead of being moved.
     static constexpr PCWSTR kNotificationCenterTitles[] = {
         L"Notification Center",
         L"Notification Centre",
