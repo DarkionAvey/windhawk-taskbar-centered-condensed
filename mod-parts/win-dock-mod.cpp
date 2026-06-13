@@ -4285,8 +4285,8 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Not explorer.exe; setting g_PartialMode to true");
     HMODULE moduleStartDocked = GetModuleHandle(L"StartDocked.dll");
     if (moduleStartDocked) {
-      WindhawkUtils::SYMBOL_HOOK hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
-      return WindhawkUtils::HookSymbols(moduleStartDocked, hook, ARRAYSIZE(hook));
+      WindhawkUtils::SYMBOL_HOOK StartDockedDll_hook[] = {{{LR"(private: void __cdecl StartDocked::StartSizingFrame::UpdateWindowRegion(class Windows::Foundation::Size))"}, &StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Original, StartDocked__StartSizingFrame_UpdateWindowRegion_WithArgs_Hook}};
+      return WindhawkUtils::HookSymbols(moduleStartDocked, StartDockedDll_hook, ARRAYSIZE(StartDockedDll_hook));
     }
     return true;
   }

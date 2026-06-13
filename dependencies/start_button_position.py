@@ -73,6 +73,12 @@ class StartButtonPosition(URLProcessor):
                 r"using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);",
                 read_patch("startbuttonposition_notification_center_hack.cpp"),
             )
+            .replace_regex("taskbarDllHooks", "TaskbarDll_hooks",
+                           in_function="bool HookTaskbarDllSymbolsStartButtonPosition()", count=0)
+
+            .replace_regex("symbolHooks", "TaskbarViewDll_hooks",
+                           in_function="bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module)", count=0)
+
             .text()
         )
 

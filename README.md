@@ -4,6 +4,11 @@
 
 TAI lets you transform your Windows 11 taskbar into a smooth floating dock without losing any of the original taskbar functionality!
 
+
+# Bug reports
+
+Please file bug reports here: https://github.com/DarkionAvey/windhawk-taskbar-centered-condensed/issues
+
 ---
 
 ## 🚀 How to Install (Development Build)

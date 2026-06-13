@@ -177,6 +177,9 @@ def main(major_minor="1.0"):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(merged_contents)
 
+    with open(os.path.join(base_dir, 'taskbar-dock-like.wh.cpp'), 'w', encoding='utf-8') as f:
+        f.write(merged_contents)
+
     print("Saved assembled mod")
 
 
