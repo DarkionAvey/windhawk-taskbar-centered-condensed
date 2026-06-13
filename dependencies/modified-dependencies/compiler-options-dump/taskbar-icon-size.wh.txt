@@ -1,1 +1,1 @@
--DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore -lversion
+ -lole32 -loleaut32 -lruntimeobject -lshcore -lversion

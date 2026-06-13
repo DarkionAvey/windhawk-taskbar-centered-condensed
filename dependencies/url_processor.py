@@ -40,7 +40,7 @@ class URLProcessor(ABC):
             compiler_dump_dir = self.output_folder / "compiler-options-dump"
             compiler_dump_dir.mkdir(parents=True, exist_ok=True)
             (compiler_dump_dir / filename.replace(".cpp", ".txt")).write_text(
-                match.group(1).strip(),
+                match.group(1).strip().replace("-DWINVER=0x0A00",""),
                 encoding="utf-8",
             )
 

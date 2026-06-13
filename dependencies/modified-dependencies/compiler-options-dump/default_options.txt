@@ -1,1 +1,1 @@
--ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32 -Wl,--export-all-symbols
+-ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lcomctl32

@@ -103,6 +103,14 @@ def get_compiler_options_string(base_dir: Path):
         for txt in txt_dir.rglob("*.txt")
         for option in txt.read_text(encoding="utf-8").split()
     )
+
+    flags_to_remove = {"-Wl,--export-all-symbols", "-DWINVER=0x0A00"}
+
+    options = [
+        flag for flag in options
+        if flag not in flags_to_remove
+    ]
+
     compiler_options = " ".join(options)
     print(txt_dir)
     return compiler_options
