@@ -2036,7 +2036,7 @@ void ApplySettingsTBIconSize(int taskbarHeight) {
 }
 bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll
-    WindhawkUtils::SYMBOL_HOOK SystemTray_TaskbarViewDll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -2068,7 +2068,7 @@ bool HookSystemTraySymbols(HMODULE module) {
             true,  // From Windows 11 version 22H2.
         },
     };
-    if (!HookSymbols(module, SystemTray_TaskbarViewDll_hooks, ARRAYSIZE(SystemTray_TaskbarViewDll_hooks))) {
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -2084,7 +2084,7 @@ bool HookSystemTraySymbols(HMODULE module) {
 bool HookTaskbarViewDllSymbols(HMODULE module,
                                bool hookSystemTraySymbolsInline) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK TaskbarViewDll_hooks[] =  //
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
                 // For Windows 11 version 21H2.
@@ -2250,7 +2250,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
     // itself, so include them in the same hook batch when
     // hookSystemTraySymbolsInline is set.
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK SystemTray_TaskbarViewDll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooksSystemTray[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -2285,13 +2285,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module,
     // Alias for the extract_mod_symbols.py script.
     using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
     COMBINED_SH allHooks[  //
-        ARRAYSIZE(TaskbarViewDll_hooks) + ARRAYSIZE(SystemTray_TaskbarViewDll_hooks)];
+        ARRAYSIZE(symbolHooks) + ARRAYSIZE(symbolHooksSystemTray)];
     int index = 0;
-    for (auto& hook : TaskbarViewDll_hooks) {
+    for (auto& hook : symbolHooks) {
         allHooks[index++] = std::move(hook);
     }
     if (hookSystemTraySymbolsInline) {
-        for (auto& hook : SystemTray_TaskbarViewDll_hooks) {
+        for (auto& hook : symbolHooksSystemTray) {
             allHooks[index++] = std::move(hook);
         }
     }
@@ -2340,7 +2340,7 @@ WindhawkUtils::Wh_SetFunctionHookT(
 }
 bool HookSearchUxUiDllSymbols(HMODULE module) {
     // SearchUx.UI.dll
-    WindhawkUtils::SYMBOL_HOOK SearchUxUiDll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IMap<struct winrt::Windows::UI::Xaml::ResourceDictionary,struct winrt::Windows::Foundation::IInspectable,struct winrt::Windows::Foundation::IInspectable>::Lookup(struct winrt::Windows::Foundation::IInspectable const &)const )"},
             &ResourceDictionary_Lookup_SearchUxUi_Original,
@@ -2352,7 +2352,7 @@ bool HookSearchUxUiDllSymbols(HMODULE module) {
             SearchButtonBase_UpdateButtonPadding_Hook,
         },
     };
-    if (!HookSymbols(module, SearchUxUiDll_hooks, ARRAYSIZE(SearchUxUiDll_hooks))) {
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
@@ -2369,7 +2369,7 @@ bool HookTaskbarDllSymbolsTBIconSize() {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK taskbarDll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             // Pre-DynamicIconScaling.
             {LR"(void __cdecl IconUtils::GetIconSize(bool,enum IconUtils::IconType,struct tagSIZE *))"},
@@ -2417,7 +2417,7 @@ bool HookTaskbarDllSymbolsTBIconSize() {
             TrayUI__HandleSettingChange_Hook,
         },
     };
-if (!HookSymbols(module, taskbarDll_hooks, ARRAYSIZE(taskbarDll_hooks))) {
+if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols failed");
         if (loadedTaskbarDllForHooking) {
             FreeLibrary(module);

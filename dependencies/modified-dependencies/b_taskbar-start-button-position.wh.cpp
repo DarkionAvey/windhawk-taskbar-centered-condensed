@@ -663,7 +663,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK TaskbarDll_hooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {{{LR"(public: virtual void __cdecl CTaskBand::RemoveIcon(struct ITaskItem *))"}, &CTaskBand_RemoveIcon_WithArgs_Original, CTaskBand_RemoveIcon_WithArgs_Hook},
     {{LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"}, &CTaskBand__UpdateItemIcon_WithArgs_Original, CTaskBand__UpdateItemIcon_WithArgs_Hook},
     {
         {LR"(protected: static __int64 __cdecl CImpWndProc::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
@@ -767,7 +767,7 @@ bool HookTaskbarDllSymbolsStartButtonPosition() {
             &std__Ref_count_base__Decref_Original,
         },
     };
-     if (!HookSymbols(module, TaskbarDll_hooks, ARRAYSIZE(TaskbarDll_hooks))) {
+     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols failed");
         if (loadedTaskbarDllForHooking) {
             FreeLibrary(module);
@@ -814,7 +814,7 @@ static void WINAPI TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook
 }
 bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
     // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK TaskbarViewDll_hooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {{{LR"(public: static void __cdecl TaskbarTelemetry::StartItemEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemEntranceAnimation, Hook_StartItemEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartItemPlateEntranceAnimation<bool const &>(bool const &))"}, &orig_StartItemPlateEntranceAnimation, Hook_StartItemPlateEntranceAnimation_call},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartHideAnimationCompleted(void))"}, &TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartHideAnimationCompleted_WithoutArgs_Hook},
     {{LR"(public: static void __cdecl TaskbarTelemetry::StartEntranceAnimationCompleted(void))"}, &TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Original, TaskbarTelemetry_StartEntranceAnimationCompleted_WithoutArgs_Hook},
@@ -834,7 +834,7 @@ bool HookTaskbarViewDllSymbolsStartButtonPosition(HMODULE module) {
             AugmentedEntryPointButton_UpdateButtonPadding_Hook_StartButtonPosition,
         },
     };
-    return HookSymbols(module, TaskbarViewDll_hooks, ARRAYSIZE(TaskbarViewDll_hooks));
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
     if (!g_taskbarViewDllLoadedStartButtonPosition && GetTaskbarViewModuleHandle() == module &&

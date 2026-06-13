@@ -237,17 +237,6 @@ class TaskbarIconSizeMod(URLProcessor):
                 "    }\n",
                 in_function="void Wh_ModSettingsChangedTBIconSize()",
             )
-            .replace_regex("symbolHooks", "SystemTray_TaskbarViewDll_hooks",
-                           in_function="bool HookSystemTraySymbols(HMODULE module)", count=0)
-            .replace_regex("symbolHooks\\b", "TaskbarViewDll_hooks",
-                           in_function="""bool HookTaskbarViewDllSymbols(HMODULE module, bool hookSystemTraySymbolsInline)""", count=0)
-            .replace_regex("symbolHooksSystemTray", "SystemTray_TaskbarViewDll_hooks",
-                           in_function="""bool HookTaskbarViewDllSymbols(HMODULE module,
-                                         bool hookSystemTraySymbolsInline)""", count=0)
-            .replace_regex("symbolHooks", "SearchUxUiDll_hooks",
-                           in_function="""bool HookSearchUxUiDllSymbols(HMODULE module)""", count=0)
-            .replace_regex("taskbarDllHooks", "taskbarDll_hooks",
-                           in_function="""bool HookTaskbarDllSymbolsTBIconSize()""", count=0)
             .text()
         )
 
